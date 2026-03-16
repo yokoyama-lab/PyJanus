@@ -1,0 +1,45 @@
+// Reversible linked list using struct array as node pool.
+// Demonstrates: struct, struct arrays, #define, call/uncall.
+// Insert 3 elements, then uncall all inserts to restore the empty list.
+
+#define POOL 5
+
+struct node {
+    int val,
+    int next
+}
+
+// Insert value at the front of the list (reversibly).
+// pool_next is the allocator pointer; head is the list head index.
+// Convention: index 0 means "nil" (empty); real nodes start at 1.
+procedure insert(node pool[POOL], int head, int pool_next, int v, int count)
+    local int slot = pool_next
+        pool[slot].val += v
+        pool[slot].next ^= head
+        head ^= pool[slot].next
+        head ^= slot
+    delocal int slot = head
+    pool_next += 1
+    count += 1
+
+procedure main()
+    node pool[POOL]
+    int head
+    int alloc = 1
+    int count
+    int vals[] = {10, 20, 30}
+
+    // Build list: 30 -> 20 -> 10 -> nil
+    call insert(pool, head, alloc, vals[0], count)
+    call insert(pool, head, alloc, vals[1], count)
+    call insert(pool, head, alloc, vals[2], count)
+
+    printf("count=%d head=%d\n", count, head)
+    show(pool)
+
+    // Undo: uncall reverses all three inserts
+    uncall insert(pool, head, alloc, vals[2], count)
+    uncall insert(pool, head, alloc, vals[1], count)
+    uncall insert(pool, head, alloc, vals[0], count)
+
+    printf("after undo: count=%d head=%d alloc=%d\n", count, head, alloc)

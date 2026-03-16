@@ -1,0 +1,7 @@
+procedure main()
+    int x
+    from x = 0 do
+        x += 1
+    loop
+        x -= 1
+    until x = 1

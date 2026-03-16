@@ -1,0 +1,5 @@
+procedure main()
+    int x
+    iterate int i = 0 to 1
+        x += 1
+    end

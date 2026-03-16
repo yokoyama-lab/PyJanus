@@ -1,0 +1,24 @@
+// Reversible Caesar cipher.
+// Demonstrates: #define, char arrays, call/uncall reversibility.
+// Encrypt with `call caesar`, decrypt with `uncall caesar`.
+
+#define LEN 12
+
+procedure caesar(char buf[LEN], int key)
+    iterate int i = 0 to LEN - 2
+        local int ch = buf[i]
+            if ch >= 97 && ch <= 122 then
+                buf[i] -= ch
+                buf[i] += (ch - 97 + key) % 26 + 97
+            fi buf[i] >= 97 && buf[i] <= 122
+        delocal int ch = buf[i] >= 97 && buf[i] <= 122 ? (buf[i] - 97 - key + 26) % 26 + 97 : buf[i]
+    end
+
+procedure main()
+    char msg[LEN] = "hello world"
+    int key = 3
+    printf("plain:  %s\n", msg)
+    call caesar(msg, key)
+    printf("cipher: %s\n", msg)
+    uncall caesar(msg, key)
+    printf("back:   %s\n", msg)
