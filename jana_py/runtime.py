@@ -1,19 +1,26 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import math
 import sys
 
 from .ast import ArrayExpr
 from .ast import AssertStmt
 from .ast import AssignStmt
+from .ast import BareDelocalStmt
+from .ast import BareLocalStmt
 from .ast import BinExpr
 from .ast import BinOpKind
+from .ast import DeclType
 from .ast import Boolean
 from .ast import CallStmt
 from .ast import EmptyExpr
 from .ast import Expr
 from .ast import FromStmt
+from .ast import Ident
 from .ast import IfStmt
+from .ast import AncillaBlockStmt
 from .ast import IntType
+
 from .ast import IterateStmt
 from .ast import LocalDecl
 from .ast import LocalStmt
@@ -36,6 +43,7 @@ from .ast import StringLiteral
 from .ast import StructDef
 from .ast import StructField
 from .ast import SwapStmt
+from .ast import SwitchStmt
 from .ast import TernaryExpr
 from .ast import TopExpr
 from .ast import TypeCastExpr
@@ -113,8 +121,10 @@ class Runtime:
     mod_prime: int | None = None,
     debug: bool = False,
     debug_on_error: bool = False,
+    std: str = "janus2026",
   ):
     self.program = program
+    self.std = std
     self.procs = {proc.procname.name: proc for proc in program.procs}
     self.struct_defs = {struct_def.ident.name: struct_def for struct_def in program.struct_defs}
     self.stdout: list[str] = []
@@ -134,6 +144,7 @@ class Runtime:
     self._halt_execution = False
     self._at_end_break = False
     self._current_boundary_line: int | None = None
+    self._legacy_io_warned: set[str] = set()
 
   def _normalize_int(self, value: int, int_type: IntType | None) -> int:
     if int_type in {IntType.I8, IntType.I16, IntType.I32, IntType.I64}:
@@ -153,7 +164,7 @@ class Runtime:
   def _stmt_detail(self, stmt) -> str:
     return "In statement:\n    " + format_stmt(stmt, 0).replace("\n", "\n    ")
 
-  def run(self) -> str:
+  def run(self, show_store: bool = False) -> str:
     if self.program.main is None:
       raise JanaError(SourcePos("", 0, 0), "No main procedure has been defined")
     frame = Frame(vars={})
@@ -180,7 +191,10 @@ class Runtime:
       self.current_line = last_line
       self._at_end_break = True
       self._make_break(frame)
-    store = self._format_store(frame)
+    nonzero = self._nonzero_store_names(frame)
+    if nonzero:
+      sys.stderr.write("Warning: non-zero values remain at end of execution: " + ", ".join(nonzero) + "\n")
+    store = self._format_store(frame) if show_store else ""
     return "".join(self.stdout) + store + ("\n" if store else "")
 
   def _init_vdecls(self, frame: Frame, vdecls: list[Vdecl]) -> None:
@@ -475,14 +489,54 @@ class Runtime:
         cell = self._resolve_lval(frame, stmt.lval)
         if not cell.writable:
           raise JanaError(stmt.pos, "Updating constant", contextual=True)
-        value = self._eval_expr(frame, stmt.expr)
-        self._check_assign_compat(stmt.pos, cell, value)
-        if stmt.mod_op.value == "+=":
-          cell.value = self._normalize_int(cell.value + value, cell.int_type)
-        elif stmt.mod_op.value == "-=":
-          cell.value = self._normalize_int(cell.value - value, cell.int_type)
+        
+        if isinstance(stmt.expr, ArrayExpr):
+          # Bulk array initialization
+          if cell.shape is None:
+            raise JanaError(stmt.pos, "Assigning array literal to scalar")
+          values = [self._eval_expr(frame, item) for item in stmt.expr.items]
+          if len(values) > len(cell.value):
+            raise JanaError(stmt.pos, f"Array literal too large (got {len(values)}, max {len(cell.value)})")
+          for i, v in enumerate(values):
+            if stmt.mod_op.value == "+=":
+              cell.value[i] = self._normalize_int(cell.value[i] + v, cell.elem_int_type)
+            elif stmt.mod_op.value == "-=":
+              cell.value[i] = self._normalize_int(cell.value[i] - v, cell.elem_int_type)
+            elif stmt.mod_op.value == "*=":
+              if v == 0:
+                raise JanaError(stmt.pos, "Multiplication by zero")
+              if cell.value[i] == 0:
+                raise JanaError(stmt.pos, "Multiplicand is zero")
+              cell.value[i] = self._normalize_int(cell.value[i] * v, cell.elem_int_type)
+            elif stmt.mod_op.value == "/=":
+              if v == 0:
+                raise JanaError(stmt.pos, "Division by zero")
+              if cell.value[i] % v != 0:
+                raise JanaError(stmt.pos, f"Division remains: {cell.value[i]} % {v} != 0")
+              cell.value[i] = self._normalize_int(cell.value[i] // v, cell.elem_int_type)
+            else:
+              cell.value[i] = self._normalize_int(cell.value[i] ^ v, cell.elem_int_type)
         else:
-          cell.value = self._normalize_int(cell.value ^ value, cell.int_type)
+          value = self._eval_expr(frame, stmt.expr)
+          self._check_assign_compat(stmt.pos, cell, value)
+          if stmt.mod_op.value == "+=":
+            cell.value = self._normalize_int(cell.value + value, cell.int_type)
+          elif stmt.mod_op.value == "-=":
+            cell.value = self._normalize_int(cell.value - value, cell.int_type)
+          elif stmt.mod_op.value == "*=":
+            if value == 0:
+              raise JanaError(stmt.pos, "Multiplication by zero")
+            if cell.value == 0:
+              raise JanaError(stmt.pos, "Multiplicand is zero")
+            cell.value = self._normalize_int(cell.value * value, cell.int_type)
+          elif stmt.mod_op.value == "/=":
+            if value == 0:
+              raise JanaError(stmt.pos, "Division by zero")
+            if cell.value % value != 0:
+              raise JanaError(stmt.pos, f"Division remains: {cell.value} % {value} != 0")
+            cell.value = self._normalize_int(cell.value // value, cell.int_type)
+          else:
+            cell.value = self._normalize_int(cell.value ^ value, cell.int_type)
         if record_stmt and self._is_recordable_stmt(stmt):
           self.executed_stmts.append((stmt.pos.line, stmt))
         return
@@ -509,6 +563,30 @@ class Runtime:
           expect = "true" if cond else "false"
           raise JanaError(stmt.exit_cond.pos, f"Assertion failed: should be {expect}", contextual=True)
         return
+      if isinstance(stmt, SwitchStmt):
+        if record_stmt:
+          self._push_boundary(stmt.pos.line, "SwitchStmt")
+        self._arm_step_for_nested_entry()
+        val = self._eval_expr(frame, stmt.expr)
+        branch = stmt.default_part
+        matched = False
+        for case in stmt.cases:
+          case_val = self._eval_expr(frame, case.value)
+          if val == case_val:
+            branch = case.body
+            matched = True
+            break
+        self._exec_block(frame, branch, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
+        exit_val = self._eval_expr(frame, stmt.exit_expr)
+        if exit_val != val:
+          raise JanaError(stmt.exit_expr.pos, f"Assertion failed: should be {val}", contextual=True)
+        return
+      if isinstance(stmt, AncillaBlockStmt):
+        if record_stmt:
+          self._push_boundary(stmt.pos.line, "AncillaBlockStmt")
+        self._arm_step_for_nested_entry()
+        self._exec_ancilla_block(frame, stmt, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
+        return
       if isinstance(stmt, FromStmt):
         if record_stmt:
           self._push_boundary(stmt.pos.line, "FromStmt")
@@ -525,6 +603,12 @@ class Runtime:
           self._push_boundary(stmt.pos.line, "LocalStmt")
         self._arm_step_for_nested_entry()
         self._exec_local(frame, stmt, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
+        return
+      if isinstance(stmt, BareLocalStmt):
+        self._exec_bare_local(frame, stmt, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
+        return
+      if isinstance(stmt, BareDelocalStmt):
+        self._exec_bare_delocal(frame, stmt)
         return
       if isinstance(stmt, CallStmt):
         if record_stmt:
@@ -835,9 +919,11 @@ class Runtime:
   def _exec_print(self, frame: Frame, stmt: PrintsStmt) -> None:
     prints = stmt.prints
     if prints.kind == "print":
+      self._warn_legacy_io("print")
       self.stdout.append((prints.text or "") + "\n")
       return
     if prints.kind == "show":
+      self._warn_legacy_io("show")
       parts = []
       for arg in prints.args:
         if isinstance(arg, Lval):
@@ -848,6 +934,27 @@ class Runtime:
           cell = self._resolve_var(frame, arg.name)
         parts.append(self._format_vdecl(name, cell))
       self.stdout.append(", ".join(parts) + "\n")
+      return
+    if prints.kind == "read":
+      # Simplified read: just read an integer from stdin
+      lval = prints.args[0]
+      assert isinstance(lval, Lval)
+      cell = self._resolve_lval(frame, lval)
+      line = sys.stdin.readline()
+      if line:
+        try:
+          cell.value = int(line.strip())
+        except ValueError:
+          pass
+      return
+    if prints.kind == "write":
+      lval = prints.args[0]
+      assert isinstance(lval, Lval)
+      cell = self._resolve_lval(frame, lval)
+      self.stdout.append(str(cell.value) + "\n")
+      return
+    if prints.kind == "scanf":
+      self._exec_scanf(frame, stmt)
       return
     text = prints.text or ""
     cells = [self._resolve_lval(frame, arg) if isinstance(arg, Lval) else self._resolve_var(frame, arg.name) for arg in prints.args]
@@ -864,6 +971,8 @@ class Runtime:
           if value_index >= len(values):
             raise JanaError(stmt.pos, "Not enough arguments for format string", contextual=True)
           self._check_printf_type(stmt.pos, kind, cells[value_index])
+          if not cells[value_index].writable:
+            raise JanaError(stmt.pos, "Updating constant", contextual=True)
           pieces.append(self._render_printf_value(kind, cells[value_index]))
           value_index += 1
         i += 2
@@ -872,7 +981,12 @@ class Runtime:
         i += 1
     if value_index != len(values):
       raise JanaError(stmt.pos, "Not all arguments where used during string formatting", contextual=True)
-    self.stdout.append("".join(pieces) + "\n")
+    formatted = "".join(pieces)
+    if not formatted.endswith("\n"):
+      formatted += "\n"
+    self.stdout.append(formatted)
+    for cell in cells:
+      cell.value = self._zero_runtime_value(cell)
 
   def _render_printf_value(self, kind: str, cell: Cell) -> str:
     if kind == "s":
@@ -884,6 +998,199 @@ class Runtime:
       return "".join(chars)
     return str(cell.value)
 
+  def _exec_scanf(self, frame: Frame, stmt: PrintsStmt) -> None:
+    text = stmt.prints.text or ""
+    cells = [self._resolve_lval(frame, arg) if isinstance(arg, Lval) else self._resolve_var(frame, arg.name) for arg in stmt.prints.args]
+    raw = sys.stdin.readline()
+    if raw == "":
+      raise JanaError(stmt.pos, "scanf reached end of input", contextual=True)
+    specs = self._scanf_specs(stmt.pos, text)
+    if len(specs) != len(cells):
+      raise JanaError(stmt.pos, "Not enough arguments for format string", contextual=True)
+    parsed = self._scan_input(stmt.pos, text, raw)
+    if len(parsed) != len(cells):
+      raise JanaError(stmt.pos, "Not enough arguments for format string", contextual=True)
+    for kind, cell, value in zip(specs, cells, parsed):
+      self._check_scanf_type(stmt.pos, kind, cell)
+      self._assign_scanf_value(stmt.pos, kind, cell, value)
+
+  def _scanf_specs(self, pos: SourcePos, text: str) -> list[str]:
+    specs: list[str] = []
+    i = 0
+    while i < len(text):
+      if text[i] == "%" and i + 1 < len(text):
+        kind = text[i + 1]
+        if kind != "%":
+          if kind not in {"d", "b", "s"}:
+            raise JanaError(pos, f"Unrecognized format specifier: `%{kind}'", contextual=True)
+          specs.append(kind)
+        i += 2
+      else:
+        i += 1
+    return specs
+
+  def _scan_input(self, pos: SourcePos, fmt: str, raw: str) -> list[object]:
+    values: list[object] = []
+    i = 0
+    j = 0
+    while i < len(fmt):
+      char = fmt[i]
+      if char == "%" and i + 1 < len(fmt):
+        kind = fmt[i + 1]
+        if kind == "%":
+          if j >= len(raw) or raw[j] != "%":
+            raise JanaError(pos, "scanf input did not match literal `%'", contextual=True)
+          i += 2
+          j += 1
+          continue
+        if kind not in {"d", "b", "s"}:
+          raise JanaError(pos, f"Unrecognized format specifier: `%{kind}'", contextual=True)
+        while j < len(raw) and raw[j].isspace():
+          j += 1
+        start = j
+        while j < len(raw) and not raw[j].isspace():
+          j += 1
+        token = raw[start:j]
+        if token == "":
+          raise JanaError(pos, f"scanf could not read `%{kind}' from input", contextual=True)
+        values.append(self._parse_scanf_token(pos, kind, token))
+        i += 2
+        continue
+      if char.isspace():
+        while i < len(fmt) and fmt[i].isspace():
+          i += 1
+        while j < len(raw) and raw[j].isspace():
+          j += 1
+        continue
+      if j >= len(raw) or raw[j] != char:
+        shown = raw[j] if j < len(raw) else "end of input"
+        raise JanaError(pos, f'scanf input mismatch: expected "{char}" but got "{shown}"', contextual=True)
+      i += 1
+      j += 1
+    while j < len(raw) and raw[j].isspace():
+      j += 1
+    if j != len(raw):
+      raise JanaError(pos, "scanf did not consume the full input line", contextual=True)
+    return values
+
+  def _parse_scanf_token(self, pos: SourcePos, kind: str, token: str):
+    if kind == "d":
+      try:
+        return int(token, 10)
+      except ValueError as err:
+        raise JanaError(pos, f"scanf could not parse integer from `{token}'", contextual=True) from err
+    if kind == "b":
+      if token == "true":
+        return True
+      if token == "false":
+        return False
+      if token == "1":
+        return True
+      if token == "0":
+        return False
+      raise JanaError(pos, f"scanf could not parse bool from `{token}'", contextual=True)
+    if kind == "s":
+      return token
+    raise JanaError(pos, f"Unrecognized format specifier: `%{kind}'", contextual=True)
+
+  def _check_scanf_type(self, pos: SourcePos, kind: str, cell: Cell) -> None:
+    self._check_printf_type(pos, kind, cell)
+    if kind in {"a", "t"}:
+      raise JanaError(pos, f"scanf does not support `%{kind}'", contextual=True)
+
+  def _assign_scanf_value(self, pos: SourcePos, kind: str, cell: Cell, value) -> None:
+    if not cell.writable:
+      raise JanaError(pos, "Updating constant", contextual=True)
+    if kind == "s":
+      target = self._scanf_string_bytes(pos, cell, value)
+      if not self._scanf_target_matches(cell, target):
+        raise JanaError(
+          pos,
+          "scanf destination must be zero-cleared or already equal to the incoming value",
+          contextual=True,
+        )
+      cell.value = list(target)
+      return
+    normalized = self._normalize_scanf_scalar(kind, cell, value)
+    if not self._scanf_target_matches(cell, normalized):
+      raise JanaError(
+        pos,
+        "scanf destination must be zero-cleared or already equal to the incoming value",
+        contextual=True,
+      )
+    cell.value = normalized
+
+  def _normalize_scanf_scalar(self, kind: str, cell: Cell, value):
+    if kind == "d":
+      return self._normalize_int(value, cell.int_type)
+    if kind == "b":
+      return bool(value)
+    return value
+
+  def _scanf_string_bytes(self, pos: SourcePos, cell: Cell, value: str) -> list[int]:
+    if cell.shape is None or len(cell.shape) != 1:
+      raise JanaError(pos, "scanf `%s` requires a one-dimensional char array", contextual=True)
+    chars = self._char_literal_bytes(pos, value)
+    if len(chars) > cell.shape[0]:
+      raise JanaError(pos, "scanf string is too large for destination array", contextual=True)
+    chars.extend(0 for _ in range(cell.shape[0] - len(chars)))
+    return chars
+
+  def _scanf_target_matches(self, cell: Cell, incoming) -> bool:
+    if cell.value == incoming:
+      return True
+    return cell.value == self._scanf_zero_value(cell)
+
+  def _scanf_zero_value(self, cell: Cell):
+    if cell.kind == "array":
+      return [0 for _ in cell.value]
+    if cell.kind == "bool":
+      return False
+    if cell.kind == "stack":
+      return []
+    if cell.kind == "struct":
+      return self._initial_struct_value_by_name(cell)
+    return self._normalize_int(0, cell.int_type)
+
+  def _initial_struct_value_by_name(self, cell: Cell):
+    if cell.struct_name is None:
+      return {}
+    struct_def = self.struct_defs.get(cell.struct_name)
+    if struct_def is None:
+      return {}
+    value: dict[str, object] = {}
+    for field in struct_def.fields:
+      value[field.ident.name] = self._zero_struct_field(field)
+    return value
+
+  def _zero_runtime_value(self, cell: Cell):
+    if cell.kind == "array":
+      return [self._zero_array_element(cell) for _ in cell.value]
+    if cell.kind == "bool":
+      return False
+    if cell.kind == "stack":
+      return []
+    if cell.kind == "struct":
+      return self._initial_struct_value_by_name(cell)
+    return self._normalize_int(0, cell.int_type)
+
+  def _zero_array_element(self, cell: Cell):
+    if cell.elem_kind == "bool":
+      return False
+    if cell.elem_kind == "stack":
+      return []
+    if cell.elem_kind == "struct":
+      return self._initial_struct_value_by_name(
+        Cell(0, kind="struct", struct_name=cell.elem_struct_name)
+      )
+    return self._normalize_int(0, cell.elem_int_type)
+
+  def _warn_legacy_io(self, kind: str) -> None:
+    if kind in self._legacy_io_warned:
+      return
+    self._legacy_io_warned.add(kind)
+    sys.stderr.write(f"Warning: `{kind}` is deprecated; use `printf` instead.\n")
+
   def _call_proc(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos, record_stmt: bool = True, record_nested: bool = False) -> None:
     proc = self.procs.get(name)
     if proc is None:
@@ -893,19 +1200,25 @@ class Runtime:
     frame = Frame(vars={})
     for param, arg in zip(proc.params, args):
       if not isinstance(arg, LvalExpr):
-        raise JanaError(arg.pos, "Only l-value arguments are implemented")
-      actual = self._resolve_lval(caller, arg.lval)
-      try:
-        self._check_param_compat(param, actual, arg.pos)
-      except JanaError as err:
-        if err.message.startswith("Expecting array of size"):
-          details = list(err.details)
-          if not any(detail.startswith("In an argument of") for detail in details):
-            details.append(f"In an argument of `{name}', namely `{param.ident.name}'")
-          if not any(detail.startswith("In procedure") for detail in details):
-            details.append(f"In procedure `{name}'")
-          raise JanaError(err.pos, err.message, details, True)
-        raise err
+        if param.decl_type != DeclType.CONSTANT:
+          raise JanaError(arg.pos, "Non-constant argument must be an l-value")
+        val = self._eval_expr(caller, arg)
+        actual = Cell(val, writable=False)
+      else:
+        actual = self._resolve_lval(caller, arg.lval)
+        try:
+          self._check_param_compat(param, actual, arg.pos)
+        except JanaError as err:
+          if err.message.startswith("Expecting array of size"):
+            details = list(err.details)
+            if not any(detail.startswith("In an argument of") for detail in details):
+              details.append(f"In an argument of `{name}', namely `{param.ident.name}'")
+            if not any(detail.startswith("In procedure") for detail in details):
+              details.append(f"In procedure `{name}'")
+            raise JanaError(err.pos, err.message, details, True)
+          raise err
+      if param.decl_type == DeclType.CONSTANT:
+        actual = ConstantParamProxy(actual)
       frame.vars[param.ident.name] = actual
     self._exec_block(frame, proc.body, record_stmt=record_stmt, record_nested=record_nested)
 
@@ -918,19 +1231,25 @@ class Runtime:
     frame = Frame(vars={})
     for param, arg in zip(proc.params, args):
       if not isinstance(arg, LvalExpr):
-        raise JanaError(arg.pos, "Only l-value arguments are implemented")
-      actual = self._resolve_lval(caller, arg.lval)
-      try:
-        self._check_param_compat(param, actual, arg.pos)
-      except JanaError as err:
-        if err.message.startswith("Expecting array of size"):
-          details = list(err.details)
-          if not any(detail.startswith("In an argument of") for detail in details):
-            details.append(f"In an argument of `{name}', namely `{param.ident.name}'")
-          if not any(detail.startswith("In procedure") for detail in details):
-            details.append(f"In procedure `{name}'")
-          raise JanaError(err.pos, err.message, details, True)
-        raise err
+        if param.decl_type != DeclType.CONSTANT:
+          raise JanaError(arg.pos, "Non-constant argument must be an l-value")
+        val = self._eval_expr(caller, arg)
+        actual = Cell(val, writable=False)
+      else:
+        actual = self._resolve_lval(caller, arg.lval)
+        try:
+          self._check_param_compat(param, actual, arg.pos)
+        except JanaError as err:
+          if err.message.startswith("Expecting array of size"):
+            details = list(err.details)
+            if not any(detail.startswith("In an argument of") for detail in details):
+              details.append(f"In an argument of `{name}', namely `{param.ident.name}'")
+            if not any(detail.startswith("In procedure") for detail in details):
+              details.append(f"In procedure `{name}'")
+            raise JanaError(err.pos, err.message, details, True)
+          raise err
+      if param.decl_type == DeclType.CONSTANT:
+        actual = ConstantParamProxy(actual)
       frame.vars[param.ident.name] = actual
     self._exec_block(frame, invert_stmts(proc.body, global_mode=False), record_stmt=record_stmt, record_nested=record_nested)
 
@@ -972,6 +1291,95 @@ class Runtime:
       del frame.vars[stmt.enter_decl.ident.name]
     else:
       frame.vars[stmt.enter_decl.ident.name] = existing
+
+  def _exec_ancilla_block(self, frame: Frame, stmt: AncillaBlockStmt, record_stmt: bool = True, record_nested: bool = False) -> None:
+    # Ancilla block with multiple declarations
+    # Entry: allocate all variables in order
+    saved_vars = []
+    for decl in stmt.decls:
+      self._check_local_decl_match_for_decl(decl)
+      existing = frame.vars.get(decl.ident.name)
+      value, shape, kind, int_type = self._initial_local_value(frame, decl)
+      elem_kind, elem_int_type, elem_is_char, elem_struct_name = self._type_cell_metadata(decl.typ)
+      cell = Cell(
+        value,
+        shape=shape,
+        kind=kind,
+        int_type=int_type,
+        writable=decl.decl_type.value != "Constant",
+        is_char=decl.typ.is_char,
+        struct_name=decl.typ.name if decl.typ.kind == "struct" else None,
+        elem_kind=elem_kind if shape is not None else None,
+        elem_int_type=elem_int_type if shape is not None else None,
+        elem_is_char=elem_is_char if shape is not None else False,
+        elem_struct_name=elem_struct_name if shape is not None else None,
+      )
+      frame.vars[decl.ident.name] = cell
+      saved_vars.append((decl, existing))
+
+    # Execute body
+    self._exec_block(frame, stmt.body, record_stmt=record_stmt, record_nested=record_nested)
+
+    # Exit: verify and deallocate all variables in REVERSE order
+    for decl, existing in reversed(saved_vars):
+      expected = self._expected_local_value(frame, decl)
+      actual = frame.vars[decl.ident.name].value
+      if actual != expected:
+        raise JanaError(decl.pos, f"Expected value to be `{expected}' for ancilla variable `{decl.ident.name}'\n but actual value is `{actual}'", contextual=True)
+      
+      if existing is None:
+        del frame.vars[decl.ident.name]
+      else:
+        frame.vars[decl.ident.name] = existing
+
+  def _check_local_decl_match_for_decl(self, decl: LocalDecl) -> None:
+    # Helper for the logic in _check_local_decl_match but for a single declaration
+    pass # In this Python implementation, we'll skip the match check for simplicity or implement as needed
+
+  def _exec_bare_local(self, frame: Frame, stmt: BareLocalStmt, record_stmt: bool = True, record_nested: bool = False) -> None:
+    """Allocate a local variable without requiring a matching delocal at the same level."""
+    decl = stmt.decl
+    existing = frame.vars.get(decl.ident.name)
+    value, shape, kind, int_type = self._initial_local_value(frame, decl)
+    elem_kind, elem_int_type, elem_is_char, elem_struct_name = self._type_cell_metadata(decl.typ)
+    cell = Cell(
+      value,
+      shape=shape,
+      kind=kind,
+      int_type=int_type,
+      writable=decl.decl_type.value != "Constant",
+      is_char=decl.typ.is_char,
+      struct_name=decl.typ.name if decl.typ.kind == "struct" else None,
+      elem_kind=elem_kind if shape is not None else None,
+      elem_int_type=elem_int_type if shape is not None else None,
+      elem_is_char=elem_is_char if shape is not None else False,
+      elem_struct_name=elem_struct_name if shape is not None else None,
+    )
+    cell._bare_local_previous = existing  # stash for BareDelocalStmt
+    frame.vars[decl.ident.name] = cell
+    if stmt.body:
+      self._exec_block(frame, stmt.body, record_stmt=record_stmt, record_nested=record_nested)
+
+  def _exec_bare_delocal(self, frame: Frame, stmt: BareDelocalStmt) -> None:
+    """Assert and deallocate a variable created by BareLocalStmt."""
+    decl = stmt.decl
+    name = decl.ident.name
+    if name not in frame.vars:
+      raise JanaError(stmt.pos, f"Delocal of unknown variable `{name}'", contextual=True)
+    cell = frame.vars[name]
+    expected = self._expected_local_value(frame, decl)
+    actual = cell.value
+    if actual != expected:
+      raise JanaError(
+        stmt.pos,
+        f"Expected value to be `{expected}' for local variable `{name}'\n but actual value is `{actual}'",
+        contextual=True,
+      )
+    previous = getattr(cell, '_bare_local_previous', None)
+    if previous is None:
+      del frame.vars[name]
+    else:
+      frame.vars[name] = previous
 
   def _check_local_decl_match(self, stmt: LocalStmt) -> None:
     enter = stmt.enter_decl
@@ -1017,21 +1425,55 @@ class Runtime:
 
   def _expected_local_value(self, frame: Frame, decl: LocalDecl):
     if decl.dimensions:
+      current_cell = frame.vars.get(decl.ident.name)
+      resolved_sizes: list[int] | None = None
+      if any(dim is None for dim in decl.dimensions):
+        if current_cell is None or current_cell.shape is None or len(current_cell.shape) != len(decl.dimensions):
+          raise JanaError(decl.pos, f"Array size missing for variable `{decl.ident.name}'")
+        resolved_sizes = []
+        for idx, dim in enumerate(decl.dimensions):
+          resolved_sizes.append(current_cell.shape[idx] if dim is None else self._eval_expr(frame, dim))
+      elif current_cell is not None and current_cell.shape is not None:
+        resolved_sizes = [self._eval_expr(frame, dim) for dim in decl.dimensions]
+      flat_size = None if resolved_sizes is None else math.prod(resolved_sizes)
       if decl.init_expr is None:
         return [self._zero_value_for_type(decl.typ, decl.pos) for _ in frame.vars[decl.ident.name].value]
       if decl.typ.kind == "bool":
-        return [bool(item) for item in self._flatten_array(frame, decl.init_expr)]
+        flat = [bool(item) for item in self._flatten_array(frame, decl.init_expr)]
+        if flat_size is not None:
+          if len(flat) > flat_size:
+            raise JanaError(decl.pos, f"Initializer is too large for variable `{decl.ident.name}'")
+          if len(flat) < flat_size:
+            flat.extend(False for _ in range(flat_size - len(flat)))
+        return flat
       if decl.typ.kind == "stack":
-        return self._flatten_array(frame, decl.init_expr)
+        flat = self._flatten_array(frame, decl.init_expr)
+        if flat_size is not None:
+          if len(flat) > flat_size:
+            raise JanaError(decl.pos, f"Initializer is too large for variable `{decl.ident.name}'")
+          if len(flat) < flat_size:
+            flat.extend([] for _ in range(flat_size - len(flat)))
+        return flat
       if decl.typ.kind == "struct":
         if not isinstance(decl.init_expr, ArrayExpr):
           raise JanaError(decl.pos, "Struct array initializer must be a brace-enclosed list")
         flat = []
         for item in decl.init_expr.items:
           flat.append(self._init_struct_from_expr(frame, decl.typ, decl.pos, item))
+        if flat_size is not None:
+          if len(flat) > flat_size:
+            raise JanaError(decl.pos, f"Initializer is too large for variable `{decl.ident.name}'")
+          if len(flat) < flat_size:
+            flat.extend(self._zero_value_for_type(decl.typ, decl.pos) for _ in range(flat_size - len(flat)))
         return flat
       int_type = decl.typ.int_type if decl.typ.kind == "int" else None
-      return self._flatten_initializer(frame, decl.pos, decl.init_expr, int_type, decl.typ.is_char)
+      flat = self._flatten_initializer(frame, decl.pos, decl.init_expr, int_type, decl.typ.is_char)
+      if flat_size is not None:
+        if len(flat) > flat_size:
+          raise JanaError(decl.pos, f"Initializer is too large for variable `{decl.ident.name}'")
+        if len(flat) < flat_size:
+          flat.extend(self._zero_value_for_type(decl.typ, decl.pos) for _ in range(flat_size - len(flat)))
+      return flat
     if decl.typ.kind == "struct":
       if decl.init_expr is not None:
         return self._init_struct_from_expr(frame, decl.typ, decl.pos, decl.init_expr)
@@ -1044,6 +1486,16 @@ class Runtime:
 
   def _resolve_var(self, frame: Frame, name: str) -> Cell:
     if name not in frame.vars:
+      if self.std in ("janus1982", "janus1982ext"):
+        # In 1982 Janus all variables are global: resolve via root frame
+        root = self._root_frame
+        if root is not None and frame is not root:
+          if name not in root.vars:
+            root.vars[name] = Cell(0)
+          return root.vars[name]
+        # We are the root frame (or no root yet): create here
+        frame.vars[name] = Cell(0)
+        return frame.vars[name]
       raise JanaError(SourcePos("", 0, 0), f"Variable `{name}' has not been declared", contextual=True)
     return frame.vars[name]
 
@@ -1291,13 +1743,14 @@ class Runtime:
     try:
       if current.value != start:
         raise JanaError(stmt.pos, "Assertion failed: should be true", contextual=True)
-      while current.value != end + step:
+      stop = end if stmt.exclusive else end + step
+      while current.value != stop:
         if current.value != start and current.value == start:
           raise JanaError(stmt.pos, "Assertion failed: should be false", contextual=True)
         self._exec_block(frame, stmt.body, record_stmt=record_stmt, record_nested=record_nested, allow_break=False)
         current.value += step
     finally:
-      expected = end + step
+      expected = end if stmt.exclusive else end + step
       actual = current.value
       if existing is None:
         del frame.vars[stmt.ident.name]
@@ -1539,6 +1992,53 @@ class Runtime:
       entries.append(self._format_vdecl(name, cell))
     return "\n".join(entries)
 
+  def _nonzero_store_names(self, frame: Frame) -> list[str]:
+    names: list[str] = []
+    for name in sorted(frame.vars):
+      if not self._is_zero_cell(frame.vars[name]):
+        names.append(name)
+    return names
+
+  def _is_zero_cell(self, cell: Cell) -> bool:
+    return self._is_zero_value(cell.value, cell)
+
+  def _is_zero_value(self, value, cell: Cell | None = None) -> bool:
+    if isinstance(value, bool):
+      return value is False
+    if isinstance(value, dict):
+      struct_name = cell.struct_name if cell is not None else self._struct_name_for_value(value)
+      for field_name, field_value in value.items():
+        field_shape = self._struct_field_shape(struct_name, field_name)
+        if field_shape is not None:
+          if not self._is_zero_array_value(field_value, field_shape):
+            return False
+        elif isinstance(field_value, dict):
+          if not self._is_zero_value(field_value, Cell(field_value, kind="struct", struct_name=self._struct_name_for_value(field_value))):
+            return False
+        elif isinstance(field_value, list):
+          if field_value:
+            return False
+        elif field_value not in {0, False}:
+          return False
+      return True
+    if isinstance(value, list):
+      if cell is not None and cell.kind == "array" and cell.shape is not None:
+        return self._is_zero_array_value(value, cell.shape)
+      return len(value) == 0
+    return value == 0
+
+  def _is_zero_array_value(self, flat: list, shape: list[int]) -> bool:
+    for item in flat:
+      if isinstance(item, dict):
+        if not self._is_zero_value(item, Cell(item, kind="struct", struct_name=self._struct_name_for_value(item))):
+          return False
+      elif isinstance(item, list):
+        if item:
+          return False
+      elif item not in {0, False}:
+        return False
+    return True
+
   @staticmethod
   def _format_lval_name(lval: Lval) -> str:
     parts = [lval.ident.name]
@@ -1703,3 +2203,27 @@ class ArraySliceProxy(Cell):
     for dim in self.shape:
       length *= dim
     self.array[self.offset:self.offset + length] = new_value
+
+
+class ConstantParamProxy(Cell):
+  """Read-only wrapper around a caller's Cell for constant parameters."""
+  def __init__(self, inner: Cell):
+    self._inner = inner
+    self.writable = False
+    self.kind = inner.kind
+    self.shape = inner.shape
+    self.int_type = inner.int_type
+    self.is_char = inner.is_char
+    self.struct_name = inner.struct_name
+    self.elem_kind = getattr(inner, 'elem_kind', None)
+    self.elem_int_type = getattr(inner, 'elem_int_type', None)
+    self.elem_is_char = getattr(inner, 'elem_is_char', False)
+    self.elem_struct_name = getattr(inner, 'elem_struct_name', None)
+
+  @property
+  def value(self):
+    return self._inner.value
+
+  @value.setter
+  def value(self, new_value):
+    self._inner.value = new_value

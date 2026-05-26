@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import io
 import json
 import sys
 from enum import Enum
@@ -10,7 +11,7 @@ import signal
 
 from .format import format_program
 from .invert import invert_program
-from .parser import parse_program
+from .parser_janus2026 import parse_program
 from .preprocess import preprocess_text
 from .c_codegen import format_program as format_c_program
 from .errors import JanaError
@@ -39,20 +40,44 @@ def _to_jsonable(value):
 
 
 def build_parser() -> argparse.ArgumentParser:
-  parser = argparse.ArgumentParser(prog="jana-py", add_help=False)
-  parser.add_argument("-a", action="store_true", dest="ast")
-  parser.add_argument("-i", action="store_true", dest="invert")
-  parser.add_argument("-c", action="store_true", dest="c_code")
-  parser.add_argument("-h", dest="header")
-  parser.add_argument("-m", dest="mod_bits")
-  parser.add_argument("-p", dest="mod_prime")
-  parser.add_argument("-t", dest="timeout")
-  parser.add_argument("-d", action="store_true", dest="debug")
-  parser.add_argument("-e", action="store_true", dest="debug_on_error")
-  parser.add_argument("--circuit", action="store_true", dest="circuit")
-  parser.add_argument("--profile", action="store_true", dest="profile")
-  parser.add_argument("--inverse", dest="inverse_store", default=None)
-  parser.add_argument("file")
+  parser = argparse.ArgumentParser(
+    prog="pyjanus",
+    add_help=False,
+    description="Parse, run, transform, and inspect Janus/Jana programs.",
+    epilog=(
+      "examples:\n"
+      "  pyjanus program.ja\n"
+      "  pyjanus -a program.ja\n"
+      "  pyjanus -i program.ja\n"
+      "  pyjanus -c -h myheader.h program.ja\n"
+      "  pyjanus -m32 program.ja\n"
+      "  pyjanus -p 65537 program.ja\n"
+      "  pyjanus --profile program.ja\n"
+      "  pyjanus --inverse '{\"x\": 5, \"y\": 8}' program.ja\n"
+      "  cat program.ja | pyjanus -\n"
+      "  pyjanus program.ja 10 20            # positional args become stdin lines for scanf\n"
+      "  echo 10 | pyjanus program.ja        # equivalent: stdin piped directly"
+    ),
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+  )
+  parser.add_argument("--std", dest="std", choices=["janus2026", "jana2014", "jana2014basic", "janus1982", "janus1982ext"], default="janus2026", help="language standard: janus2026 (default, C-style), jana2014, jana2014basic, janus1982 (strict 1982), janus1982ext (1982 + extensions)")
+  parser.add_argument("-a", action="store_true", dest="ast", help="print the parsed AST as JSON")
+  parser.add_argument("-i", action="store_true", dest="invert", help="invert the program; print source unless combined with execution modes")
+  parser.add_argument("-c", action="store_true", dest="c_code", help="emit generated C code instead of running the program")
+  parser.add_argument("-h", dest="header", metavar="HEADER", help="header include path/name used with `-c` C code generation")
+  parser.add_argument("-m", dest="mod_bits", metavar="BITS", help="run integer arithmetic modulo 2^BITS")
+  parser.add_argument("-p", dest="mod_prime", metavar="PRIME", help="run integer arithmetic in the finite field of size PRIME")
+  parser.add_argument("-t", dest="timeout", metavar="SECONDS", help="abort execution after SECONDS and exit with code 124")
+  parser.add_argument("-d", action="store_true", dest="debug", help="run with debugger-style stepping output")
+  parser.add_argument("-e", action="store_true", dest="debug_on_error", help="break into debug mode only when an error occurs")
+  parser.add_argument("-s", "--store", action="store_true", dest="show_store", help="print the final store after normal execution")
+  parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
+  parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
+  parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
+  parser.add_argument("--help", action="help", default=argparse.SUPPRESS,
+                      help="show this help message and exit")
+  parser.add_argument("file", nargs="?", help="input file path, or `-` to read source from stdin")
+  parser.add_argument("program_args", nargs="*", help="positional arguments fed to the program's scanf/read via stdin (one per line)")
   return parser
 
 
@@ -67,9 +92,15 @@ def normalize_argv(argv: list[str]) -> list[str]:
       normalized.extend(["-t", arg[2:]])
     elif arg.startswith("-h="):
       normalized.extend(["-h", arg[3:]])
+    elif arg.startswith("-std="):
+      normalized.extend(["--std", arg[5:]])
     else:
       normalized.append(arg)
   return normalized
+
+
+def _parse_optional_int(value: str | None) -> int | None:
+  return int(value) if value not in {None, ""} else None
 
 
 def validate_args(args) -> None:
@@ -86,6 +117,9 @@ def validate_args(args) -> None:
 def main(argv: list[str] | None = None) -> int:
   parser = build_parser()
   args = parser.parse_args(normalize_argv(argv or sys.argv[1:]))
+  if args.file is None:
+    parser.print_help()
+    return 0
   try:
     validate_args(args)
   except Exception as exc:
@@ -93,7 +127,16 @@ def main(argv: list[str] | None = None) -> int:
       return 1
     print(str(exc))
     return 1
-  text = sys.stdin.read() if args.file == "-" else open(args.file, "r", encoding="utf-8").read()
+  if args.file == "-":
+    text = sys.stdin.read()
+  else:
+    with open(args.file, "r", encoding="utf-8") as f:
+      text = f.read()
+  if args.program_args:
+    if args.file == "-":
+      print("error: cannot pass program args when reading source from stdin (`-`)", file=sys.stderr)
+      return 1
+    sys.stdin = io.StringIO("\n".join(args.program_args) + "\n")
   timeout_sec = int(args.timeout) if args.timeout not in {None, ""} else -1
   timeout_enabled = timeout_sec > 0
   try:
@@ -101,7 +144,20 @@ def main(argv: list[str] | None = None) -> int:
     if timeout_enabled:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)
-    program = parse_program(args.file, preprocessed.text, preprocessed.line_origins)
+    if args.std == "jana2014":
+      from .parser_jana2014 import parse_program as parse_program_jana
+      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
+    elif args.std == "jana2014basic":
+      from .parser_jana2014basic import parse_program as parse_program_jana
+      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
+    elif args.std in ("janus1982", "janus1982ext"):
+      if args.std == "janus1982":
+        from .parser_janus1982 import parse_program as parse_program_1982
+      else:
+        from .parser_janus1982ext import parse_program as parse_program_1982
+      program = parse_program_1982(args.file, preprocessed.text, preprocessed.line_origins)
+    else:
+      program = parse_program(args.file, preprocessed.text, preprocessed.line_origins)
     validate_program(program)
     if args.circuit:
       from .circuit import synthesize_program
@@ -132,8 +188,8 @@ def main(argv: list[str] | None = None) -> int:
       if args.invert:
         print(format_program(program), end="")
       else:
-        mod_bits = int(args.mod_bits) if args.mod_bits not in {None, ""} else None
-        mod_prime = int(args.mod_prime) if args.mod_prime not in {None, ""} else None
+        mod_bits = _parse_optional_int(args.mod_bits)
+        mod_prime = _parse_optional_int(args.mod_prime)
         print(
           Runtime(
             program,
@@ -141,7 +197,8 @@ def main(argv: list[str] | None = None) -> int:
             mod_prime=mod_prime,
             debug=args.debug,
             debug_on_error=args.debug_on_error,
-          ).run(),
+            std=args.std,
+          ).run(show_store=args.show_store),
           end="",
         )
     return 0

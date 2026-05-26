@@ -22,6 +22,8 @@ ELSE_RE = re.compile(r"^\s*#else\s*$")
 ENDIF_RE = re.compile(r"^\s*#endif\s*$")
 DIRECTIVE_RE = re.compile(r"^\s*#")
 
+MAX_MACRO_EXPANSION_DEPTH = 100 # Max depth for macro expansion
+
 
 @dataclass(frozen=True)
 class LineOrigin:
@@ -52,7 +54,7 @@ class ConditionalFrame:
 def preprocess_text(filename: str, text: str) -> PreprocessedText:
   current_path = Path(filename).resolve() if filename not in {"", "-"} else None
   include_stack = [current_path] if current_path is not None else []
-  return _preprocess_text(filename, text, {}, {}, include_stack)
+  return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH) # Pass initial depth and max_depth
 
 
 def _preprocess_text(
@@ -61,6 +63,8 @@ def _preprocess_text(
   macros: dict[str, str],
   function_macros: dict[str, FunctionMacro],
   include_stack: list[Path],
+  depth: int, # Add depth parameter
+  max_depth: int, # Add max_depth parameter
 ) -> PreprocessedText:
   out_lines: list[str] = []
   line_origins: list[LineOrigin] = []
@@ -130,7 +134,7 @@ def _preprocess_text(
       define_match = DEFINE_RE.match(body)
       if define_match:
         _, name, replacement = define_match.groups()
-        macros[name] = _expand_macro_text(replacement, macros, function_macros, {name})
+        macros[name] = _expand_macro_text(replacement, macros, function_macros, {name}, depth, max_depth) # Pass depth and max_depth
         function_macros.pop(name, None)
         continue
       undef_match = UNDEF_RE.match(body)
@@ -153,7 +157,8 @@ def _preprocess_text(
         if not include_path.exists():
           raise JanaError(SourcePos(filename, lineno, 1), f'Included file not found: "{include_target}"')
         included_text = include_path.read_text(encoding="utf-8")
-        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path])
+        # Pass depth and max_depth to recursive call for included files
+        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path], depth, max_depth)
         if included.text:
           out_lines.append(included.text)
           line_origins.extend(included.line_origins)
@@ -210,13 +215,15 @@ def _expand_line(line: str, macros: dict[str, str], function_macros: dict[str, F
       while i < len(line) and _is_ident_continue(line[i]):
         i += 1
       ident = line[start:i]
-      func_result = _expand_function_macro(line, i, ident, macros, function_macros, set())
+      # Pass depth and max_depth to _expand_function_macro
+      func_result = _expand_function_macro(line, i, ident, macros, function_macros, set(), 0, MAX_MACRO_EXPANSION_DEPTH)
       if func_result is not None:
         replacement, end = func_result
         out.append(replacement)
         i = end
         continue
-      out.append(_expand_macro_text(macros.get(ident, ident), macros, function_macros, {ident}))
+      # Pass depth and max_depth to _expand_macro_text
+      out.append(_expand_macro_text(macros.get(ident, ident), macros, function_macros, {ident}, 0, MAX_MACRO_EXPANSION_DEPTH))
       continue
     out.append(line[i])
     i += 1
@@ -247,7 +254,10 @@ def _join_continued_lines(text: str) -> list[tuple[int, str, int]]:
   return logical_lines
 
 
-def _expand_macro_text(text: str, macros: dict[str, str], function_macros: dict[str, FunctionMacro], seen: set[str]) -> str:
+def _expand_macro_text(text: str, macros: dict[str, str], function_macros: dict[str, FunctionMacro], seen: set[str], depth: int, max_depth: int) -> str: # Add depth and max_depth parameters
+  if depth >= max_depth:
+    raise JanaError(SourcePos(filename="<macro expansion>", line=0, col=0), f"Macro expansion depth limit ({max_depth}) exceeded")
+
   out: list[str] = []
   i = 0
   while i < len(text):
@@ -260,7 +270,8 @@ def _expand_macro_text(text: str, macros: dict[str, str], function_macros: dict[
       if ident in seen:
         out.append(ident)
         continue
-      func_result = _expand_function_macro(text, i, ident, macros, function_macros, seen)
+      # Pass depth and max_depth to recursive calls
+      func_result = _expand_function_macro(text, i, ident, macros, function_macros, seen, depth + 1, max_depth)
       if func_result is not None:
         rendered, end = func_result
         out.append(rendered)
@@ -270,7 +281,8 @@ def _expand_macro_text(text: str, macros: dict[str, str], function_macros: dict[
       if replacement is None:
         out.append(ident)
       else:
-        out.append(_expand_macro_text(replacement, macros, function_macros, seen | {ident}))
+        # Pass depth and max_depth to recursive call
+        out.append(_expand_macro_text(replacement, macros, function_macros, seen | {ident}, depth + 1, max_depth))
       continue
     out.append(text[i])
     i += 1
@@ -284,6 +296,8 @@ def _expand_function_macro(
   macros: dict[str, str],
   function_macros: dict[str, FunctionMacro],
   seen: set[str],
+  depth: int, # Add depth parameter
+  max_depth: int, # Add max_depth parameter
 ) -> tuple[str, int] | None:
   macro = function_macros.get(ident)
   if macro is None or ident in seen:
@@ -295,11 +309,13 @@ def _expand_function_macro(
   if len(args) != len(macro.params):
     return None
   expanded_args = {
-    param: _expand_macro_text(arg.strip(), macros, function_macros, set())
+    # Pass depth and max_depth to recursive calls within argument expansion
+    param: _expand_macro_text(arg.strip(), macros, function_macros, set(), depth + 1, max_depth)
     for param, arg in zip(macro.params, args)
   }
   substituted = _substitute_macro_params(macro.body, expanded_args)
-  return _expand_macro_text(substituted, macros, function_macros, seen | {ident}), end
+  # Pass depth and max_depth to recursive call
+  return _expand_macro_text(substituted, macros, function_macros, seen | {ident}, depth + 1, max_depth), end
 
 
 def _parse_macro_call(text: str, index: int) -> tuple[list[str], int] | None:

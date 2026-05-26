@@ -35,6 +35,8 @@ class ModOp(Enum):
   ADD_EQ = "+="
   SUB_EQ = "-="
   XOR_EQ = "^="
+  MUL_EQ = "*="
+  DIV_EQ = "/="
 
 
 class UnaryOpKind(Enum):
@@ -58,7 +60,7 @@ class BinOpKind(Enum):
   LOR = "||"
   GT = ">"
   LT = "<"
-  EQ = "="
+  EQ = "=="
   NEQ = "!="
   GE = ">="
   LE = "<="
@@ -275,6 +277,7 @@ class IterateStmt(Stmt):
   end_expr: Expr
   body: list[Stmt]
   pos: SourcePos
+  exclusive: bool = False  # True for C-style `for (i < end)`, False for `iterate i to end`
 
 
 @dataclass(frozen=True)
@@ -296,6 +299,23 @@ class LocalStmt(Stmt):
   enter_decl: LocalDecl
   body: list[Stmt]
   exit_decl: LocalDecl
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class BareLocalStmt(Stmt):
+  """Standalone local: allocates variable, body runs until block boundary.
+  Used when delocal appears at a different nesting level (crossing pattern)."""
+  decl: LocalDecl
+  body: list[Stmt]
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class BareDelocalStmt(Stmt):
+  """Standalone delocal: asserts value and deallocates variable.
+  Pairs with a BareLocalStmt at a different nesting level."""
+  decl: LocalDecl
   pos: SourcePos
 
 
@@ -342,6 +362,38 @@ class SkipStmt(Stmt):
 @dataclass(frozen=True)
 class AssertStmt(Stmt):
   expr: Expr
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class SwitchCase:
+  value: Expr
+  body: list[Stmt]
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class SwitchStmt(Stmt):
+  expr: Expr
+  cases: list[SwitchCase]
+  default_part: list[Stmt]
+  exit_expr: Expr
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class AncillaBlockStmt(Stmt):
+  decls: list[LocalDecl]
+  body: list[Stmt]
+  pos: SourcePos
+
+
+@dataclass(frozen=True)
+class ForeachStmt(Stmt):
+  typ: Type
+  ident: Ident
+  array_expr: Expr
+  body: list[Stmt]
   pos: SourcePos
 
 

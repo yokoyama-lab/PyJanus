@@ -8,7 +8,11 @@ from typing import Sequence
 
 from .ast import ArrayExpr
 from .ast import AssertStmt
+from .ast import SwitchCase
+from .ast import SwitchStmt
 from .ast import AssignStmt
+from .ast import BareDelocalStmt
+from .ast import BareLocalStmt
 from .ast import BinExpr
 from .ast import BinOpKind
 from .ast import Boolean
@@ -38,7 +42,6 @@ from .ast import ProcMain
 from .ast import Program
 from .ast import PushStmt
 from .ast import SizeExpr
-from .ast import SkipStmt
 from .ast import SourcePos
 from .ast import StringLiteral
 from .ast import StructDef
@@ -58,12 +61,16 @@ from .preprocess import LineOrigin
 
 
 KEYWORDS = {
-  "procedure", "main", "int", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
+  "void", "main", "int", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
   "char", "string", "struct",
   "ancilla", "constant", "bool", "true", "false", "if", "then", "else", "fi",
+  "for",
   "from", "do", "loop", "until", "push", "pop", "local", "delocal", "call", "uncall",
-  "external", "error", "skip", "stack", "empty", "top", "size", "show", "print",
+  "external", "error", "stack", "empty", "top", "size",
   "printf", "nil", "assert", "iterate", "by", "to", "end",
+  "read", "write", "show", "print",
+  "switch", "case", "default", "break",
+  "scanf",
 }
 
 TOKEN_RE = re.compile(
@@ -73,7 +80,7 @@ TOKEN_RE = re.compile(
   |(?P<MCOMMENT>/\*.*?\*/)
   |(?P<STRING>"(?:\\.|[^"\\])*")
   |(?P<NUMBER>0b[01]+|\d+)
-  |(?P<OP><=>|\+=|-=|\^=|<<|>>|<=|>=|!=|&&|\|\||\*\*|=|<|>|\+|-|\*|/|%|\^|&|\||!|,|\.|\?|:|\(|\)|\[|\]|\{|\})
+  |(?P<OP><=>|\+=|\-=|\^=|\*=|\/=|<<|>>|<=|>=|!=|==|&&|\|\||\*\*|=|<|>|\+|-|\*|\/|%|\^|&|\||!|,|\. |\?|:|\(|\)|\[|\]|\{|\}|;)
   |(?P<IDENT>[A-Za-z][A-Za-z0-9_']*)
   |(?P<MISMATCH>.)
   """,
@@ -84,7 +91,7 @@ BIN_PRECEDENCE = [
   {"ops": {"||": BinOpKind.LOR}, "assoc": "left"},
   {"ops": {"&&": BinOpKind.LAND}, "assoc": "left"},
   {"ops": {"&": BinOpKind.AND, "|": BinOpKind.OR, "^": BinOpKind.XOR}, "assoc": "left"},
-  {"ops": {"<=": BinOpKind.LE, "<": BinOpKind.LT, ">=": BinOpKind.GE, ">": BinOpKind.GT, "=": BinOpKind.EQ, "!=": BinOpKind.NEQ}, "assoc": "left"},
+  {"ops": {"<=": BinOpKind.LE, "<": BinOpKind.LT, ">=": BinOpKind.GE, ">": BinOpKind.GT, "=": BinOpKind.EQ, "==": BinOpKind.EQ, "!=": BinOpKind.NEQ}, "assoc": "left"},
   {"ops": {"<<": BinOpKind.SL, ">>": BinOpKind.SR}, "assoc": "left"},
   {"ops": {"+": BinOpKind.ADD, "-": BinOpKind.SUB}, "assoc": "left"},
   {"ops": {"*": BinOpKind.MUL, "/": BinOpKind.DIV, "%": BinOpKind.MOD}, "assoc": "left"},
@@ -117,6 +124,8 @@ class TokenStream:
     self.index = 0
 
   def peek(self) -> Token:
+    if self.index >= len(self.tokens):
+      return self.tokens[-1]
     return self.tokens[self.index]
 
   def consume(self) -> Token:
@@ -209,17 +218,21 @@ class Parser:
       else:
         procs.append(proc_or_main)
     if len(mains) > 1:
-      raise JanaError(self.tokens.peek().pos, 'Unexpected end of input\n    Expecting "procedure" or end of input\n    Multiple main procedures has been defined')
+      raise JanaError(self.tokens.peek().pos, 'Unexpected end of input\n    Expecting "void" or end of input\n    Multiple main procedures has been defined')
     return Program(mains[0] if mains else None, procs, struct_defs)
 
   def parse_struct_def(self) -> StructDef:
     pos = self.expect_kw("struct").pos
     ident = self.parse_ident(allow_field_keywords=True)
     self.expect_op("{")
-    fields = [self.parse_struct_field()]
-    while self.tokens.match("OP", ","):
+    fields = []
+    while not (self.tokens.peek().kind == "OP" and self.tokens.peek().value == "}"):
       fields.append(self.parse_struct_field())
+      if self.tokens.match("OP", ","):
+        continue
+      self.tokens.match("OP", ";")
     self.expect_op("}")
+    self.tokens.match("OP", ";")  # optional trailing semicolon: struct Foo { ... };
     return StructDef(ident, fields, pos)
 
   def parse_struct_field(self) -> StructField:
@@ -231,21 +244,26 @@ class Parser:
     return StructField(typ, ident, pos, dimensions)
 
   def parse_procedure(self) -> ProcMain | Proc:
-    self.expect_kw("procedure")
+    start = self.tokens.peek()
+    if start.kind != "KW" or start.value != "void":
+      raise JanaError(start.pos, f'Unexpected "{start.value}"\n    Expecting "void"')
+    self.tokens.consume()
     ident = self.parse_ident(allow_main=True)
     if ident.name == "main":
       pos = ident.pos
-      self.expect_op("(")
-      self.expect_op(")")
+      if self.tokens.peek().value == "(":
+        self.expect_op("(")
+        self.expect_op(")")
       vdecls: list[Vdecl] = []
+      self.expect_op("{")
       while self._starts_vdecl():
-        vdecls.append(self.parse_main_vdecl())
-      stmts = self.parse_stmt_block({"procedure", "EOF"})
-      if not stmts:
-        raise JanaError(pos, "Expecting statement")
+        vdecls.extend(self.parse_main_vdecl())
+        self.expect_op(";")
+      stmts = self.parse_stmt_block({"void", "EOF"})
+      self.expect_op("}")
       return ProcMain(vdecls, stmts, pos)
     params = self.parse_params()
-    body = self.parse_stmt_block({"procedure", "EOF"})
+    body = self.parse_stmt_block({"void", "EOF"}, require_braces=True)
     if not body:
       raise JanaError(ident.pos, "Expecting statement")
     return Proc(ident, params, body)
@@ -260,8 +278,23 @@ class Parser:
       self.expect_op(")")
     return params
 
-  def parse_main_vdecl(self) -> Vdecl:
-    return self.parse_vdecl(True)
+  def parse_main_vdecl(self) -> list[Vdecl]:
+    pos = self.tokens.peek().pos
+    decl_type = self.parse_decl_type()
+    typ = self.parse_type()
+    result = []
+    while True:
+      dims = self._parse_decl_dimensions()
+      ident = self.parse_ident()
+      dims = self._merge_decl_dimensions(dims, self._parse_decl_dimensions())
+      init_expr = None
+      if self.tokens.match("OP", "="):
+        init_expr = self.parse_array_or_expr()
+      result.append(Vdecl(decl_type, typ, ident, dims, init_expr, pos))
+      if not self.tokens.match("OP", ","):
+        break
+      pos = self.tokens.peek().pos
+    return result
 
   def parse_vdecl(self, allow_init: bool) -> Vdecl:
     pos = self.tokens.peek().pos
@@ -284,7 +317,7 @@ class Parser:
 
   def parse_type(self) -> Type:
     token = self.tokens.peek()
-    if token.kind == "IDENT":
+    if token.kind == "IDENT" and token.value in self.struct_names:
       self.tokens.consume()
       return Type("struct", token.pos, name=token.value)
     if token.kind != "KW":
@@ -303,7 +336,9 @@ class Parser:
       return Type("bool", token.pos)
     raise JanaError(token.pos, "Expecting type")
 
-  def parse_stmt_block(self, end_keywords: set[str]) -> list:
+  def parse_stmt_block(self, end_keywords: set[str], require_braces: bool = False) -> list:
+    if require_braces:
+      self.expect_op("{")
     stmts = []
     while True:
       token = self.tokens.peek()
@@ -311,7 +346,12 @@ class Parser:
         break
       if token.kind == "KW" and token.value in end_keywords:
         break
+      if token.kind == "OP" and token.value == "}":
+        break
       stmts.append(self.parse_statement())
+      self.tokens.match("OP", ";")   # skip optional semicolon (C-style)
+    if require_braces:
+      self.expect_op("}")
     return stmts
 
   def parse_statement(self):
@@ -327,6 +367,7 @@ class Parser:
         "constant": self.parse_constant_stmt,
         "if": self.parse_if_stmt,
         "from": self.parse_from_stmt,
+        "for": self.parse_for_stmt,
         "iterate": self.parse_iterate_stmt,
         "push": self.parse_push_stmt,
         "pop": self.parse_pop_stmt,
@@ -334,14 +375,24 @@ class Parser:
         "call": self.parse_call_stmt,
         "uncall": self.parse_uncall_stmt,
         "error": self.parse_error_stmt,
-        "print": self.parse_print_stmt,
         "printf": self.parse_printf_stmt,
-        "show": self.parse_show_stmt,
-        "skip": self.parse_skip_stmt,
+        "switch": self.parse_switch_stmt,
+        "scanf": self.parse_scanf_stmt,
         "assert": self.parse_assert_stmt,
+        "read": self.parse_read_stmt,
+        "write": self.parse_write_stmt,
+        "show": self.parse_show_stmt,
+        "print": self.parse_print_stmt,
       }
       if token.value in dispatch:
         return dispatch[token.value]()
+    # bare call: ident(args) without the `call` keyword
+    if token.kind == "IDENT":
+      next_idx = self.tokens.index + 1
+      if next_idx < len(self.tokens.tokens):
+        next_tok = self.tokens.tokens[next_idx]
+        if next_tok.kind == "OP" and next_tok.value == "(":
+          return self.parse_bare_call_stmt()
     return self.parse_assign_or_swap()
 
   def parse_assign_or_swap(self):
@@ -358,35 +409,95 @@ class Parser:
     if op := self.tokens.match("OP", "<=>"):
       right = self.parse_lval()
       return SwapStmt(left, right, op.pos)
-    for value, modop in [("+=", ModOp.ADD_EQ), ("-=", ModOp.SUB_EQ), ("^=", ModOp.XOR_EQ)]:
+    for value, modop in [("+=", ModOp.ADD_EQ), ("-=", ModOp.SUB_EQ), ("^=", ModOp.XOR_EQ), ("*=", ModOp.MUL_EQ), ("/=", ModOp.DIV_EQ)]:
       if self.tokens.match("OP", value):
-        expr = self.parse_expression()
+        expr = self.parse_binary_level(0)  # bare ternary requires parentheses
         return AssignStmt(modop, left, expr, pos)
     raise JanaError(self.tokens.peek().pos, "Expecting statement")
 
   def parse_if_stmt(self) -> IfStmt:
     pos = self.expect_kw("if").pos
     entry = self.parse_expression()
-    self.expect_kw("then")
-    if_part = self.parse_stmt_block({"else", "fi"})
+    self.tokens.match("KW", "then")  # optional in C-style
+    c_style = self.tokens.peek().kind == "OP" and self.tokens.peek().value == "{"
+    if_part = self.parse_stmt_block({"else", "fi"}, require_braces=c_style)
     else_part: list = []
     if self.tokens.match("KW", "else"):
-      else_part = self.parse_stmt_block({"fi"})
-    self.expect_kw("fi")
-    exit_cond = self.parse_expression()
+      c_else = self.tokens.peek().kind == "OP" and self.tokens.peek().value == "{"
+      else_part = self.parse_stmt_block({"fi"}, require_braces=c_else)
+    if self.tokens.match("KW", "fi"):
+      if self._looks_like_expr():
+        exit_cond = self.parse_expression()
+      else:
+        exit_cond = entry
+    else:
+      exit_cond = entry
+    self.tokens.match("OP", ";")  # optional trailing semicolon in C-style
     return IfStmt(entry, if_part, else_part, exit_cond, pos)
+
+  def parse_switch_stmt(self) -> SwitchStmt:
+    pos = self.expect_kw("switch").pos
+    self.expect_op("(")
+    expr = self.parse_expression()
+    self.expect_op(")")
+    self.expect_op("{")
+    cases: list[SwitchCase] = []
+    default_part: list = []
+    while not (self.tokens.peek().kind == "OP" and self.tokens.peek().value == "}"):
+      if self.tokens.match("KW", "case"):
+        case_pos = self.tokens.tokens[self.tokens.index - 1].pos
+        value = self.parse_expression()
+        self.expect_op(":")
+        body = self._parse_switch_case_body()
+        cases.append(SwitchCase(value, body, case_pos))
+      elif self.tokens.match("KW", "default"):
+        self.expect_op(":")
+        default_part = self._parse_switch_case_body()
+      else:
+        token = self.tokens.peek()
+        raise JanaError(token.pos, f'Unexpected "{token.value}"\n    Expecting "case" or "default"')
+    self.expect_op("}")
+    # closing `switch (expr)` — optional, defaults to entry expr
+    exit_expr = expr
+    if self.tokens.match("KW", "switch"):
+      if self.tokens.match("OP", "("):
+        exit_expr = self.parse_expression()
+        self.expect_op(")")
+    self.tokens.match("OP", ";")
+    return SwitchStmt(expr, cases, default_part, exit_expr, pos)
+
+  def _parse_switch_case_body(self) -> list:
+    body = []
+    while not (self.tokens.peek().kind == "KW" and self.tokens.peek().value == "break"):
+      token = self.tokens.peek()
+      if token.kind == "EOF" or (token.kind == "KW" and token.value in {"case", "default"}):
+        raise JanaError(token.pos, 'Expecting "break" to end case body')
+      if token.kind == "OP" and token.value == "}":
+        raise JanaError(token.pos, 'Expecting "break" to end case body')
+      body.append(self.parse_statement())
+      self.tokens.match("OP", ";")
+    self.expect_kw("break")
+    self.expect_op(";")
+    return body
 
   def parse_from_stmt(self) -> FromStmt:
     pos = self.expect_kw("from").pos
     entry = self.parse_expression()
     do_part: list = []
     loop_part: list = []
-    if self.tokens.match("KW", "do"):
+    # C-style: from (expr) { do } loop { loop } until (expr);
+    if self.tokens.peek().kind == "OP" and self.tokens.peek().value == "{":
+      do_part = self.parse_stmt_block(set(), require_braces=True)
+    elif self.tokens.match("KW", "do"):
       do_part = self.parse_stmt_block({"loop", "until"})
     if self.tokens.match("KW", "loop"):
-      loop_part = self.parse_stmt_block({"until"})
+      if self.tokens.peek().kind == "OP" and self.tokens.peek().value == "{":
+        loop_part = self.parse_stmt_block(set(), require_braces=True)
+      else:
+        loop_part = self.parse_stmt_block({"until"})
     self.expect_kw("until")
     exit_cond = self.parse_expression()
+    self.tokens.match("OP", ";")  # optional trailing semicolon
     return FromStmt(entry, do_part, loop_part, exit_cond, pos)
 
   def parse_iterate_stmt(self) -> IterateStmt:
@@ -403,6 +514,37 @@ class Parser:
     body = self.parse_stmt_block({"end"})
     self.expect_kw("end")
     return IterateStmt(typ, ident, start, step, end, body, pos)
+
+  def parse_for_stmt(self) -> IterateStmt:
+    pos = self.expect_kw("for").pos
+    self.expect_op("(")
+    typ = self.parse_type()
+    ident = self.parse_ident()
+    self.expect_op("=")
+    start = self.parse_expression()
+    self.expect_op(";")
+    cond = self.parse_expression()
+    self.expect_op(";")
+    lval = self.parse_lval()
+    if self.tokens.match("OP", "+="):
+      step = self.parse_expression()
+    else:
+      raise JanaError(self.tokens.peek().pos, 'Expecting "+=" in for-update')
+    self.expect_op(")")
+    body = self.parse_stmt_block(set(), require_braces=True)
+    end = self._for_cond_to_end(cond, ident)
+    return IterateStmt(typ, ident, start, step, end, body, pos, exclusive=True)
+
+  def _for_cond_to_end(self, cond: Expr, ident: Ident) -> Expr:
+    if (
+      isinstance(cond, BinExpr)
+      and isinstance(cond.left, LvalExpr)
+      and not cond.left.lval.selectors
+      and cond.left.lval.ident.name == ident.name
+      and cond.op == BinOpKind.LT
+    ):
+      return cond.right
+    raise JanaError(cond.pos, f"Unsupported for-loop condition: expecting `{ident.name} < expr`")
 
   def parse_push_stmt(self) -> PushStmt:
     pos = self.expect_kw("push").pos
@@ -431,7 +573,7 @@ class Parser:
   def _parse_single_decl_local(self, keyword: str, decl_type: DeclType) -> LocalStmt:
     pos = self.expect_kw(keyword).pos
     decl = self.parse_local_decl_with_known_type(decl_type, pos)
-    body = self.parse_stmt_block({"procedure", "EOF", "else", "fi", "loop", "until", "delocal", "end"})
+    body = self.parse_stmt_block({"void", "EOF", "else", "fi", "loop", "until", "delocal", "end"})
     return LocalStmt(decl, body, decl, pos)
 
   def parse_local_stmt(self) -> LocalStmt:
@@ -439,16 +581,31 @@ class Parser:
     enters = [self.parse_local_decl()]
     while self.tokens.match("OP", ","):
       enters.append(self.parse_local_decl())
-    body = self.parse_stmt_block({"delocal"})
-    self.expect_kw("delocal")
-    exits = [self.parse_local_decl()]
-    while len(exits) < len(enters):
-      self.expect_op(",")
-      exits.append(self.parse_local_decl())
+    # C-style: local int x = 0 { stmts } delocal int x = 0;
+    if self.tokens.peek().kind == "OP" and self.tokens.peek().value == "{":
+      body = self.parse_stmt_block(set(), require_braces=True)
+      self.expect_kw("delocal")
+      exits = [self.parse_local_decl()]
+      while len(exits) < len(enters):
+        self.expect_op(",")
+        exits.append(self.parse_local_decl())
+      self.tokens.match("OP", ";")
+    else:
+      body = self.parse_stmt_block({"delocal"})
+      self.expect_kw("delocal")
+      exits = [self.parse_local_decl()]
+      while len(exits) < len(enters):
+        self.expect_op(",")
+        exits.append(self.parse_local_decl())
     stmt = body
     for enter_decl, exit_decl in reversed(list(zip(enters, exits))):
       stmt = [LocalStmt(enter_decl, stmt, exit_decl, pos)]
     return stmt[0]
+
+  def parse_bare_delocal_stmt(self):
+    pos = self.expect_kw("delocal").pos
+    decl = self.parse_local_decl()
+    return BareDelocalStmt(decl, pos)
 
   def parse_local_decl(self) -> LocalDecl:
     pos = self.tokens.peek().pos
@@ -495,24 +652,44 @@ class Parser:
     self.expect_op(")")
     return UserErrorStmt(message, pos)
 
-  def parse_print_stmt(self) -> PrintsStmt:
-    pos = self.expect_kw("print").pos
-    self.expect_op("(")
-    text = self.parse_string()
-    self.expect_op(")")
-    return PrintsStmt(Prints("print", text=text), pos)
-
   def parse_printf_stmt(self) -> PrintsStmt:
     pos = self.expect_kw("printf").pos
     self.expect_op("(")
     text = self.parse_string()
-    args: list[Ident | Lval] = []
+    args: list = []
     if self.tokens.match("OP", ","):
       args.append(self._parse_printf_arg())
       while self.tokens.match("OP", ","):
         args.append(self._parse_printf_arg())
     self.expect_op(")")
     return PrintsStmt(Prints("printf", text=text, args=args), pos)
+
+  def parse_scanf_stmt(self) -> PrintsStmt:
+    pos = self.expect_kw("scanf").pos
+    self.expect_op("(")
+    text = self.parse_string()
+    args: list = []
+    if self.tokens.match("OP", ","):
+      args.append(self._parse_printf_arg())
+      while self.tokens.match("OP", ","):
+        args.append(self._parse_printf_arg())
+    self.expect_op(")")
+    return PrintsStmt(Prints("scanf", text=text, args=args), pos)
+
+  def parse_bare_call_stmt(self) -> CallStmt:
+    ident = self.parse_ident(allow_main=True)
+    args = self.parse_arg_list()
+    return CallStmt(ident, args, False, ident.pos)
+
+  def parse_read_stmt(self) -> PrintsStmt:
+    pos = self.expect_kw("read").pos
+    lval = self.parse_lval()
+    return PrintsStmt(Prints("read", args=[lval]), pos)
+
+  def parse_write_stmt(self) -> PrintsStmt:
+    pos = self.expect_kw("write").pos
+    lval = self.parse_lval()
+    return PrintsStmt(Prints("write", args=[lval]), pos)
 
   def parse_show_stmt(self) -> PrintsStmt:
     pos = self.expect_kw("show").pos
@@ -523,22 +700,25 @@ class Parser:
     self.expect_op(")")
     return PrintsStmt(Prints("show", args=args), pos)
 
+  def parse_print_stmt(self) -> PrintsStmt:
+    pos = self.expect_kw("print").pos
+    text: str | None = None
+    if self.tokens.peek().kind == "STRING":
+      text = self.tokens.next().value
+    return PrintsStmt(Prints("print", text=text, args=[]), pos)
+
   def _parse_printf_arg(self) -> Ident | Lval:
-    """Parse a printf/show argument: simple ident or lvalue (arr[i], p.x)."""
     lval = self.parse_lval()
     if not lval.selectors:
       return lval.ident
     return lval
 
-  def parse_skip_stmt(self) -> SkipStmt:
-    pos = self.expect_kw("skip").pos
-    return SkipStmt(pos)
-
   def parse_assert_stmt(self) -> AssertStmt:
     pos = self.expect_kw("assert").pos
+    self.expect_op("(")
     expr = self.parse_expression()
+    self.expect_op(")")
     return AssertStmt(expr, pos)
-
   def parse_expression(self) -> Expr:
     expr = self.parse_binary_level(0)
     if self.tokens.match("OP", "?"):
@@ -700,26 +880,26 @@ class Parser:
       idx += 1
     token = self.tokens.tokens[idx]
     if token.kind == "IDENT":
-      next_idx = idx + 1
-      # Skip bracket pairs for struct array dimensions: Pair[3] ps, Pair[2][2] ps
-      while (next_idx < len(self.tokens.tokens)
-             and self.tokens.tokens[next_idx].kind == "OP"
-             and self.tokens.tokens[next_idx].value == "["):
-        depth = 1
-        next_idx += 1
-        while next_idx < len(self.tokens.tokens) and depth > 0:
-          v = self.tokens.tokens[next_idx].value
-          if v == "[": depth += 1
-          elif v == "]": depth -= 1
-          next_idx += 1
-      return (next_idx < len(self.tokens.tokens)
-              and self.tokens.tokens[next_idx].kind == "IDENT")
+      next_token = self.tokens.tokens[idx + 1]
+      return next_token.kind == "IDENT"
     return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool", "char", "string"}
 
   def _looks_like_type_cast(self) -> bool:
     idx = self.tokens.index + 1
     token = self.tokens.tokens[idx]
     return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool", "char", "string"}
+
+  def _looks_like_expr(self) -> bool:
+    token = self.tokens.peek()
+    if token.kind == "KW" and token.value in {
+      "if", "from", "switch", "case", "default", "break",
+      "push", "pop", "local", "delocal", "call", "uncall",
+      "void", "error", "printf", "iterate"
+    }:
+      return False
+    if token.kind == "EOF" or (token.kind == "OP" and token.value in {"}", ";"}):
+      return False
+    return True
 
 
 def parse_program(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None) -> Program:
