@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "pyjanus"
 version = "1.0.0"
@@ -5,5 +9,11 @@ description = "A Python interpreter for Janus, the reversible programming langua
 requires-python = ">=3.10"
 license = {text = "BSD-3-Clause"}
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.scripts]
 pyjanus = "jana_py.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jana_py"]
