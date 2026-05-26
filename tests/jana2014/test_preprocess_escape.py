@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", *args],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -50,7 +50,7 @@ class PreprocessEscapeTests(unittest.TestCase):
       #define MSG 42
       procedure main()
           // MSG should not expand here
-          print("MSG")
+          printf("MSG")
       """
     )
     self.assertEqual(result.returncode, 0)
@@ -62,7 +62,7 @@ class PreprocessEscapeTests(unittest.TestCase):
       """\
       #define MSG 42
       procedure main()
-          print("MSG \\\" MSG \\\\ MSG")
+          printf("MSG \\\" MSG \\\\ MSG")
       """
     )
     self.assertEqual(result.returncode, 0)
@@ -78,7 +78,7 @@ class PreprocessEscapeTests(unittest.TestCase):
         "main.ja": """\
         #include "defs.ja"
         procedure main()
-            print(MSG)
+            printf(MSG)
         """,
       },
       "main.ja",
@@ -92,7 +92,7 @@ class PreprocessEscapeTests(unittest.TestCase):
       """\
       #define ID(x) x
       procedure main()
-          print(ID("a\\n\\\\\\\"b"))
+          printf(ID("a\\n\\\\\\\"b"))
       """
     )
     self.assertEqual(result.returncode, 0)
@@ -104,7 +104,7 @@ class PreprocessEscapeTests(unittest.TestCase):
       """\
       #define ID(x) x
       procedure main()
-          print(ID("a,b"))
+          printf(ID("a,b"))
       """
     )
     self.assertEqual(result.returncode, 0)

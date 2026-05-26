@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-s", *args],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -41,9 +41,9 @@ class PreprocessConditionalsTests(unittest.TestCase):
       #define FLAG 1
       procedure main()
       #ifdef FLAG
-          print("on")
+          printf("on")
       #else
-          print("off")
+          printf("off")
       #endif
       """
     )
@@ -55,9 +55,9 @@ class PreprocessConditionalsTests(unittest.TestCase):
       """\
       procedure main()
       #ifndef FLAG
-          print("off")
+          printf("off")
       #else
-          print("on")
+          printf("on")
       #endif
       """
     )
@@ -86,12 +86,12 @@ class PreprocessConditionalsTests(unittest.TestCase):
       procedure main()
       #ifdef A
       #ifndef B
-          print("nested")
+          printf("nested")
       #else
-          print("wrong")
+          printf("wrong")
       #endif
       #else
-          print("wrong")
+          printf("wrong")
       #endif
       """
     )

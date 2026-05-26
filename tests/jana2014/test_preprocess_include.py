@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-s", *args],
     cwd=ROOT,
     text=True,
     capture_output=True,

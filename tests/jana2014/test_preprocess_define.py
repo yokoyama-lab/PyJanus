@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-s", *args],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -46,7 +46,9 @@ class PreprocessDefineTests(unittest.TestCase):
     )
     self.assertEqual(result.returncode, 0)
     self.assertEqual(result.stdout, "333\nx = 333\n")
-    self.assertEqual(result.stderr, "")
+    # x is left non-zero at end; the interpreter emits an informational
+    # "non-zero values remain" notice on stderr, which is expected here.
+    self.assertIn("non-zero values remain", result.stderr)
 
   def test_define_expands_in_ast_output(self) -> None:
     result = self.run_case(
