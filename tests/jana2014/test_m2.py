@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(program_path: str) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", program_path],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", program_path],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -54,17 +54,17 @@ class M2Tests(unittest.TestCase):
     try:
       result = run_python(str(tmp_path))
       self.assertEqual(result.returncode, 0, result.stderr)
-      self.assertEqual(result.stdout, "0 8 13\n\nn = 0\nx1 = 8\nx2 = 13\n")
+      self.assertEqual(result.stdout, "0 8 13\n")
     finally:
       tmp_path.unlink(missing_ok=True)
 
   def test_division_by_zero(self) -> None:
-    result = run_python("tests/fixtures_errors/division-by-zero.ja")
+    result = run_python("tests/jana2014/fixtures_errors/division-by-zero.ja")
     self.assertNotEqual(result.returncode, 0)
     self.assertIn("Division by zero", result.stdout)
 
   def test_no_main_proc(self) -> None:
-    result = run_python("tests/fixtures_errors/no-main-proc.ja")
+    result = run_python("tests/jana2014/fixtures_errors/no-main-proc.ja")
     self.assertNotEqual(result.returncode, 0)
     self.assertIn("No main procedure has been defined", result.stdout)
 

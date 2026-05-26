@@ -14,7 +14,7 @@ import sys
 import textwrap
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from jana_py.ast import (
@@ -33,7 +33,7 @@ from jana_py.ast import (
     Type,
 )
 from jana_py.bennett import bennett_embed, bennett_embed_procedure, _collect_modified_vars
-from jana_py.parser import parse_program
+from jana_py.parser_jana2014 import parse_program
 from jana_py.validate import validate_program
 from jana_py.runtime import Runtime
 

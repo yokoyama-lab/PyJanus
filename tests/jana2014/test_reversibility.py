@@ -11,10 +11,10 @@ import textwrap
 import unittest
 import copy
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from jana_py.parser import parse_program
+from jana_py.parser_jana2014 import parse_program
 from jana_py.validate import validate_program
 from jana_py.runtime import Runtime
 
@@ -155,27 +155,6 @@ class ReversibilityTests(unittest.TestCase):
       "    fi x1 = x2",
       "int x1\n    int x2\n    int n = 5",
       "fib(x1, x2, n)",
-    )
-
-  def test_struct_fields(self) -> None:
-    self.assertRoundTrip(
-      "struct Pair { int x, int y }\n\n"
-      "procedure bump(Pair p)\n"
-      "    p.x += 1\n"
-      "    p.y += 2",
-      "Pair p",
-      "bump(p)",
-    )
-
-  def test_struct_array(self) -> None:
-    self.assertRoundTrip(
-      "struct Pair { int x, int y }\n\n"
-      "procedure fill(Pair ps[3])\n"
-      "    ps[0].x += 10\n"
-      "    ps[1].y += 20\n"
-      "    ps[2].x += 30",
-      "Pair ps[3]",
-      "fill(ps)",
     )
 
   def test_xor_swap(self) -> None:

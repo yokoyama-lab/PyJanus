@@ -6,10 +6,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from jana_py.parser import parse_program
+from jana_py.parser_jana2014 import parse_program
 from jana_py.equiv import check_equivalence, check_inverse, check_self_inverse
 
 

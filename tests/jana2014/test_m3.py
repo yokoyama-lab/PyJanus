@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(program_path: str) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", program_path],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", program_path],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -56,7 +56,7 @@ class M3Tests(unittest.TestCase):
     try:
       result = run_python(str(tmp_path))
       self.assertEqual(result.returncode, 0, result.stderr)
-      self.assertEqual(result.stdout, "0 8 13\n\n5 0 0\n\nn = 5\nx1 = 0\nx2 = 0\n")
+      self.assertEqual(result.stdout, "0 8 13\n5 0 0\n")
     finally:
       tmp_path.unlink(missing_ok=True)
 
@@ -82,7 +82,7 @@ class M3Tests(unittest.TestCase):
     try:
       result = run_python(str(tmp_path))
       self.assertEqual(result.returncode, 0, result.stderr)
-      self.assertEqual(result.stdout, "14\n\n7\n\nx = 7\n")
+      self.assertEqual(result.stdout, "14\n7\n")
     finally:
       tmp_path.unlink(missing_ok=True)
 

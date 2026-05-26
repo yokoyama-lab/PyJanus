@@ -7,16 +7,16 @@ import sys
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
-FROM_DEBUG_SIMPLE = "tests/fixtures/from_debug_simple.ja"
-ITERATE_DEBUG_SIMPLE = "tests/fixtures/iterate_debug_simple.ja"
+ROOT = Path(__file__).resolve().parents[2]
+FROM_DEBUG_SIMPLE = "tests/jana2014/fixtures/from_debug_simple.ja"
+ITERATE_DEBUG_SIMPLE = "tests/jana2014/fixtures/iterate_debug_simple.ja"
 
 
 def run_python(args: list[str], stdin: str) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", *args],
     cwd=ROOT,
     text=True,
     input=stdin,
@@ -69,7 +69,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_reverse_from_initial_prompt_terminates_with_store(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "r\n")
+    result = run_python(["-d", "-s", "examples/fib.ja"], "r\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -80,7 +80,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_backward_from_initial_prompt_terminates_with_store(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "b\n")
+    result = run_python(["-d", "-s", "examples/fib.ja"], "b\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
