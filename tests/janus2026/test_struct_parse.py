@@ -8,18 +8,18 @@ import tempfile
 import textwrap
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from jana_py.format import format_program
-from jana_py.parser import parse_program
+from jana_py.parser_janus2026 import parse_program
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", *args],
+    [sys.executable, "-m", "jana_py.cli", "--std", "janus2026", *args],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -33,16 +33,18 @@ class StructParseTests(unittest.TestCase):
     source = textwrap.dedent(
       """\
       struct Pair {
-          int x,
-          int y
+          int x;
+          int y;
+      };
+
+      void main() {
+          Pair p;
+          call bump(p);
       }
 
-      procedure main()
-          Pair p
-          call bump(p)
-
-      procedure bump(Pair p)
-          skip
+      void bump(Pair p) {
+          p.x += 0;
+      }
       """
     )
     program = parse_program("struct_roundtrip.ja", source)
@@ -58,9 +60,9 @@ class StructParseTests(unittest.TestCase):
             int y
         }
 
-        procedure main()
-            Pair p
-            skip
+        void main() {
+            Pair p;
+        }
         """
       ),
     )
@@ -82,12 +84,14 @@ class StructParseTests(unittest.TestCase):
             int y
         }
 
-        procedure bump(Pair p)
-            skip
+        void bump(Pair p) {
+            p.x += 0;
+        }
 
-        procedure main()
-            Pair p
-            call bump(p)
+        void main() {
+            Pair p;
+            call bump(p);
+        }
         """
       ),
     )
@@ -108,9 +112,9 @@ class StructParseTests(unittest.TestCase):
             Entry entries[4]
         }
 
-        procedure main()
-            Dict d
-            skip
+        void main() {
+            Dict d;
+        }
         """
       ),
     )
@@ -127,9 +131,9 @@ class StructParseTests(unittest.TestCase):
             int y
         }
 
-        procedure main()
-            Pair p
-            skip
+        void main() {
+            Pair p;
+        }
         """
       ))
       path = handle.name
@@ -142,8 +146,7 @@ class StructParseTests(unittest.TestCase):
     self.assertIn('"name": "Pair"', result.stdout)
     self.assertIn('"kind": "struct"', result.stdout)
 
-
-  def test_parse_struct_array_dims_before_name(self) -> None:
+  def test_parse_struct_array_dimensions(self) -> None:
     program = parse_program(
       "struct_array.ja",
       textwrap.dedent(
@@ -153,9 +156,9 @@ class StructParseTests(unittest.TestCase):
             int y
         }
 
-        procedure main()
-            Pair[3] ps
-            skip
+        void main() {
+            Pair ps[3];
+        }
         """
       ),
     )
@@ -165,7 +168,7 @@ class StructParseTests(unittest.TestCase):
     self.assertEqual(vdecl.typ.name, "Pair")
     self.assertEqual(len(vdecl.dimensions), 1)
 
-  def test_parse_struct_2d_array_dims_before_name(self) -> None:
+  def test_parse_struct_2d_array_dimensions(self) -> None:
     program = parse_program(
       "struct_2d.ja",
       textwrap.dedent(
@@ -175,9 +178,9 @@ class StructParseTests(unittest.TestCase):
             int y
         }
 
-        procedure main()
-            Pair[2][2] ps
-            skip
+        void main() {
+            Pair ps[2][2];
+        }
         """
       ),
     )
@@ -189,13 +192,13 @@ class StructParseTests(unittest.TestCase):
     source = textwrap.dedent(
       """\
       struct Pair {
-          int x,
-          int y
-      }
+          int x;
+          int y;
+      };
 
-      procedure main()
-          Pair ps[3]
-          skip
+      void main() {
+          Pair ps[3];
+      }
       """
     )
     program = parse_program("struct_arr_rt.ja", source)

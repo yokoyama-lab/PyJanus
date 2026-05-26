@@ -9,14 +9,14 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(path: str) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", path],
+    [sys.executable, "-m", "jana_py.cli", "--std", "janus2026", path],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -43,8 +43,8 @@ class StructErrorTests(unittest.TestCase):
           int x
       }
 
-      procedure main()
-          skip
+      void main() {
+      }
       """
     )
     self.assertEqual(result.returncode, 1)
@@ -53,13 +53,14 @@ class StructErrorTests(unittest.TestCase):
   def test_unknown_struct_type_fails(self) -> None:
     result = self.run_case(
       """\
-      procedure main()
-          Pair p
-          skip
+      void main() {
+          Pair p;
+      }
       """
     )
     self.assertEqual(result.returncode, 1)
-    self.assertIn("Struct `Pair' is not defined", result.stdout)
+    # janus2026 rejects an undefined struct type at parse time.
+    self.assertIn("Expecting type", result.stdout)
 
   def test_unknown_field_fails(self) -> None:
     result = self.run_case(
@@ -68,9 +69,10 @@ class StructErrorTests(unittest.TestCase):
           int x
       }
 
-      procedure main()
-          Pair p
-          p.y += 1
+      void main() {
+          Pair p;
+          p.y += 1;
+      }
       """
     )
     self.assertEqual(result.returncode, 1)
@@ -87,12 +89,14 @@ class StructErrorTests(unittest.TestCase):
           int x
       }
 
-      procedure bump(Pair p)
-          skip
+      void bump(Pair p) {
+          p.x += 0;
+      }
 
-      procedure main()
-          Other p
-          call bump(p)
+      void main() {
+          Other p;
+          call bump(p);
+      }
       """
     )
     self.assertEqual(result.returncode, 1)
@@ -101,10 +105,11 @@ class StructErrorTests(unittest.TestCase):
   def test_ternary_condition_must_be_bool(self) -> None:
     result = self.run_case(
       """\
-      procedure main()
-          int x = 1
-          int y
-          y += x ? 3 : 4
+      void main() {
+          int x = 1;
+          int y;
+          y += (x ? 3 : 4);
+      }
       """
     )
     self.assertEqual(result.returncode, 1)

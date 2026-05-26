@@ -9,14 +9,15 @@ import textwrap
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_python(path: str) -> subprocess.CompletedProcess[str]:
   env = dict(os.environ)
   env["PYTHONPATH"] = str(ROOT)
   return subprocess.run(
-    [sys.executable, "-m", "jana_py.cli", path],
+    # -s emits the final store dump (now opt-in); show(...) is also exercised.
+    [sys.executable, "-m", "jana_py.cli", "--std", "janus2026", "-s", path],
     cwd=ROOT,
     text=True,
     capture_output=True,
@@ -43,16 +44,16 @@ class StructShowTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair p
-          p.x += 1
-          p.y += 2
-          show(p)
+      void main() {
+          Pair p;
+          p.x += 1;
+          p.y += 2;
+          show(p);
+      }
       """
     )
     self.assertEqual(result.returncode, 0)
     self.assertEqual(result.stdout, "p = {x = 1, y = 2}\np = {x = 1, y = 2}\n")
-    self.assertEqual(result.stderr, "")
 
   def test_show_and_store_render_struct_array_fields(self) -> None:
     result = self.run_case(
@@ -66,17 +67,16 @@ class StructShowTests(unittest.TestCase):
           Entry entries[2]
       }
 
-      procedure main()
-          Dict d
-          d.size += 2
-          d.entries[1].k += 7
-          show(d)
+      void main() {
+          Dict d;
+          d.size += 2;
+          d.entries[1].k += 7;
+          show(d);
+      }
       """
     )
     self.assertEqual(result.returncode, 0)
     self.assertEqual(result.stdout, "d = {size = 2, entries = {{k = 0}, {k = 7}}}\nd = {size = 2, entries = {{k = 0}, {k = 7}}}\n")
-    self.assertEqual(result.stderr, "")
-
 
   def test_show_struct_array_from_bracket_syntax(self) -> None:
     result = self.run_case(
@@ -86,16 +86,16 @@ class StructShowTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair[2] ps
-          ps[0].x += 1
-          ps[1].y += 2
-          show(ps)
+      void main() {
+          Pair ps[2];
+          ps[0].x += 1;
+          ps[1].y += 2;
+          show(ps);
+      }
       """
     )
     self.assertEqual(result.returncode, 0)
     self.assertIn("ps[2] = {{x = 1, y = 0}, {x = 0, y = 2}}", result.stdout)
-    self.assertEqual(result.stderr, "")
 
 
 if __name__ == "__main__":

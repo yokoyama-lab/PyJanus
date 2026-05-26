@@ -5,10 +5,10 @@ import sys
 import textwrap
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from jana_py.parser import parse_program
+from jana_py.parser_janus2026 import parse_program
 from jana_py.runtime import Runtime
 from jana_py.validate import validate_program
 
@@ -27,9 +27,9 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair p
-          skip
+      void main() {
+          Pair p;
+      }
       """
     )
     runtime.run()
@@ -47,9 +47,9 @@ class StructRuntimeTests(unittest.TestCase):
           stack xs
       }
 
-      procedure main()
-          Mixed m
-          skip
+      void main() {
+          Mixed m;
+      }
       """
     )
     runtime.run()
@@ -66,12 +66,13 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair p
-          int z
-          p.x += 1
-          p.y += 2
-          z += p.y
+      void main() {
+          Pair p;
+          int z;
+          p.x += 1;
+          p.y += 2;
+          z += p.y;
+      }
       """
     )
     runtime.run()
@@ -87,13 +88,15 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure bump(Pair p)
-          p.x += 1
-          p.y += 2
+      void bump(Pair p) {
+          p.x += 1;
+          p.y += 2;
+      }
 
-      procedure main()
-          Pair p
-          call bump(p)
+      void main() {
+          Pair p;
+          call bump(p);
+      }
       """
     )
     runtime.run()
@@ -107,12 +110,13 @@ class StructRuntimeTests(unittest.TestCase):
           int k
       }
 
-      procedure main()
-          int di = 1
-          int z
-          Entry xs[2]
-          xs[1].k += 6
-          z += xs[di].k
+      void main() {
+          int di = 1;
+          int z;
+          Entry xs[2];
+          xs[1].k += 6;
+          z += xs[di].k;
+      }
       """
     )
     runtime.run()
@@ -133,13 +137,14 @@ class StructRuntimeTests(unittest.TestCase):
           Entry entries[3]
       }
 
-      procedure main()
-          Dict d
-          int i = 1
-          int z
-          d.size += 3
-          d.entries[1].k += 6
-          z += d.entries[i].k
+      void main() {
+          Dict d;
+          int i = 1;
+          int z;
+          d.size += 3;
+          d.entries[1].k += 6;
+          z += d.entries[i].k;
+      }
       """
     )
     runtime.run()
@@ -148,7 +153,7 @@ class StructRuntimeTests(unittest.TestCase):
     self.assertEqual(runtime._root_frame.vars["d"].value["size"], 3)
     self.assertEqual(runtime._root_frame.vars["d"].value["entries"], [{"k": 0}, {"k": 6}, {"k": 0}])
 
-  def test_struct_array_dims_before_name_works(self) -> None:
+  def test_struct_array_works(self) -> None:
     runtime = self.runtime_for(
       """\
       struct Pair {
@@ -156,11 +161,12 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair[3] ps
-          ps[0].x += 10
-          ps[1].y += 20
-          ps[2].x += 30
+      void main() {
+          Pair ps[3];
+          ps[0].x += 10;
+          ps[1].y += 20;
+          ps[2].x += 30;
+      }
       """
     )
     runtime.run()
@@ -179,10 +185,11 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair[2][2] ps
-          ps[0][1].x += 5
-          ps[1][0].y += 7
+      void main() {
+          Pair ps[2][2];
+          ps[0][1].x += 5;
+          ps[1][0].y += 7;
+      }
       """
     )
     runtime.run()
@@ -200,13 +207,15 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure bump(Pair ps[2])
-          ps[0].x += 1
-          ps[1].y += 2
+      void bump(Pair ps[2]) {
+          ps[0].x += 1;
+          ps[1].y += 2;
+      }
 
-      procedure main()
-          Pair[2] ps
-          call bump(ps)
+      void main() {
+          Pair ps[2];
+          call bump(ps);
+      }
       """
     )
     runtime.run()
@@ -224,9 +233,9 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair p = {10, 20}
-          skip
+      void main() {
+          Pair p = {10, 20};
+      }
       """
     )
     runtime.run()
@@ -241,9 +250,9 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair ps[3] = {{1, 2}, {3, 4}, {5, 6}}
-          skip
+      void main() {
+          Pair ps[3] = {{1, 2}, {3, 4}, {5, 6}};
+      }
       """
     )
     runtime.run()
@@ -263,9 +272,9 @@ class StructRuntimeTests(unittest.TestCase):
           Inner inner
       }
 
-      procedure main()
-          Outer o = {99, {1, 2}}
-          skip
+      void main() {
+          Outer o = {99, {1, 2}};
+      }
       """
     )
     runtime.run()
@@ -280,9 +289,9 @@ class StructRuntimeTests(unittest.TestCase):
           int y
       }
 
-      procedure main()
-          Pair p = {42}
-          skip
+      void main() {
+          Pair p = {42};
+      }
       """
     )
     runtime.run()
@@ -292,11 +301,12 @@ class StructRuntimeTests(unittest.TestCase):
   def test_ternary_expression_selects_branch(self) -> None:
     runtime = self.runtime_for(
       """\
-      procedure main()
-          int x = 1
-          int y = 9
-          int z
-          z += x = 1 ? y : x
+      void main() {
+          int x = 1;
+          int y = 9;
+          int z;
+          z += (x == 1 ? y : x);
+      }
       """
     )
     runtime.run()
