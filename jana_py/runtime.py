@@ -985,8 +985,6 @@ class Runtime:
     if not formatted.endswith("\n"):
       formatted += "\n"
     self.stdout.append(formatted)
-    for cell in cells:
-      cell.value = self._zero_runtime_value(cell)
 
   def _render_printf_value(self, kind: str, cell: Cell) -> str:
     if kind == "s":
