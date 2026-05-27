@@ -1,0 +1,61 @@
+"""Tests for the Janus self-interpreter encoder.
+
+Only the encoder unit tests are kept here; the end-to-end self-interpreter
+execution tests required example assets that are not part of this repo.
+"""
+
+from __future__ import annotations
+
+from jana_py.encode import encode_program
+from jana_py.encode import (
+    S_ADDEQ, S_SUBEQ, S_XOREQ, S_SWAP,
+    E_BINOP,
+)
+
+
+class TestEncoderBasic:
+
+    def test_encode_addeq_const(self):
+        src = "void main() {\n    int x;\n    x += 5;\n}\n"
+        result = encode_program(src)
+        assert result.code[0] == S_ADDEQ
+
+    def test_encode_subeq(self):
+        src = "void main() {\n    int x;\n    x -= 3;\n}\n"
+        result = encode_program(src)
+        assert result.code[0] == S_SUBEQ
+
+    def test_encode_xoreq(self):
+        src = "void main() {\n    int x;\n    x ^= 7;\n}\n"
+        result = encode_program(src)
+        assert result.code[0] == S_XOREQ
+
+    def test_encode_swap(self):
+        src = "void main() {\n    int x;\n    int y;\n    x <=> y;\n}\n"
+        result = encode_program(src)
+        assert result.code[0] == S_SWAP
+
+    def test_encode_binexpr(self):
+        src = "void main() {\n    int x;\n    int a;\n    int b;\n    x += a + b;\n}\n"
+        result = encode_program(src)
+        assert E_BINOP in result.code
+
+    def test_var_slots(self):
+        src = "void main() {\n    int x;\n    int y;\n    int z;\n    x += 1;\n}\n"
+        result = encode_program(src)
+        assert result.var_map["x"].slot == 0
+        assert result.var_map["y"].slot == 1
+        assert result.var_map["z"].slot == 2
+
+    def test_array_slots(self):
+        src = "void main() {\n    int a[5];\n    int x;\n    x += 1;\n}\n"
+        result = encode_program(src)
+        assert result.var_map["a"].slot == 0
+        assert result.var_map["a"].size == 5
+        assert result.var_map["x"].slot == 5
+
+    def test_procedure_encoding(self):
+        src = "void inc(int x) {\n    x += 1;\n}\nvoid main() {\n    int x;\n    call inc(x);\n}\n"
+        result = encode_program(src)
+        assert len(result.procs) == 1
+        assert result.procs[0].name == "inc"
