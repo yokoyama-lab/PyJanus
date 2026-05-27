@@ -11,7 +11,7 @@ from jana_py.format import format_program
 from jana_py.parser_janus2026 import parse_program
 
 
-SYNTAX_DIR = ROOT / "examples" / "janus2026" / "syntax"
+SYNTAX_DIR = ROOT / "tests" / "janus2026" / "fixtures" / "examples"
 
 
 class SyntaxExampleTests(unittest.TestCase):

@@ -8,7 +8,7 @@ Encoding format for code[]:
   TAG identifies the construct; TOTAL_LEN includes TAG and both LEN fields.
 
 Usage:
-  python3 -m jana_py.encode examples/fib.ja
+  python3 -m jana_py.encode tests/janus2026/fixtures/examples/caesar.ja
 """
 
 from __future__ import annotations

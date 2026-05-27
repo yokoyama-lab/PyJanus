@@ -47,7 +47,7 @@ def run_python(path: Path, extra_args: list[str] | None = None) -> subprocess.Co
 
 def jana_cases() -> list[Path]:
   cases = sorted((ROOT / "tests" / "errors").glob("*.ja"))
-  cases.extend(sorted((ROOT / "examples").glob("**/*.ja")))
+  cases.extend(sorted((ROOT / "tests" / "jana2014" / "fixtures" / "examples").glob("*.ja")))
   return cases
 
 
@@ -57,10 +57,6 @@ class Step1GoldenTests(unittest.TestCase):
 
 # Cases that intentionally diverge from Haskell (Python-only extensions or Haskell timeouts).
 _SKIP_CASES: set[str] = {
-    "examples/janus2026/build-dict.ja",          # uses #define preprocessor (Python extension)
-    "examples/janus2026/caesar.ja",              # uses #define and char array init (Python extension)
-    "examples/janus2026/linked-list.ja",         # uses struct and #define (Python extension)
-    "examples/janus2026/sort-network.ja",        # uses struct (Python extension)
     "tests/errors/infinite-recursion.ja",  # Haskell hangs on this input
     "tests/errors/array-size-mismatch.ja",  # Python checks at call site; Haskell doesn't
 }

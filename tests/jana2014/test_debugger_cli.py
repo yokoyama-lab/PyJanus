@@ -10,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 FROM_DEBUG_SIMPLE = "tests/jana2014/fixtures/from_debug_simple.ja"
 ITERATE_DEBUG_SIMPLE = "tests/jana2014/fixtures/iterate_debug_simple.ja"
+FIB_EXAMPLE = "tests/jana2014/fixtures/examples/fib.ja"
 
 
 def run_python(args: list[str], stdin: str) -> subprocess.CompletedProcess[str]:
@@ -30,7 +31,7 @@ class DebuggerCliTests(unittest.TestCase):
   maxDiff = None
 
   def test_help_output_matches_eval_hs_text(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "h\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "h\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn('Welcome to the Jana debugger. Type "h[elp]" for the help menu.\n', result.stdout)
     self.assertIn("Usage of the jana debugger\n", result.stdout)
@@ -43,12 +44,12 @@ class DebuggerCliTests(unittest.TestCase):
     self.assertIn("  q[uit]       quit the debugger (ends termination)\n", result.stdout)
 
   def test_unknown_command_reports_expected_error_text(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "wat\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "wat\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn('Unknown command: "wat". Type "h[elp]" to see known commands.\n', result.stdout)
 
   def test_next_stops_at_following_statement(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "n\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "n\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -58,7 +59,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_reverse_step_from_first_break_goes_to_begin(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "n\nr\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "n\nr\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -69,7 +70,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_reverse_from_initial_prompt_terminates_with_store(self) -> None:
-    result = run_python(["-d", "-s", "examples/fib.ja"], "r\n")
+    result = run_python(["-d", "-s", FIB_EXAMPLE], "r\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -80,7 +81,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_backward_from_initial_prompt_terminates_with_store(self) -> None:
-    result = run_python(["-d", "-s", "examples/fib.ja"], "b\n")
+    result = run_python(["-d", "-s", FIB_EXAMPLE], "b\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -91,7 +92,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_stepping_enters_call_and_if_boundaries(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "n\nn\nn\nr\nr\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "n\nn\nn\nr\nr\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -105,7 +106,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_reverse_from_end_rewinds_to_last_visible_boundary(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "f\nr\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "f\nr\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,
@@ -171,7 +172,7 @@ class DebuggerCliTests(unittest.TestCase):
     )
 
   def test_call_reverse_stepping_crosses_procedure_boundary(self) -> None:
-    result = run_python(["-d", "examples/fib.ja"], "f\nr\nr\nr\nq\n")
+    result = run_python(["-d", FIB_EXAMPLE], "f\nr\nr\nr\nq\n")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertEqual(
       result.stdout,

@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHONPATH = str(ROOT)
+FIB_EXAMPLE = "tests/jana2014/fixtures/examples/fib.ja"
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -26,14 +27,14 @@ def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 class M1Tests(unittest.TestCase):
   def test_parse_fib_ast(self) -> None:
-    result = run_python(["-a", "examples/fib.ja"])
+    result = run_python(["-a", FIB_EXAMPLE])
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn('"procname"', result.stdout)
     self.assertIn('"main"', result.stdout)
     self.assertIn('"fib"', result.stdout)
 
   def test_invert_fib(self) -> None:
-    result = run_python(["-i", "examples/fib.ja"])
+    result = run_python(["-i", FIB_EXAMPLE])
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn("void fib(", result.stdout)
     self.assertIn("uncall fib(x1, x2, n)", result.stdout)
