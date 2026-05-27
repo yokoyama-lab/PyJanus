@@ -936,10 +936,28 @@ class Runtime:
       self.stdout.append(", ".join(parts) + "\n")
       return
     if prints.kind == "read":
-      # Simplified read: just read an integer from stdin
       lval = prints.args[0]
       assert isinstance(lval, Lval)
       cell = self._resolve_lval(frame, lval)
+      if self.std == "jana2014_in_out":
+        # Reversible read: the target must be zero, then absorb one input value.
+        if not self._is_zero_cell(cell):
+          raise JanaError(
+            stmt.pos,
+            f"`read` target `{self._format_lval_name(lval)}' must be zero",
+            contextual=True,
+          )
+        line = sys.stdin.readline()
+        if not line:
+          raise JanaError(stmt.pos, "read reached end of input", contextual=True)
+        try:
+          cell.value = self._normalize_int(int(line.strip()), cell.int_type)
+        except ValueError:
+          raise JanaError(
+            stmt.pos, f"read expected an integer but got {line.strip()!r}", contextual=True
+          )
+        return
+      # Simplified (legacy) read: just read an integer from stdin
       line = sys.stdin.readline()
       if line:
         try:
@@ -952,6 +970,9 @@ class Runtime:
       assert isinstance(lval, Lval)
       cell = self._resolve_lval(frame, lval)
       self.stdout.append(str(cell.value) + "\n")
+      if self.std == "jana2014_in_out":
+        # Reversible write: emitting the value consumes it (clears to zero).
+        cell.value = self._zero_runtime_value(cell)
       return
     if prints.kind == "scanf":
       self._exec_scanf(frame, stmt)

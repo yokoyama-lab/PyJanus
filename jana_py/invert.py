@@ -15,6 +15,8 @@ from .ast import Number
 from .ast import PopStmt
 from .ast import Proc
 from .ast import Program
+from .ast import Prints
+from .ast import PrintsStmt
 from .ast import PushStmt
 from .ast import SwitchCase
 from .ast import SwitchStmt
@@ -75,6 +77,13 @@ def invert_stmt(stmt, global_mode: bool):
     return BareDelocalStmt(stmt.decl, stmt.pos)
   if isinstance(stmt, BareDelocalStmt):
     return BareLocalStmt(stmt.decl, [], stmt.pos)
+  if isinstance(stmt, PrintsStmt):
+    # Reversible I/O: read and write are exact inverses of each other.
+    if stmt.prints.kind == "read":
+      return PrintsStmt(Prints("write", text=stmt.prints.text, args=stmt.prints.args), stmt.pos)
+    if stmt.prints.kind == "write":
+      return PrintsStmt(Prints("read", text=stmt.prints.text, args=stmt.prints.args), stmt.pos)
+    return stmt
   if not global_mode and isinstance(stmt, CallStmt):
     return UncallStmt(stmt.ident, stmt.args, stmt.external, stmt.pos)
   if not global_mode and isinstance(stmt, UncallStmt):

@@ -9,8 +9,9 @@ from enum import Enum
 import math
 import signal
 
+from .ast import ProcMain, Program
 from .format import format_program
-from .invert import invert_program
+from .invert import invert_program, invert_proc_globally, invert_stmts
 from .parser_janus2026 import parse_program
 from .preprocess import preprocess_text
 from .c_codegen import format_program as format_c_program
@@ -39,6 +40,29 @@ def _to_jsonable(value):
   return value
 
 
+def _invert_program_full(program: Program) -> Program:
+  """Globally invert a whole program (main body + procedures) for backward run."""
+  main = program.main
+  inv_main = (
+    ProcMain(main.vdecls, invert_stmts(main.stmts, global_mode=True), main.pos)
+    if main is not None
+    else None
+  )
+  inv_procs = [invert_proc_globally(proc) for proc in program.procs]
+  return Program(inv_main, inv_procs, program.struct_defs)
+
+
+def _check_expect(actual: str, expected: str) -> int:
+  """Compare program output against an expected value (trailing newlines ignored)."""
+  if actual.rstrip("\n") == expected.rstrip("\n"):
+    print("OK")
+    return 0
+  print("MISMATCH")
+  print(f"  expected: {expected.rstrip(chr(10))!r}")
+  print(f"  actual:   {actual.rstrip(chr(10))!r}")
+  return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
     prog="pyjanus",
@@ -60,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     ),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  parser.add_argument("--std", dest="std", choices=["janus2026", "jana2014", "jana2014basic", "janus1982", "janus1982ext"], default="janus2026", help="language standard: janus2026 (default, C-style), jana2014, jana2014basic, janus1982 (strict 1982), janus1982ext (1982 + extensions)")
+  parser.add_argument("--std", dest="std", choices=["janus2026", "jana2014", "jana2014basic", "jana2014_in_out", "janus1982", "janus1982ext"], default="janus2026", help="language standard: janus2026 (default, C-style), jana2014, jana2014basic, jana2014_in_out (jana2014 + reversible read/write I/O), janus1982 (strict 1982), janus1982ext (1982 + extensions)")
   parser.add_argument("-a", action="store_true", dest="ast", help="print the parsed AST as JSON")
   parser.add_argument("-i", action="store_true", dest="invert", help="invert the program; print source unless combined with execution modes")
   parser.add_argument("-c", action="store_true", dest="c_code", help="emit generated C code instead of running the program")
@@ -74,6 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
   parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
+  parser.add_argument("--direction", dest="direction", choices=["forward", "backward"], default="forward", help="execution direction: forward (default) or backward (run the program inverted)")
+  parser.add_argument("--expect", dest="expect", default=None, metavar="TEXT", help="compare program output against TEXT; exit 0 if equal, 1 otherwise")
+  parser.add_argument("--expect-file", dest="expect_file", default=None, metavar="PATH", help="like --expect but read the expected output from PATH")
   parser.add_argument("--help", action="help", default=argparse.SUPPRESS,
                       help="show this help message and exit")
   parser.add_argument("file", nargs="?", help="input file path, or `-` to read source from stdin")
@@ -150,6 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.std == "jana2014basic":
       from .parser_jana2014basic import parse_program as parse_program_jana
       program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
+    elif args.std == "jana2014_in_out":
+      from .parser_jana2014_in_out import parse_program as parse_program_jana
+      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
     elif args.std in ("janus1982", "janus1982ext"):
       if args.std == "janus1982":
         from .parser_janus1982 import parse_program as parse_program_1982
@@ -190,17 +220,23 @@ def main(argv: list[str] | None = None) -> int:
       else:
         mod_bits = _parse_optional_int(args.mod_bits)
         mod_prime = _parse_optional_int(args.mod_prime)
-        print(
-          Runtime(
-            program,
-            mod_bits=mod_bits,
-            mod_prime=mod_prime,
-            debug=args.debug,
-            debug_on_error=args.debug_on_error,
-            std=args.std,
-          ).run(show_store=args.show_store),
-          end="",
-        )
+        run_program = _invert_program_full(program) if args.direction == "backward" else program
+        output = Runtime(
+          run_program,
+          mod_bits=mod_bits,
+          mod_prime=mod_prime,
+          debug=args.debug,
+          debug_on_error=args.debug_on_error,
+          std=args.std,
+        ).run(show_store=args.show_store)
+        if args.expect is not None or args.expect_file is not None:
+          if args.expect_file is not None:
+            with open(args.expect_file, "r", encoding="utf-8") as f:
+              expected = f.read()
+          else:
+            expected = args.expect
+          return _check_expect(output, expected)
+        print(output, end="")
     return 0
   except TimeoutAbort:
     return 124
