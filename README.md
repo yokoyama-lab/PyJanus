@@ -12,16 +12,16 @@ reversible-computing research.
 
 ```bash
 # Run a program
-python3 -m jana_py.cli examples/fib.ja
+python3 -m jana_py.cli --std jana2014 tests/jana2014/fixtures/examples/fib.ja
 
 # Invert a program (swap call/uncall, reverse statements)
-python3 -m jana_py.cli -i examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -i tests/jana2014/fixtures/examples/fib.ja
 
 # Step-by-step debugger
-python3 -m jana_py.cli -d examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -d tests/jana2014/fixtures/examples/fib.ja
 
 # Generate C++ code
-python3 -m jana_py.cli -c examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -c tests/jana2014/fixtures/examples/fib.ja
 ```
 
 No external dependencies are required — only Python 3.10+.
@@ -50,10 +50,10 @@ PyJanus includes five research modules for studying reversible computation:
 
 ```bash
 # Synthesize a reversible gate network (CNOT, Toffoli, SWAP)
-python3 -m jana_py.cli --circuit examples/fib.ja
+python3 -m jana_py.cli --std jana2014 --circuit tests/jana2014/fixtures/examples/fib.ja
 
 # Profile space usage (pebble game analysis)
-python3 -m jana_py.cli --profile examples/fib.ja
+python3 -m jana_py.cli --std jana2014 --profile tests/jana2014/fixtures/examples/fib.ja
 
 # Inverse interpreter: given output, find the input
 python3 -m jana_py.cli --inverse '{"x": 10}' program.ja
@@ -67,7 +67,15 @@ python3 -m jana_py.cli --inverse '{"x": 10}' program.ja
 | Space profiler | `jana_py/pebble.py` | Track memory usage per step (Bennett's pebble game) |
 | Inverse interpreter | `jana_py/inverse.py` | Compute initial state from final state |
 
-## Examples
+## Example Fixtures
+
+Example programs live under dialect-specific test fixtures:
+
+- `tests/jana2014/fixtures/examples/`
+- `tests/jana2014_in_out/fixtures/examples/`
+- `tests/jana2014basic/fixtures/examples/`
+- `tests/janus1982ext/fixtures/examples/`
+- `tests/janus2026/fixtures/examples/`
 
 | File | Description |
 |------|-------------|

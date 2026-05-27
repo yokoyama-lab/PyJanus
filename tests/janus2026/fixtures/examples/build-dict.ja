@@ -1,0 +1,55 @@
+// Dictionary-building example migrated from examples/.
+
+struct entry {
+    int c,
+    char k,
+    char fst,
+    int len
+}
+
+struct dict {
+    int size,
+    entry entries[5]
+}
+
+void init_dict(dict d) {
+    d.size ^= 3;
+    for (int i = 1; i < d.size; i += 1) {
+        d.entries[i].k ^= i;
+        d.entries[i].fst ^= i;
+        d.entries[i].len ^= 1;
+    }
+}
+
+void add_to_dict(int c, char k, dict d) {
+    local int n = d.size, char fst = d.entries[c].fst, int len = d.entries[c].len + 1 {
+        d.entries[n].c ^= c;
+        d.entries[n].k ^= k;
+        d.entries[n].fst ^= fst;
+        fst ^= d.entries[n].fst;
+        d.entries[n].len ^= len;
+        len ^= d.entries[n].len;
+    } delocal int n = d.size, char fst = 0, int len = 0;
+    d.size += 1;
+}
+
+void build_dict(int out[3], int i, int j, dict d) {
+    local char k = 0 {
+        call init_dict(d);
+        from (j == 0) loop {
+            j += 1;
+            k ^= (d.entries[out[j]].k == 0 ? d.entries[out[j - 1]].fst : d.entries[out[j]].fst);
+            call add_to_dict(out[j - 1], k, d);
+            k ^= d.entries[d.size - 1].k;
+            i += d.entries[out[j]].len;
+        } until (out[j + 1] == 0);
+    } delocal char k = 0;
+}
+
+void main() {
+    int out[] = {1, 2, 0};
+    int i;
+    int j;
+    dict d;
+    call build_dict(out, i, j, d);
+}
