@@ -1,0 +1,7 @@
+// Reversible echo: read one value and write it back unchanged.
+// in: 5
+// out: 5
+procedure main()
+    int x
+    read x
+    write x

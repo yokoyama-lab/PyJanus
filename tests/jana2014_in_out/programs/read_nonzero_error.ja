@@ -1,0 +1,7 @@
+// read into a non-zero variable violates reversibility (error case).
+// in: 9
+// error: must be zero
+procedure main()
+    int x = 5
+    read x
+    write x

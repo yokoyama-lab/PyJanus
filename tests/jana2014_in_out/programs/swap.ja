@@ -1,0 +1,11 @@
+// Read two values, swap them, write them out.
+// in: 3 7
+// out: 7 3
+procedure main()
+    int x
+    int y
+    read x
+    read y
+    x <=> y
+    write x
+    write y

@@ -1,0 +1,11 @@
+// Read two values; add the second into the first; write both.
+// in: 3 7
+// out: 10 7
+procedure main()
+    int x
+    int y
+    read x
+    read y
+    x += y
+    write x
+    write y
