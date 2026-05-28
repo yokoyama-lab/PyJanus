@@ -1,0 +1,21 @@
+// Push two reads onto a stack, pop them: order is reversed (LIFO).
+// case: distinct
+// in: 4 9
+// out: 9 4
+// case: zero
+// in: 0 3
+// out: 3 0
+procedure main()
+    int a
+    int b
+    int x
+    int y
+    stack s
+    read a
+    read b
+    push(a, s)
+    push(b, s)
+    pop(x, s)
+    pop(y, s)
+    write x
+    write y

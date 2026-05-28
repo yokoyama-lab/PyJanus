@@ -1,0 +1,112 @@
+// LZ-family dictionary coder: reversible LZ78 over a read/write stream.
+// Reads 4 symbols (in[0]=length prefix), runs rev_lz78, writes out[0..9]
+// where out[0] is the token count and out[2k-1],out[2k] are (index,symbol)
+// pairs. Backward run uncalls rev_lz78 (decompresses) and reproduces input.
+// Symbols must be < alphSize (8); dictSize=16.
+// case: abab
+// in: 1 2 1 2
+// out: 3 0 1 0 2 1 2 0 0 0
+// case: aaaa
+// in: 1 1 1 1
+// out: 3 0 1 1 1 1 0 0 0 0
+// case: distinct_then_repeat
+// in: 1 2 3 1
+// out: 4 0 1 0 2 0 3 1 0 0
+  /*
+    Reversible LZ78 for Jana using direct (parent, symbol) indexing.
+  
+    Overflow behavior:
+    - entry 0 is reserved as the root
+    - when `n >= dictSize`, new dictionary entries are not stored
+    - `n` still advances to preserve reversible state progression
+    - this degrades compression ratio but keeps `rev_lz78` reversible
+  */
+  
+  procedure init_dict(int n)
+    n += 1
+  
+  
+  procedure add_to_dict(int c, int k, int d[][], int n, int T[][])
+    local int len = d[c][2] + 1
+    d[n][0] ^= c
+    d[n][1] ^= k
+    d[n][2] <=> len
+    delocal int len
+  
+    T[c][k] ^= n
+    n += 1
+  
+  
+  procedure build_dict(int out[], int i, int j, int d[][], int n, int T[][], int dictSize)
+    call init_dict(n)
+    i += 1
+    from j = 0 loop
+      j += 1
+      if out[2*j] != 0 then
+        if n < dictSize then
+          call add_to_dict(out[2*j-1], out[2*j], d, n, T)
+        else
+          n += 1
+        fi n <= dictSize
+        i += d[out[2*j-1]][2] + 1
+      else
+        i += d[out[2*j-1]][2]
+      fi out[2*j] != 0
+    until j = out[0]
+  
+  
+  procedure compress(int in[], int out[], int i, int j, int d[][], int n, int T[][], int dictSize)
+    local int code = 0, int di = 0
+    call init_dict(n)
+    i += 1
+    from i = 1 loop
+      di ^= T[code][in[i]]
+      if di != 0 && d[di][0] = code && d[di][1] = in[i] then
+        in[i] ^= d[di][1]
+        code ^= d[di][0]
+        code ^= di
+        di ^= T[d[code][0]][d[code][1]]
+        i += 1
+      else
+        di ^= T[code][in[i]]
+        out[2*j+1] <=> code
+        out[2*j+2] <=> in[i]
+  
+        if out[2*j+2] != 0 then
+          if n < dictSize then
+            call add_to_dict(out[2*j+1], out[2*j+2], d, n, T)
+          else
+            n += 1
+          fi n <= dictSize
+          i += 1
+        fi out[2*j+2] != 0
+  
+        j += 1
+      fi code != 0
+    until in[i] = 0 && code = 0
+  
+    in[0] -= i - 1
+    out[0] += j
+    delocal int code = 0, int di = 0
+  
+  
+  procedure rev_lz78(int in[], int out[], int dictSize, int alphSize)
+    local int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], int d[dictSize][3]
+    call compress(in, out, i, j, d, n, T, dictSize)
+    uncall build_dict(out, i, j, d, n, T, dictSize)
+    delocal int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], int d[dictSize][3]
+
+procedure main()
+  int in[10]
+  int out[20]
+  in[0] += 4
+  read in[1]
+  read in[2]
+  read in[3]
+  read in[4]
+  local int dictSize = 16, int alphSize = 8
+  call rev_lz78(in, out, dictSize, alphSize)
+  delocal int dictSize = 16, int alphSize = 8
+  iterate int k = 0 to 9
+    write out[k]
+  end

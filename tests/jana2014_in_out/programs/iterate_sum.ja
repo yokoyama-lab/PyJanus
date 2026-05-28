@@ -1,0 +1,19 @@
+// iterate accumulates 1+2+...+n; n is read and echoed so the run is reversible.
+// case: five
+// in: 5
+// out: 15 5
+// case: one
+// in: 1
+// out: 1 1
+// case: zero
+// in: 0
+// out: 0 0
+procedure main()
+    int n
+    int sum
+    read n
+    iterate int i = 1 to n
+        sum += i
+    end
+    write sum
+    write n

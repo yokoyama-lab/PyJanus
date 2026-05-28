@@ -1,0 +1,19 @@
+// Add 100 when the input is zero, else compute x+1; echo input to stay reversible.
+// case: zero_branch
+// in: 0
+// out: 100 0
+// case: nonzero_branch
+// in: 7
+// out: 8 7
+procedure main()
+    int x
+    int y
+    read x
+    if x = 0 then
+        y += 100
+    else
+        y += x
+        y += 1
+    fi y = 100
+    write y
+    write x
