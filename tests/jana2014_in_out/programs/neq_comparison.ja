@@ -1,0 +1,10 @@
+// != is the not-equal comparison operator.
+// in:
+// out: 10
+procedure main()
+    int x
+    x += 1
+    if x != 0 then
+        x += 9
+    fi x != 0
+    write x

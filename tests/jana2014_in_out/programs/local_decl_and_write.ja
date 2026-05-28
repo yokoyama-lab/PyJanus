@@ -1,0 +1,7 @@
+// Local main declaration and write.
+// in:
+// out: 42
+procedure main()
+    int x
+    x += 42
+    write x

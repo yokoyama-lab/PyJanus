@@ -1,0 +1,15 @@
+// Read one value, increment it, and write it back.
+// case: positive
+// in: 41
+// out: 42
+// case: zero
+// in: 0
+// out: 1
+// case: negative
+// in: -3
+// out: -2
+procedure main()
+    int x
+    read x
+    x += 1
+    write x

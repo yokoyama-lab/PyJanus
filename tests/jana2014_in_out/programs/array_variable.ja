@@ -1,0 +1,7 @@
+// Array declaration and indexing.
+// in:
+// out: 99
+procedure main()
+    int arr[5]
+    arr[2] += 99
+    write arr[2]

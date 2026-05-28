@@ -1,0 +1,12 @@
+// from/do/loop/until: do block also runs for the exit value.
+// in:
+// out: 4
+procedure main()
+    int x
+    int i
+    from i=0
+    do x += 1
+    loop i += 1
+    until i=3
+    i -= 3
+    write x

@@ -1,0 +1,8 @@
+// ^= is the XOR-update operator.
+// in:
+// out: 6
+procedure main()
+    int x
+    x += 5
+    x ^= 3
+    write x

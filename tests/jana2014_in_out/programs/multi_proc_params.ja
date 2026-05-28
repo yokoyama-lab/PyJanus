@@ -1,0 +1,14 @@
+// Multiple procedures passing a value by parameter.
+// in:
+// out: 10
+procedure add3(int acc)
+    acc += 3
+
+procedure add7(int acc)
+    acc += 7
+
+procedure main()
+    int acc
+    call add3(acc)
+    call add7(acc)
+    write acc

@@ -1,0 +1,53 @@
+// Factorization from the 1982 paper, translated to Jana 2014 syntax.
+// in:
+// out: 0 2 2 3
+procedure factor(int num, int try, int z, int i, int fact[20])
+    from (try=0) & (num>1)
+    loop call nexttry(try)
+         from fact[i] != try
+         loop i += 1
+              fact[i] += try
+              z += num/try
+              z <=> num
+              z -= num*try
+         until (num % try) != 0
+    until (try*try) > num
+
+    if num != 1
+    then i += 1
+         fact[i] <=> num
+    else num -= 1
+    fi fact[i] != fact[i-1]
+
+    if (fact[i-1]*fact[i-1]) < fact[i]
+    then from (try*try) > fact[i]
+         loop uncall nexttry(try)
+         until try=0
+    else try -= fact[i-1]
+    fi (fact[i-1]*fact[i-1]) < fact[i]
+
+    call zeroi(i, fact)
+
+procedure zeroi(int i, int fact[20])
+    from fact[i+1] = 0
+    loop i -= 1
+    until i = 0
+
+procedure nexttry(int try)
+    try += 2
+    if try = 4
+    then try -= 1
+    fi try = 3
+
+procedure main()
+    int num
+    int try
+    int z
+    int i
+    int fact[20]
+    num += 12
+    call factor(num, try, z, i, fact)
+    write i
+    write fact[1]
+    write fact[2]
+    write fact[3]

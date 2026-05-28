@@ -1,0 +1,11 @@
+// uncall executes a procedure in reverse.
+// in:
+// out: 0
+procedure add3(int x)
+    x += 3
+
+procedure main()
+    int x
+    call add3(x)
+    uncall add3(x)
+    write x

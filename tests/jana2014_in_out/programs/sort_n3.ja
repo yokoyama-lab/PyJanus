@@ -1,0 +1,41 @@
+// Bubble sort from the 1982 paper for n=3, translated to Jana 2014 syntax.
+// in:
+// out: 10 20 30 3
+procedure sort(int list[12], int perm[12], int n, int i, int j)
+    from i=0
+    loop j += n-2
+         from j=n-2
+         loop if list[j] > list[j+1]
+                   then list[j] <=> list[j+1]
+                        perm[j] <=> perm[j+1]
+                   fi perm[j] > perm[j+1]
+              j -= 1
+         until j=i-1
+         j -= i-1
+         i += 1
+    until i=n-1
+    i -= n-1
+
+procedure makeidperm(int perm[12], int n, int i)
+    from i=0
+    loop perm[i] += i
+         i += 1
+    until i=n
+    i -= n
+
+procedure main()
+    int list[12]
+    int perm[12]
+    int n
+    int i
+    int j
+    n += 3
+    list[0] += 30
+    list[1] += 10
+    list[2] += 20
+    call makeidperm(perm, n, i)
+    call sort(list, perm, n, i, j)
+    write list[0]
+    write list[1]
+    write list[2]
+    write n

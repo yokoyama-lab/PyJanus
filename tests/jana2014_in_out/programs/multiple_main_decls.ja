@@ -1,0 +1,13 @@
+// Multiple typed declarations in main.
+// in:
+// out: 1 2 3
+procedure main()
+    int a
+    int b
+    int c
+    a += 1
+    b += 2
+    c += 3
+    write a
+    write b
+    write c

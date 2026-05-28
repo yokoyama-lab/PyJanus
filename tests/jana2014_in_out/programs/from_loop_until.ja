@@ -1,0 +1,12 @@
+// from/loop/until counts 0..n-1.
+// in:
+// out: 4
+procedure main()
+    int n
+    int i
+    n += 4
+    from i=0
+    loop i += 1
+    until i=n
+    i -= n
+    write n

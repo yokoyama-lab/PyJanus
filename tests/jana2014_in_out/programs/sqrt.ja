@@ -1,0 +1,31 @@
+// Integer square root from the 1982 paper, translated to Jana 2014 syntax.
+// in:
+// out: 12 0
+procedure root_proc(int num, int root, int z, int bit)
+    bit += 1
+    from bit=1
+    loop call doublebit(z, bit)
+    until (bit*bit) > num
+    from (bit*bit) > num
+    do   uncall doublebit(z, bit)
+         if ((root+bit)*(root+bit)) <= num
+         then root += bit
+         fi ((root/bit) % 2) != 0
+    until bit=1
+    bit -= 1
+    num -= root*root
+
+procedure doublebit(int z, int bit)
+    z += bit
+    bit += z
+    z -= bit/2
+
+procedure main()
+    int num
+    int root
+    int z
+    int bit
+    num += 144
+    call root_proc(num, root, z, bit)
+    write root
+    write num

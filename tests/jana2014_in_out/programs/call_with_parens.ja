@@ -1,0 +1,10 @@
+// Parameterized procedure call.
+// in:
+// out: 5
+procedure add5(int x)
+    x += 5
+
+procedure main()
+    int x
+    call add5(x)
+    write x
