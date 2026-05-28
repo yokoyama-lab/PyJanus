@@ -1,0 +1,47 @@
+// LZ-family gateway: reversible run-length encoding over a read/write stream.
+// Reads 6 symbols (text[6] stays 0 as terminator), encodes in place into
+// (symbol, run-length) pairs, and writes them. Backward run decodes.
+// out tokens cover the full fixed-size arc[14] buffer (trailing zeros included).
+// case: runs
+// in: 1 1 2 2 2 1
+// out: 1 2 2 3 1 1 0 0 0 0 0 0 0 0
+// case: all_same
+// in: 5 5 5 5 5 5
+// out: 5 6 0 0 0 0 0 0 0 0 0 0 0 0
+// case: alternating
+// in: 3 4 3 4 3 4
+// out: 3 1 4 1 3 1 4 1 3 1 4 1 0 0
+procedure encode(int text[], int arc[])
+    local int i = 0
+    local int j = 0
+    from i = 0 && j = 0 loop
+        arc[j] += text[i]
+        text[i] -= arc[j]
+        from arc[j+1] = 0 do
+            arc[j+1] += 1
+            i += 1
+        loop
+            text[i] -= arc[j]
+        until arc[j] != text[i]
+        j += 2
+    until text[i] = 0
+    from arc[j] = 0 do
+        j -= 2
+        i -= arc[j+1]
+    until i = 0
+    delocal int j = 0
+    delocal int i = 0
+
+procedure main()
+    int text[7]
+    int arc[14]
+    read text[0]
+    read text[1]
+    read text[2]
+    read text[3]
+    read text[4]
+    read text[5]
+    call encode(text, arc)
+    iterate int k = 0 to 13
+        write arc[k]
+    end

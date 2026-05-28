@@ -1,0 +1,15 @@
+// local/delocal: a temporary holds 2*x while x is tripled; delocal asserts its value.
+// case: four
+// in: 4
+// out: 12
+// case: zero
+// in: 0
+// out: 0
+procedure main()
+    int x
+    read x
+    local int t = x
+    t += x
+    x += t
+    delocal int t = x / 3 * 2
+    write x
