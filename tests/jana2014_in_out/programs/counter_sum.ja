@@ -1,0 +1,14 @@
+// Sum 0+1+...+(n-1) using from/loop/until.
+// in:
+// out: 10
+procedure main()
+    int n
+    int sum
+    int i
+    n += 5
+    from i=0
+    loop sum += i
+         i += 1
+    until i=n
+    i -= n
+    write sum

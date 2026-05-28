@@ -11,3 +11,8 @@ htmlcov/
 dist/
 build/
 .DS_Store
+# AI confidential config
+CLAUDE.md
+AGENTS.md
+memory.instruction.md
+*.instruction.md

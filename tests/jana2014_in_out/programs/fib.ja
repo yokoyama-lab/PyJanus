@@ -1,0 +1,22 @@
+// Fibonacci with parameterized procedures.
+// in:
+// out: 89 144
+procedure fib(int n, int x1, int x2)
+    if n = 0 then
+        x1 += 1
+        x2 += 1
+    else
+        n -= 1
+        call fib(n, x1, x2)
+        x1 += x2
+        x1 <=> x2
+    fi x1 = x2
+
+procedure main()
+    int n
+    int x1
+    int x2
+    n += 10
+    call fib(n, x1, x2)
+    write x1
+    write x2
