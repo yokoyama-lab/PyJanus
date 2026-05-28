@@ -561,7 +561,7 @@ class Runtime:
         exit_cond = self._truthy(self._eval_expr(frame, stmt.exit_cond))
         if exit_cond != cond:
           expect = "true" if cond else "false"
-          raise JanaError(stmt.exit_cond.pos, f"Assertion failed: should be {expect}", contextual=True)
+          raise self._assertion_error(frame, stmt.exit_cond.pos, f"Assertion failed: should be {expect}", stmt.exit_cond)
         return
       if isinstance(stmt, SwitchStmt):
         if record_stmt:
@@ -579,7 +579,8 @@ class Runtime:
         self._exec_block(frame, branch, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
         exit_val = self._eval_expr(frame, stmt.exit_expr)
         if exit_val != val:
-          raise JanaError(stmt.exit_expr.pos, f"Assertion failed: should be {val}", contextual=True)
+          detail = f"actual: {format_expr(stmt.exit_expr)} = {self._format_compare_value(exit_val)} (expected {self._format_compare_value(val)})"
+          raise JanaError(stmt.exit_expr.pos, f"Assertion failed: should be {val}", [detail], contextual=True)
         return
       if isinstance(stmt, AncillaBlockStmt):
         if record_stmt:
@@ -592,7 +593,7 @@ class Runtime:
           self._push_boundary(stmt.pos.line, "FromStmt")
         self._arm_step_for_nested_entry()
         if not self._truthy(self._eval_expr(frame, stmt.entry_cond)):
-          raise JanaError(stmt.entry_cond.pos, "Assertion failed: should be true", contextual=True)
+          raise self._assertion_error(frame, stmt.entry_cond.pos, "Assertion failed: should be true", stmt.entry_cond)
         self._exec_from_forward(frame, stmt, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
         return
       if isinstance(stmt, IterateStmt):
@@ -628,8 +629,7 @@ class Runtime:
       if isinstance(stmt, SkipStmt):
         return
       if isinstance(stmt, AssertStmt):
-        if not self._truthy(self._eval_expr(frame, stmt.expr)):
-          raise JanaError(stmt.expr.pos, "Assertion failed: should be true", contextual=True)
+        self._exec_assert(frame, stmt)
         return
       if isinstance(stmt, UserErrorStmt):
         raise JanaError(stmt.pos, f"User error: {stmt.message}")
@@ -1205,6 +1205,8 @@ class Runtime:
     return self._normalize_int(0, cell.elem_int_type)
 
   def _warn_legacy_io(self, kind: str) -> None:
+    if self.std == "jana2014_in_out":
+      return
     if kind in self._legacy_io_warned:
       return
     self._legacy_io_warned.add(kind)
@@ -1737,6 +1739,61 @@ class Runtime:
   def _truthy(self, value) -> bool:
     return bool(value)
 
+  _COMPARISON_OPS = (BinOpKind.EQ, BinOpKind.NEQ, BinOpKind.LT, BinOpKind.GT, BinOpKind.LE, BinOpKind.GE)
+
+  def _format_compare_value(self, value) -> str:
+    if isinstance(value, bool):
+      return "true" if value else "false"
+    if isinstance(value, list):
+      return "{" + ", ".join(self._format_compare_value(item) for item in value) + "}"
+    if isinstance(value, dict):
+      return "{" + ", ".join(f"{key}={self._format_compare_value(item)}" for key, item in value.items()) + "}"
+    return str(value)
+
+  def _condition_detail(self, frame: Frame, expr: Expr) -> str | None:
+    """For a failing comparison condition, report the operand values."""
+    if not (isinstance(expr, BinExpr) and expr.op in self._COMPARISON_OPS):
+      return None
+    try:
+      left = self._eval_expr(frame, expr.left)
+      right = self._eval_expr(frame, expr.right)
+    except JanaError:
+      return None
+    return (
+      f"actual: {format_expr(expr.left)} = {self._format_compare_value(left)}, "
+      f"{format_expr(expr.right)} = {self._format_compare_value(right)}"
+    )
+
+  def _assertion_error(self, frame: Frame, pos: SourcePos, message: str, cond: Expr) -> JanaError:
+    detail = self._condition_detail(frame, cond)
+    details = [detail] if detail is not None else []
+    return JanaError(pos, message, details, contextual=True)
+
+  def _exec_assert(self, frame: Frame, stmt: AssertStmt) -> None:
+    expr = stmt.expr
+    # Aggregate-aware equality: `assert a = b` / `assert a != b` on arrays,
+    # stacks, or structs does a structural comparison with a left/right diff.
+    if isinstance(expr, BinExpr) and expr.op in (BinOpKind.EQ, BinOpKind.NEQ):
+      left = self._eval_expr(frame, expr.left)
+      right = self._eval_expr(frame, expr.right)
+      if isinstance(left, (list, dict)) or isinstance(right, (list, dict)):
+        equal = left == right
+        ok = equal if expr.op == BinOpKind.EQ else not equal
+        if not ok:
+          relation = "equal" if expr.op == BinOpKind.EQ else "not equal"
+          details = [
+            f"left:  {format_expr(expr.left)} = {self._format_compare_value(left)}",
+            f"right: {format_expr(expr.right)} = {self._format_compare_value(right)}",
+          ]
+          raise JanaError(expr.pos, f"Assertion failed: values should be {relation}", details, contextual=True)
+        return
+    value = self._eval_expr(frame, expr)
+    if not self._truthy(value):
+      detail = self._condition_detail(frame, expr)
+      if detail is None:
+        detail = f"actual value: {self._format_compare_value(value)}"
+      raise JanaError(expr.pos, "Assertion failed: should be true", [detail], contextual=True)
+
   def _exec_from_forward(self, frame: Frame, stmt: FromStmt, record_stmt: bool = True, record_nested: bool = False) -> None:
     if stmt.do_part:
       self._exec_block(frame, stmt.do_part, record_stmt=record_stmt, record_nested=record_nested)
@@ -1746,7 +1803,7 @@ class Runtime:
       if stmt.loop_part:
         self._exec_block(frame, stmt.loop_part, record_stmt=record_stmt, record_nested=record_nested)
       if self._truthy(self._eval_expr(frame, stmt.entry_cond)):
-        raise JanaError(stmt.entry_cond.pos, "Assertion failed: should be false", contextual=True)
+        raise self._assertion_error(frame, stmt.entry_cond.pos, "Assertion failed: should be false", stmt.entry_cond)
       if stmt.do_part:
         self._exec_block(frame, stmt.do_part, record_stmt=record_stmt, record_nested=record_nested)
       if self._truthy(self._eval_expr(frame, stmt.exit_cond)):

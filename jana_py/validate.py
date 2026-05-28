@@ -19,10 +19,10 @@ from .format import format_stmt
 from .errors import JanaError
 
 
-def validate_program(program: Program) -> None:
+def validate_program(program: Program, require_main: bool = True) -> None:
   _validate_struct_defs(program.struct_defs)
   known_structs = {struct_def.ident.name for struct_def in program.struct_defs}
-  if program.main is None:
+  if program.main is None and require_main:
     filename = program.procs[0].procname.pos.filename if program.procs else ""
     raise JanaError(SourcePos(filename, 0, 0), "No main procedure has been defined")
   seen: dict[str, Proc] = {}
