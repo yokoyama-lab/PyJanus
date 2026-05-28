@@ -15,7 +15,7 @@ from .invert import invert_program, invert_proc_globally, invert_stmts
 from .parser_janus2026 import parse_program
 from .preprocess import preprocess_text
 from .c_codegen import format_program as format_c_program
-from .errors import JanaError
+from .errors import JanaError, format_jana_error
 from .runtime import Runtime
 from .validate import validate_program
 
@@ -130,6 +130,17 @@ def _parse_optional_int(value: str | None) -> int | None:
   return int(value) if value not in {None, ""} else None
 
 
+def _source_map(filename: str, text: str) -> dict[str, str]:
+  sources = {filename: text}
+  if filename not in {"", "-"}:
+    try:
+      from pathlib import Path
+      sources[str(Path(filename).resolve())] = text
+    except OSError:
+      pass
+  return sources
+
+
 def validate_args(args) -> None:
   if args.mod_bits is not None and args.mod_bits != "":
     int(args.mod_bits)
@@ -166,11 +177,13 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdin = io.StringIO("\n".join(args.program_args) + "\n")
   timeout_sec = int(args.timeout) if args.timeout not in {None, ""} else -1
   timeout_enabled = timeout_sec > 0
+  phase = "preprocessing"
   try:
     preprocessed = preprocess_text(args.file, text)
     if timeout_enabled:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)
+    phase = "parsing"
     if args.std == "jana2014":
       from .parser_jana2014 import parse_program as parse_program_jana
       program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
@@ -188,18 +201,22 @@ def main(argv: list[str] | None = None) -> int:
       program = parse_program_1982(args.file, preprocessed.text, preprocessed.line_origins)
     else:
       program = parse_program(args.file, preprocessed.text, preprocessed.line_origins)
+    phase = "validation"
     validate_program(program)
     if args.circuit:
+      phase = "circuit synthesis"
       from .circuit import synthesize_program
       circuit = synthesize_program(program)
       print(circuit.to_text())
       return 0
     if args.profile:
+      phase = "profiling"
       from .pebble import profile_space, format_profile
       profile = profile_space(program)
       print(format_profile(profile))
       return 0
     if args.inverse_store is not None:
+      phase = "inverse analysis"
       from .inverse import run_inverse
       final_store = json.loads(args.inverse_store)
       result = run_inverse(program, final_store)
@@ -209,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
       print(json.dumps(result.initial_store))
       return 0
     if args.invert:
+      phase = "inversion"
       program = invert_program(program)
     if args.ast:
       print(json.dumps(_to_jsonable(program), indent=2))
@@ -221,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         mod_bits = _parse_optional_int(args.mod_bits)
         mod_prime = _parse_optional_int(args.mod_prime)
         run_program = _invert_program_full(program) if args.direction == "backward" else program
+        phase = "execution"
         output = Runtime(
           run_program,
           mod_bits=mod_bits,
@@ -244,6 +263,15 @@ def main(argv: list[str] | None = None) -> int:
     if timeout_enabled:
       return 124
     print("maximum recursion depth exceeded")
+    return 1
+  except JanaError as exc:
+    print(format_jana_error(
+      exc,
+      phase=phase,
+      std=args.std,
+      direction=args.direction,
+      sources=_source_map(args.file, text),
+    ))
     return 1
   except Exception as exc:
     print(str(exc))

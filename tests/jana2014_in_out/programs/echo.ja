@@ -1,6 +1,13 @@
 // Reversible echo: read one value and write it back unchanged.
+// case: positive
 // in: 5
 // out: 5
+// case: zero
+// in: 0
+// out: 0
+// case: negative
+// in: -7
+// out: -7
 procedure main()
     int x
     read x

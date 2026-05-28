@@ -1,6 +1,13 @@
 // Read two values; add the second into the first; write both.
+// case: positive
 // in: 3 7
 // out: 10 7
+// case: zero_left
+// in: 0 5
+// out: 5 5
+// case: negative_left
+// in: -2 8
+// out: 6 8
 procedure main()
     int x
     int y

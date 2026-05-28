@@ -1,6 +1,13 @@
 // Read two values, swap them, write them out.
+// case: distinct
 // in: 3 7
 // out: 7 3
+// case: includes_zero
+// in: 0 9
+// out: 9 0
+// case: negative
+// in: -4 2
+// out: 2 -4
 procedure main()
     int x
     int y

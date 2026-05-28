@@ -1,5 +1,9 @@
 // read into a non-zero variable violates reversibility (error case).
+// case: positive
 // in: 9
+// error: must be zero
+// case: zero
+// in: 0
 // error: must be zero
 procedure main()
     int x = 5
