@@ -95,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("-d", action="store_true", dest="debug", help="run with debugger-style stepping output")
   parser.add_argument("-e", action="store_true", dest="debug_on_error", help="break into debug mode only when an error occurs")
   parser.add_argument("-s", "--store", action="store_true", dest="show_store", help="print the final store after normal execution")
+  parser.add_argument("--no-main", action="store_true", dest="no_main", help="allow a library file without a main procedure (for -a/-c/-i and validation; cannot be executed)")
   parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
   parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
@@ -202,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
       program = parse_program(args.file, preprocessed.text, preprocessed.line_origins)
     phase = "validation"
-    validate_program(program)
+    validate_program(program, require_main=not args.no_main)
     if args.circuit:
       phase = "circuit synthesis"
       from .circuit import synthesize_program
