@@ -75,6 +75,7 @@ from .preprocess import LineOrigin
 
 KEYWORDS = {
   "procedure", "main", "int", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
+  "char", "string", "struct",
   "ancilla", "constant", "bool", "true", "false",
   "if", "then", "else", "fi",
   "from", "do", "loop", "until",
@@ -96,7 +97,7 @@ TOKEN_RE = re.compile(
   |(?P<MCOMMENT>/\*.*?\*/)
   |(?P<STRING>"(?:\\.|[^"\\])*")
   |(?P<NUMBER>0b[01]+|\d+)
-  |(?P<OP><=>|==|\+=|-=|\^=|!=|<<|>>|<=|>=|&&|\|\||\*\*|=|<|>|\+|-|\*|/|%|\^|&|\||!|,|\.|\(|\)|\[|\]|\{|\}|;)
+  |(?P<OP><=>|==|\+=|-=|\^=|!=|<<|>>|<=|>=|&&|\|\||\*\*|=|<|>|\+|-|\*|/|%|\^|&|\||!|,|\.|\?|:|\(|\)|\[|\]|\{|\}|;)
   |(?P<IDENT>[A-Za-z][A-Za-z0-9_']*)
   |(?P<MISMATCH>.)
   """,
@@ -219,11 +220,18 @@ def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None
 class Parser:
   def __init__(self, filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None):
     self.tokens = TokenStream(tokenize(filename, text, line_origins))
+    self.struct_names: set[str] = set()
 
   def parse_program(self) -> Program:
+    struct_defs: list[StructDef] = []
     mains: list[ProcMain] = []
     procs: list[Proc] = []
     while self.tokens.peek().kind != "EOF":
+      if self.tokens.peek().kind == "KW" and self.tokens.peek().value == "struct":
+        struct_def = self.parse_struct_def()
+        struct_defs.append(struct_def)
+        self.struct_names.add(struct_def.ident.name)
+        continue
       proc_or_main = self.parse_procedure()
       if isinstance(proc_or_main, ProcMain):
         mains.append(proc_or_main)
@@ -232,7 +240,25 @@ class Parser:
 
     if len(mains) > 1:
       raise JanaError(self.tokens.peek().pos, 'Unexpected end of input\n    Expecting "procedure" or end of input\n    Multiple main procedures has been defined')
-    return Program(mains[0] if mains else None, procs, [])
+    return Program(mains[0] if mains else None, procs, struct_defs)
+
+  def parse_struct_def(self) -> StructDef:
+    pos = self.expect_kw("struct").pos
+    ident = self.parse_ident(allow_field_keywords=True)
+    self.expect_op("{")
+    fields = [self.parse_struct_field()]
+    while self.tokens.match("OP", ","):
+      fields.append(self.parse_struct_field())
+    self.expect_op("}")
+    return StructDef(ident, fields, pos)
+
+  def parse_struct_field(self) -> StructField:
+    pos = self.tokens.peek().pos
+    typ = self.parse_type()
+    dimensions = self._parse_decl_dimensions()
+    ident = self.parse_ident(allow_field_keywords=True)
+    dimensions = self._merge_decl_dimensions(dimensions, self._parse_decl_dimensions())
+    return StructField(typ, ident, pos, dimensions)
 
   def parse_procedure(self) -> ProcMain | Proc:
     start = self.tokens.peek()
@@ -302,7 +328,10 @@ class Parser:
     return Vdecl(decl_type, typ, ident, dimensions, init_expr, pos)
 
   def _starts_shared_vdecl_tail(self) -> bool:
-    return self.tokens.peek(1).kind == "IDENT"
+    # A shared tail is a bare name continuing the current type (`int x, y`).
+    # `T name` where T is a struct type (`..., dict d`) is a new declaration,
+    # not a shared tail, so exclude anything that itself looks like a type.
+    return self.tokens.peek(1).kind == "IDENT" and not self._looks_like_type(1)
 
   def parse_decl_type(self) -> DeclType:
     if self.tokens.match("KW", "ancilla"):
@@ -313,11 +342,17 @@ class Parser:
 
   def parse_type(self) -> Type:
     token = self.tokens.peek()
+    if token.kind == "IDENT":
+      self.tokens.consume()
+      return Type("struct", token.pos, name=token.value)
     if token.kind != "KW":
       raise JanaError(token.pos, "Expecting type")
     if token.value in TYPE_KEYWORDS:
       self.tokens.consume()
       return Type("int", token.pos, TYPE_KEYWORDS[token.value])
+    if token.value in {"char", "string"}:
+      self.tokens.consume()
+      return Type("int", token.pos, IntType.U8, is_char=True)
     if token.value == "stack":
       self.tokens.consume()
       return Type("stack", token.pos)
@@ -638,7 +673,13 @@ class Parser:
     return AssertStmt(expr, pos)
 
   def parse_expression(self) -> Expr:
-    return self.parse_binary_level(0)
+    expr = self.parse_binary_level(0)
+    if self.tokens.match("OP", "?"):
+      then_expr = self.parse_expression()
+      self.expect_op(":")
+      else_expr = self.parse_expression()
+      return TernaryExpr(expr, then_expr, else_expr, expr.pos)
+    return expr
 
   def parse_binary_level(self, level: int) -> Expr:
     if level == len(BIN_PRECEDENCE):
@@ -803,7 +844,7 @@ class Parser:
           next_idx += 1
       return (next_idx < len(self.tokens.tokens)
               and self.tokens.tokens[next_idx].kind == "IDENT")
-    return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool"}
+    return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool", "char", "string"}
 
   def _starts_vdecl(self) -> bool:
     idx = 0
@@ -814,7 +855,7 @@ class Parser:
   def _looks_like_type_cast(self) -> bool:
     idx = self.tokens.index + 1
     token = self.tokens.tokens[idx]
-    return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool"}
+    return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool", "char", "string"}
 
 
 def parse_program(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None) -> Program:

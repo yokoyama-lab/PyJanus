@@ -191,10 +191,7 @@ class Runtime:
       self.current_line = last_line
       self._at_end_break = True
       self._make_break(frame)
-    nonzero = self._nonzero_store_names(frame)
-    if nonzero:
-      sys.stderr.write("Warning: non-zero values remain at end of execution: " + ", ".join(nonzero) + "\n")
-    store = self._format_store(frame) if show_store else ""
+    store = self._format_store(frame)
     return "".join(self.stdout) + store + ("\n" if store else "")
 
   def _init_vdecls(self, frame: Frame, vdecls: list[Vdecl]) -> None:
@@ -981,12 +978,7 @@ class Runtime:
         i += 1
     if value_index != len(values):
       raise JanaError(stmt.pos, "Not all arguments where used during string formatting", contextual=True)
-    formatted = "".join(pieces)
-    if not formatted.endswith("\n"):
-      formatted += "\n"
-    self.stdout.append(formatted)
-    for cell in cells:
-      cell.value = self._zero_runtime_value(cell)
+    self.stdout.append("".join(pieces) + "\n")
 
   def _render_printf_value(self, kind: str, cell: Cell) -> str:
     if kind == "s":
@@ -1186,10 +1178,8 @@ class Runtime:
     return self._normalize_int(0, cell.elem_int_type)
 
   def _warn_legacy_io(self, kind: str) -> None:
-    if kind in self._legacy_io_warned:
-      return
-    self._legacy_io_warned.add(kind)
-    sys.stderr.write(f"Warning: `{kind}` is deprecated; use `printf` instead.\n")
+    # `print`/`show` are first-class output forms in jana2014; no deprecation notice.
+    return
 
   def _call_proc(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos, record_stmt: bool = True, record_nested: bool = False) -> None:
     proc = self.procs.get(name)

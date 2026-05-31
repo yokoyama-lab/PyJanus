@@ -21,7 +21,7 @@ from .ast import (
     LvalExpr, Lval, LvalIndex, ModOp, Number, Proc, Program,
     SkipStmt, Stmt, SwapStmt, UncallStmt, LocalStmt, Expr,
 )
-from .parser_janus2026 import parse_program
+from .parser_jana2014 import parse_program
 from .preprocess import preprocess_text
 
 # ── Tag constants (must match opcodes.ja) ─────────────────────────────

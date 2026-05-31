@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     ),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  parser.add_argument("--std", dest="std", choices=["janus2026", "jana2014", "jana2014basic", "janus1982", "janus1982ext"], default="janus2026", help="language standard: janus2026 (default, C-style), jana2014, jana2014basic, janus1982 (strict 1982), janus1982ext (1982 + extensions)")
+  parser.add_argument("--std", dest="std", choices=["janus2026", "jana2014", "jana2014basic", "janus1982", "janus1982ext"], default="jana2014", help="language standard: jana2014 (default, procedure-style), janus2026 (C-style), jana2014basic, janus1982 (strict 1982), janus1982ext (1982 + extensions)")
   parser.add_argument("-a", action="store_true", dest="ast", help="print the parsed AST as JSON")
   parser.add_argument("-i", action="store_true", dest="invert", help="invert the program; print source unless combined with execution modes")
   parser.add_argument("-c", action="store_true", dest="c_code", help="emit generated C code instead of running the program")
