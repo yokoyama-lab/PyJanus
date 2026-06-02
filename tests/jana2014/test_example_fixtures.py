@@ -74,6 +74,30 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_iterate_cumsum_xor_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_iterate.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    self.assertIn("cumsum:     1 3 6 10 15", result.stdout)
+    self.assertIn("cumsum^-1:  1 2 3 4 5", result.stdout)
+    self.assertIn("xor_chain:  5 6 0 2 5", result.stdout)
+    self.assertIn("odd_even:   20 10 40 30 60 50", result.stdout)
+    self.assertIn("feistel4:   L=181 R=552", result.stdout)
+    self.assertIn("feistel4^-1: L=5 R=7", result.stdout)
+
+  def test_injective_bits_xor_gray_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_bits.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # xor_key is an involution: applying the same key twice restores the input.
+    self.assertIn("xor_key:    a=6 (k=10)", result.stdout)
+    self.assertIn("xor_key x2: a=12", result.stdout)
+    self.assertIn("xor_into:   x=240 y=15", result.stdout)
+    # Gray(12) = 12 XOR 6 = 10; uncall recovers g=0.
+    self.assertIn("gray_enc:   gx=12 g=10", result.stdout)
+    self.assertIn("gray_dec:   gx=12 g=0", result.stdout)
+    # Feistel round (L=5, R=7, K=3) -> (L=7, R=16); inverse restores it.
+    self.assertIn("feistel:    L=7 R=16 (K=3)", result.stdout)
+    self.assertIn("feistel^-1: L=5 R=7", result.stdout)
+
 
 if __name__ == "__main__":
   unittest.main()

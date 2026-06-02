@@ -1,0 +1,93 @@
+/*
+ * A third level of reversible injective procedures: bijections on whole
+ * arrays, built with `iterate` loops where each step is a local injection.
+ *
+ *   1. cumsum         arr -> running prefix sum of arr (bijection).
+ *                     Inverse is `uncall cumsum`, which reproduces the
+ *                     classical "difference" sequence.
+ *   2. xor_chain      arr -> running XOR. Same shape as cumsum but with
+ *                     XOR; doubly an involution at each step.
+ *   3. odd_even_swap  swap arr[2k] and arr[2k+1] for every k (involution).
+ *   4. feistel_block  apply `rounds` Feistel rounds to (L, R) under key K.
+ *                     Demonstrates how iteration composes reversible
+ *                     procedures into a stronger one.
+ */
+
+procedure cumsum(int arr[], int n)
+    iterate int i = 1 to n - 1
+        arr[i] += arr[i - 1]
+    end
+
+procedure xor_chain(int arr[], int n)
+    iterate int i = 1 to n - 1
+        arr[i] ^= arr[i - 1]
+    end
+
+procedure odd_even_swap(int arr[], int n)
+    // Pairs (0,1), (2,3), ... ; if n is odd the last element stays put.
+    local int i = 0
+        from i = 0 do
+            arr[i] <=> arr[i + 1]
+            i += 2
+        loop
+        until i + 1 >= n
+    delocal int i = i
+
+// One Feistel round inline (avoids a forward-reference issue when this
+// fixture is run standalone).
+procedure feistel_round(int L, int R, int K)
+    local int t = R * K
+        L ^= t
+    delocal int t = R * K
+    L <=> R
+
+procedure feistel_block(int L, int R, int K, int rounds)
+    iterate int i = 0 to rounds - 1
+        call feistel_round(L, R, K)
+    end
+
+procedure main()
+    int a[5] = {1, 2, 3, 4, 5}
+    int b[5] = {5, 3, 6, 2, 7}
+    int c[6] = {10, 20, 30, 40, 50, 60}
+    int n5
+    int n6
+    int L
+    int R
+    int K
+    int rounds
+
+    n5 += 5
+    n6 += 6
+
+    // 1. cumsum: {1, 2, 3, 4, 5} -> {1, 3, 6, 10, 15}
+    call cumsum(a, n5)
+    printf("cumsum:     %d %d %d %d %d\n", a[0], a[1], a[2], a[3], a[4])
+    // uncall restores the original sequence.
+    uncall cumsum(a, n5)
+    printf("cumsum^-1:  %d %d %d %d %d\n", a[0], a[1], a[2], a[3], a[4])
+
+    // 2. xor_chain: {5, 3, 6, 2, 7} -> {5, 6, 0, 2, 5}
+    //    (5; 5^3=6; 6^6=0; 0^2=2; 2^7=5)
+    call xor_chain(b, n5)
+    printf("xor_chain:  %d %d %d %d %d\n", b[0], b[1], b[2], b[3], b[4])
+
+    // 3. odd_even_swap on c: swap (0,1)(2,3)(4,5) ->
+    //    {10,20,30,40,50,60} -> {20,10,40,30,60,50}
+    call odd_even_swap(c, n6)
+    printf("odd_even:   %d %d %d %d %d %d\n", c[0], c[1], c[2], c[3], c[4], c[5])
+
+    // 4. feistel_block with 4 rounds on (L=5, R=7, K=3):
+    //    round 1: (5,7,3)  -> (7, 5^21=16)
+    //    round 2: (7,16,3) -> (16, 7^48=55)
+    //    round 3: (16,55,3)-> (55, 16^165=181)
+    //    round 4: (55,181,3)-> (181, 55^543=552)
+    L += 5
+    R += 7
+    K += 3
+    rounds += 4
+    call feistel_block(L, R, K, rounds)
+    printf("feistel4:   L=%d R=%d\n", L, R)
+    // Reversibility: uncall reverses the 4 rounds to the original input.
+    uncall feistel_block(L, R, K, rounds)
+    printf("feistel4^-1: L=%d R=%d\n", L, R)
