@@ -68,6 +68,21 @@ class StructReversibilityTests(unittest.TestCase):
       "fill(ps)",
     )
 
+  def test_struct_local_value_copy_roundtrip(self) -> None:
+    proc = (
+      "struct Ref {\n          int dist,\n          int len,\n          int next\n      }\n\n"
+      "      void apply(Ref out[1], int in_[2], int i) {\n"
+      "          local Ref ref = out[0]\n"
+      "              in_[i] ^= ref.next;\n"
+      "          delocal Ref ref = out[0]\n"
+      "      }"
+    )
+    self.assertRoundTrip(
+      proc,
+      "Ref out[1] = {{0, 0, 7}}; int in_[2]; int i; i += 1;",
+      "apply(out, in_, i)",
+    )
+
 
 if __name__ == "__main__":
   unittest.main()
