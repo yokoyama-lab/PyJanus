@@ -74,6 +74,15 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_arithmetic_factorial_ipow_horner(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_arithmetic.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    self.assertIn("factorial:  5! = 120", result.stdout)
+    self.assertIn("ipow:       2^10 = 1024", result.stdout)
+    self.assertIn("horner:     p(4) = 57", result.stdout)
+    # Reversibility: uncall of each procedure clears the result.
+    self.assertIn("cleared:    fact=0 pow=0 y=0", result.stdout)
+
   def test_injective_iterate_cumsum_xor_feistel(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_iterate.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
