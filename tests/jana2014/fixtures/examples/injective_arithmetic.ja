@@ -1,0 +1,82 @@
+/*
+ * A fourth level of reversible injective procedures: arithmetic built from
+ * the standard Janus "multiply by a known constant" pattern
+ *
+ *     local int t = y
+ *         y += t * c
+ *         y -= t
+ *     delocal int t = y / c
+ *
+ * which leaves y = y_old * c (c nonzero). The delocal closes the loop by
+ * dividing the new y back to y_old exactly, since y is by construction a
+ * multiple of c.
+ *
+ *   1. factorial(n, result)   result = n!,        n preserved.
+ *   2. ipow(base, exp, result) result = base^exp,  base, exp preserved.
+ *   3. horner(x, y, coeffs, n) y += p(x), with p given in Horner form.
+ *
+ * All three require `result`/`y` to be 0 at entry; on exit, `uncall`
+ * restores that zero.
+ */
+
+procedure factorial(int n, int result)
+    result += 1
+    iterate int i = 1 to n
+        local int t = result
+            result += t * i
+            result -= t
+        delocal int t = result / i
+    end
+
+procedure ipow(int base, int exp, int result)
+    result += 1
+    iterate int i = 1 to exp
+        local int t = result
+            result += t * base
+            result -= t
+        delocal int t = result / base
+    end
+
+procedure horner(int x, int y, int coeffs[], int n)
+    y += coeffs[n - 1]
+    iterate int i = n - 2 by -1 to 0
+        local int t = y
+            y += t * x
+            y -= t
+        delocal int t = y / x
+        y += coeffs[i]
+    end
+
+procedure main()
+    int n
+    int fact
+    int base
+    int exp
+    int pow
+    int x
+    int y
+    int coeffs[3] = {1, 2, 3}
+    int deg
+
+    // 1. factorial(5) = 120
+    n += 5
+    call factorial(n, fact)
+    printf("factorial:  5! = %d\n", fact)
+
+    // 2. ipow(2, 10) = 1024
+    base += 2
+    exp += 10
+    call ipow(base, exp, pow)
+    printf("ipow:       2^10 = %d\n", pow)
+
+    // 3. horner: p(x) = 1 + 2x + 3x^2, p(4) = 1 + 8 + 48 = 57
+    x += 4
+    deg += 3
+    call horner(x, y, coeffs, deg)
+    printf("horner:     p(4) = %d\n", y)
+
+    // Reversibility: uncall each procedure to clear the result variable.
+    uncall horner(x, y, coeffs, deg)
+    uncall ipow(base, exp, pow)
+    uncall factorial(n, fact)
+    printf("cleared:    fact=%d pow=%d y=%d\n", fact, pow, y)
