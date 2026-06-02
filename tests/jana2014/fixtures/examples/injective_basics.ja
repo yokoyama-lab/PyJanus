@@ -1,0 +1,115 @@
+/*
+ * A staircase of reversible procedures that compute injective integer
+ * functions, ordered from trivial to less trivial.
+ *
+ * Each procedure is reversible as a Janus statement, so `uncall` inverts it
+ * exactly. Viewed as a mathematical function from "inputs" to "outputs"
+ * (whichever variables we treat as carrying meaning), each step is
+ * injective: distinct inputs give distinct outputs.
+ *
+ *   1. inc        x -> x + 1
+ *   2. neg        x -> -x       (XOR-then-add trick)
+ *   3. add        (x, y) -> (x, y + x)
+ *   4. dbl        x -> 2x
+ *   5. mul_const  (x) -> n * x  for a known nonzero constant n
+ *   6. mul        (a, b, c) -> (a, b, c + a*b)
+ *   7. square     (x, sq) -> (x, sq + x*x)
+ *   8. cantor     (a, b, z) -> (a, b, z + pi(a,b))
+ *                 where pi(a,b) = (a+b)(a+b+1)/2 + a is the Cantor pairing.
+ */
+
+procedure inc(int x)
+    x += 1
+
+// Reversible negation: x -> -x. The ancilla `t` is initialized to -x and
+// expected to equal -x again at the delocal; the swap inside the block
+// installs the negated value into x while the ancilla holds x_old.
+procedure neg(int x)
+    local int t = -x
+        x <=> t
+    delocal int t = -x
+
+procedure add(int x, int y)
+    y += x
+
+// Direct `x += x` would alias the lvalue with the rhs, which Janus forbids.
+// The standard reversible doubling pattern uses a copy ancilla.
+procedure dbl(int x)
+    local int t = x
+        x += t
+    delocal int t = x / 2
+
+// Scale x by a known nonzero constant n. Reversible because the delocal
+// recovers t = x_new / n exactly when n divides x_new (which holds since
+// x_new = x_old * n).
+procedure mul_const(int x, int n)
+    local int t = x
+        x += t * n
+        x -= t
+    delocal int t = x / n
+
+procedure mul(int a, int b, int c)
+    c += a * b
+
+procedure square(int x, int sq)
+    sq += x * x
+
+// Cantor pairing: pi(a, b) = (a+b)(a+b+1)/2 + a. Injective on N x N.
+procedure cantor(int a, int b, int z)
+    local int s = a + b
+        local int half = s * (s + 1) / 2
+            z += half
+            z += a
+        delocal int half = s * (s + 1) / 2
+    delocal int s = a + b
+
+procedure main()
+    int x
+    int y
+    int c
+    int sq
+    int z
+    int n
+    int a
+    int b
+    int ca
+    int cb
+
+    // 1. inc: 5 -> 6
+    x += 5
+    call inc(x)
+    printf("inc:        x=%d\n", x)
+
+    // 2. neg: 6 -> -6
+    call neg(x)
+    printf("neg:        x=%d\n", x)
+
+    // 3. add: (x=-6, y=10) -> (x=-6, y=4)
+    y += 10
+    call add(x, y)
+    printf("add:        x=%d y=%d\n", x, y)
+
+    // 4. dbl: y=4 -> 8
+    call dbl(y)
+    printf("dbl:        y=%d\n", y)
+
+    // 5. mul_const by 3: y=8 -> 24
+    n += 3
+    call mul_const(y, n)
+    printf("mul_const:  y=%d (n=%d)\n", y, n)
+
+    // 6. mul: (a=4, b=7, c=0) -> c=28
+    a += 4
+    b += 7
+    call mul(a, b, c)
+    printf("mul:        c=%d\n", c)
+
+    // 7. square: x=-6 -> sq=36
+    call square(x, sq)
+    printf("square:     sq=%d\n", sq)
+
+    // 8. cantor: (3, 4) -> (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
+    ca += 3
+    cb += 4
+    call cantor(ca, cb, z)
+    printf("cantor:     z=%d\n", z)
