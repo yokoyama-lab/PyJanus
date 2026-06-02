@@ -11,6 +11,8 @@ htmlcov/
 dist/
 build/
 .DS_Store
+# Tool binaries
+bfg.jar
 # AI confidential config
 CLAUDE.md
 AGENTS.md
