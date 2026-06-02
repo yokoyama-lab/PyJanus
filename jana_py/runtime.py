@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import copy
 import math
 import sys
 
@@ -241,13 +242,20 @@ class Runtime:
     return value
 
   def _init_struct_from_expr(self, frame: Frame, typ, pos: SourcePos, expr: Expr) -> dict[str, object]:
-    """Initialize a struct from a C-style initializer like {1, 2}."""
+    """Initialize a struct from a C-style initializer like {1, 2} or by
+    value-copying another struct value, e.g. `local Ref r = out[j]`."""
     struct_name = typ.name
     if struct_name is None or struct_name not in self.struct_defs:
       raise JanaError(pos, f"Unknown struct type `{struct_name or typ.kind}`")
     struct_def = self.struct_defs[struct_name]
     if not isinstance(expr, ArrayExpr):
-      raise JanaError(pos, f"Struct initializer must be a brace-enclosed list")
+      value = self._eval_expr(frame, expr)
+      if isinstance(value, dict):
+        expected_fields = [field.ident.name for field in struct_def.fields]
+        if list(value.keys()) != expected_fields:
+          raise JanaError(pos, f"Cannot initialize struct `{struct_name}' from a value with mismatched fields")
+        return copy.deepcopy(value)
+      raise JanaError(pos, f"Struct initializer must be a brace-enclosed list or a `{struct_name}' value")
     items = expr.items
     if len(items) > len(struct_def.fields):
       raise JanaError(pos, f"Too many initializers for struct `{struct_name}' (expected {len(struct_def.fields)}, got {len(items)})")
