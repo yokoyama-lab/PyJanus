@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from jana_py.errors import JanaError
 from jana_py.parser_janus2026 import parse_program
 from jana_py.runtime import Runtime
 from jana_py.validate import validate_program
@@ -57,6 +58,55 @@ class StructRuntimeTests(unittest.TestCase):
     cell = runtime._root_frame.vars["m"]
     self.assertEqual(cell.kind, "struct")
     self.assertEqual(cell.value, {"flag": False, "xs": []})
+
+  def test_local_struct_copies_by_value_not_alias(self) -> None:
+    runtime = self.runtime_for(
+      """\
+      struct Ref {
+          int dist,
+          int len,
+          int next
+      }
+
+      void main() {
+          Ref out[1] = {{0, 0, 7}};
+          int sink;
+          local Ref ref = out[0]
+              ref.next += 5;
+              sink ^= ref.next;
+              ref.next -= 5;
+          delocal Ref ref = out[0]
+      }
+      """
+    )
+    runtime.run()
+    assert runtime._root_frame is not None
+    # `ref` is a value copy: mutating it leaves out[0] untouched.
+    self.assertEqual(runtime._root_frame.vars["out"].value, [{"dist": 0, "len": 0, "next": 7}])
+    self.assertEqual(runtime._root_frame.vars["sink"].value, 12)
+
+  def test_local_struct_copy_delocal_mismatch_is_rejected(self) -> None:
+    runtime = self.runtime_for(
+      """\
+      struct Ref {
+          int dist,
+          int len,
+          int next
+      }
+
+      void main() {
+          Ref out[1] = {{0, 0, 7}};
+          int sink;
+          local Ref ref = out[0]
+              ref.next += 5;
+              sink ^= ref.next;
+          delocal Ref ref = out[0]
+      }
+      """
+    )
+    with self.assertRaises(JanaError) as ctx:
+      runtime.run()
+    self.assertIn("for local variable `ref'", str(ctx.exception))
 
   def test_struct_field_update_and_read_behave_like_lvalues(self) -> None:
     runtime = self.runtime_for(
