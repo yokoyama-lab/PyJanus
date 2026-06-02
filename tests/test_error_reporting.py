@@ -140,6 +140,38 @@ class AssertionDiagnosticsTests(unittest.TestCase):
     )
     self.assertEqual(result.returncode, 0)
 
+  def test_from_loop_entry_assertion_reports_operand_values(self) -> None:
+    result = run_program(
+      """\
+      procedure main()
+          int x = 5
+          from x = 0 do
+              x += 1
+          loop
+              x += 1
+          until x = 7
+      """,
+      ["--std", "jana2014"],
+    )
+    self.assertEqual(result.returncode, 1)
+    self.assertIn("Assertion failed: should be true", result.stdout)
+    self.assertIn("actual: x = 5, 0 = 0", result.stdout)
+
+  def test_assert_array_inequality_failure_reports_diff(self) -> None:
+    result = run_program(
+      """\
+      procedure main()
+          int a[3] = {1, 2, 3}
+          int b[3] = {1, 2, 3}
+          assert a != b
+      """,
+      ["--std", "jana2014"],
+    )
+    self.assertEqual(result.returncode, 1)
+    self.assertIn("Assertion failed: values should be not equal", result.stdout)
+    self.assertIn("left:  a = {1, 2, 3}", result.stdout)
+    self.assertIn("right: b = {1, 2, 3}", result.stdout)
+
   def test_assert_struct_equality_reports_diff(self) -> None:
     result = run_program(
       """\
@@ -178,6 +210,31 @@ class NoMainFlagTests(unittest.TestCase):
     result = run_program(self.LIBRARY, ["--std", "jana2014", "--no-main", "-a"])
     self.assertEqual(result.returncode, 0)
     self.assertIn('"name": "inc"', result.stdout)
+
+  def test_no_main_flag_allows_library_invert(self) -> None:
+    result = run_program(self.LIBRARY, ["--std", "jana2014", "--no-main", "-i"])
+    self.assertEqual(result.returncode, 0)
+    self.assertIn("inc(", result.stdout)
+    self.assertIn("x -= 1", result.stdout)
+
+
+class DeprecationWarningTests(unittest.TestCase):
+  SHOW_SOURCE = """\
+    procedure main()
+        int x
+        x += 5
+        show(x)
+    """
+
+  def test_show_deprecation_warning_emitted_in_jana2014(self) -> None:
+    result = run_program(self.SHOW_SOURCE, ["--std", "jana2014"])
+    self.assertEqual(result.returncode, 0)
+    self.assertIn("`show` is deprecated", result.stderr)
+
+  def test_show_deprecation_warning_suppressed_in_jana2014_in_out(self) -> None:
+    result = run_program(self.SHOW_SOURCE, ["--std", "jana2014_in_out"])
+    self.assertEqual(result.returncode, 0)
+    self.assertNotIn("deprecated", result.stderr)
 
 
 if __name__ == "__main__":

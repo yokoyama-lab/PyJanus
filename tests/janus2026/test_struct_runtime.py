@@ -85,6 +85,56 @@ class StructRuntimeTests(unittest.TestCase):
     self.assertEqual(runtime._root_frame.vars["out"].value, [{"dist": 0, "len": 0, "next": 7}])
     self.assertEqual(runtime._root_frame.vars["sink"].value, 12)
 
+  def test_local_struct_copy_rejects_non_struct_initializer(self) -> None:
+    runtime = self.runtime_for(
+      """\
+      struct Ref {
+          int dist,
+          int len,
+          int next
+      }
+
+      void main() {
+          int n = 5;
+          local Ref ref = n
+              ref.next ^= 0;
+          delocal Ref ref = n
+      }
+      """
+    )
+    with self.assertRaises(JanaError) as ctx:
+      runtime.run()
+    self.assertIn("Struct initializer must be a brace-enclosed list", str(ctx.exception))
+
+  def test_local_struct_copy_with_nested_struct_does_not_alias(self) -> None:
+    runtime = self.runtime_for(
+      """\
+      struct Inner {
+          int a
+      }
+      struct Outer {
+          Inner inner,
+          int z
+      }
+
+      void main() {
+          Outer src;
+          int sink;
+          src.inner.a += 3;
+          local Outer copy_ = src
+              copy_.inner.a += 10;
+              sink ^= copy_.inner.a;
+              copy_.inner.a -= 10;
+          delocal Outer copy_ = src
+      }
+      """
+    )
+    runtime.run()
+    assert runtime._root_frame is not None
+    # Mutating the inner struct of copy_ must not leak into src.
+    self.assertEqual(runtime._root_frame.vars["src"].value, {"inner": {"a": 3}, "z": 0})
+    self.assertEqual(runtime._root_frame.vars["sink"].value, 13)
+
   def test_local_struct_copy_delocal_mismatch_is_rejected(self) -> None:
     runtime = self.runtime_for(
       """\
