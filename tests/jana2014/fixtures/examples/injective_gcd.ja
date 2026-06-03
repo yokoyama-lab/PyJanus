@@ -1,0 +1,82 @@
+/*
+ * Level 6: reversible subtractive Euclidean GCD using a logged inner
+ * procedure plus a Bennett wrapper.
+ *
+ * Subtractive GCD is the canonical "naturally irreversible" loop: each
+ * iteration replaces the larger of (a, b) with (larger - smaller), but the
+ * choice of which one was larger is forgotten unless we record it. We log
+ * the choice into `log[steps]` so the inverter can replay the loop
+ * backwards, then wrap the whole thing with the Bennett pattern from the
+ * previous fixture to produce a fully garbage-free GCD:
+ *
+ *   call gcd_clean(a, b, g, log)
+ *   //   a, b, log preserved
+ *   //   g += gcd(a, b)
+ *
+ * Preconditions:
+ *   a >= 0, b >= 0, not both zero.
+ *   log[0..k-1] = 0 on entry, where k is large enough for the worst-case
+ *   subtraction count (Fibonacci-like inputs are the slowest).
+ *
+ * The fi-assertion `log[steps] = 1` is exactly the entry test `a >= b`
+ * remembered into the log, which is what makes the if reversible without
+ * needing the inverter to recompute the comparison after the subtraction.
+ */
+
+procedure gcd_destructive(int a, int b, int log[], int steps)
+    from steps = 0 loop
+        if a >= b then
+            log[steps] += 1
+            a -= b
+        else
+            b -= a
+        fi log[steps] = 1
+        steps += 1
+    until a = 0 || b = 0
+
+procedure gcd_clean(int a, int b, int g, int log[])
+    local int ac = a
+        local int bc = b
+            local int steps = 0
+                call gcd_destructive(ac, bc, log, steps)
+                // (ac, bc) = (gcd, 0) or (0, gcd)
+                g += ac
+                g += bc
+                uncall gcd_destructive(ac, bc, log, steps)
+                // restored: ac = a, bc = b, log zeroed, steps = 0
+            delocal int steps = 0
+        delocal int bc = b
+    delocal int ac = a
+
+procedure main()
+    int a
+    int b
+    int g
+    int log[20]
+    int a2
+    int b2
+    int g2
+    int a3
+    int b3
+    int g3
+
+    // gcd(12, 18) = 6
+    a += 12
+    b += 18
+    call gcd_clean(a, b, g, log)
+    printf("gcd(12,18): a=%d b=%d g=%d\n", a, b, g)
+
+    // Reversibility: uncall restores g=0 and leaves a, b, log untouched.
+    uncall gcd_clean(a, b, g, log)
+    printf("uncalled:   a=%d b=%d g=%d\n", a, b, g)
+
+    // gcd(21, 14) = 7
+    a2 += 21
+    b2 += 14
+    call gcd_clean(a2, b2, g2, log)
+    printf("gcd(21,14): a=%d b=%d g=%d\n", a2, b2, g2)
+
+    // Edge case: gcd(0, n) = n (loop runs zero iterations).
+    b3 += 9
+    call gcd_clean(a3, b3, g3, log)
+    printf("gcd(0,9):   a=%d b=%d g=%d\n", a3, b3, g3)
