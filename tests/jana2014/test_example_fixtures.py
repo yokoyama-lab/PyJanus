@@ -74,6 +74,16 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_gcd_reversible_euclidean(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_gcd.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    self.assertIn("gcd(12,18): a=12 b=18 g=6", result.stdout)
+    # uncall the Bennett-wrapped GCD restores g=0 with a, b untouched.
+    self.assertIn("uncalled:   a=12 b=18 g=0", result.stdout)
+    self.assertIn("gcd(21,14): a=21 b=14 g=7", result.stdout)
+    # Edge case: gcd(0, n) = n (the loop runs zero iterations).
+    self.assertIn("gcd(0,9):   a=0 b=9 g=9", result.stdout)
+
   def test_injective_bennett_divmod_garbage_free(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_bennett.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
