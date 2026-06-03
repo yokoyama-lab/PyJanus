@@ -74,6 +74,15 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_vm_stack_machine_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_vm.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Program [PUSH 5, PUSH 3, ADD, PUSH 10, SUB] yields stack <5, 8, 2>.
+    self.assertIn("after run:    top=2 below=8", result.stdout)
+    # uncall of the program runs every instruction backwards, emptying
+    # the stack again.
+    self.assertIn("after uncall: size=0", result.stdout)
+
   def test_injective_lehmer_perm_to_factorial_base(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_lehmer.ja")
     self.assertEqual(result.returncode, 0, result.stderr)

@@ -1,0 +1,99 @@
+/*
+ * Level 10: a reversible stack-machine VM.
+ *
+ * Each instruction is a (opcode, arg) pair, stored in two parallel arrays.
+ * `run` iterates over the program and dispatches to `step`, which handles
+ * the four opcodes by chained if-fi branches. The fi post-condition is
+ * just the opcode itself (`fi op = k`), which is trivially preserved
+ * because `op` is read-only inside `step` -- no log bit needed.
+ *
+ * Opcodes (all reversible on the stack):
+ *
+ *   0  PUSH arg   <...>          ->  <..., arg>
+ *   1  ADD        <..., a, b>    ->  <..., a, a + b>
+ *   2  SUB        <..., a, b>    ->  <..., a, b - a>
+ *   3  SWAP       <..., a, b>    ->  <..., b, a>
+ *
+ * ADD and SUB preserve the lower operand, mirroring the standard
+ * reversible-add convention; that lets the inverse instruction (uncall
+ * step on the same opcode) recover both operands without any history.
+ * uncall of the full program runs every instruction backwards and
+ * leaves the stack in its initial (empty) state.
+ */
+
+procedure step(int op, int arg, stack s)
+    if op = 0 then
+        local int v = 0
+            v += arg
+            push(v, s)
+        delocal int v = 0
+    fi op = 0
+
+    if op = 1 then
+        local int b = 0
+            local int a = 0
+                pop(b, s)
+                pop(a, s)
+                b += a
+                push(a, s)
+                push(b, s)
+            delocal int a = 0
+        delocal int b = 0
+    fi op = 1
+
+    if op = 2 then
+        local int b = 0
+            local int a = 0
+                pop(b, s)
+                pop(a, s)
+                b -= a
+                push(a, s)
+                push(b, s)
+            delocal int a = 0
+        delocal int b = 0
+    fi op = 2
+
+    if op = 3 then
+        local int b = 0
+            local int a = 0
+                pop(b, s)
+                pop(a, s)
+                push(b, s)
+                push(a, s)
+            delocal int a = 0
+        delocal int b = 0
+    fi op = 3
+
+procedure run(int ops[], int args[], int n, stack s)
+    iterate int pc = 0 to n - 1
+        call step(ops[pc], args[pc], s)
+    end
+
+procedure main()
+    stack s
+    int ops[5]   = {0, 0, 1, 0, 2}
+    int args[5] = {5, 3, 0, 10, 0}
+    int n
+    int top_val
+    int below
+    int empty_check
+
+    // Program: PUSH 5, PUSH 3, ADD, PUSH 10, SUB
+    //   <>            ->  <5>
+    //   <5>           ->  <5, 3>
+    //   <5, 3>        ->  <5, 5+3>  =  <5, 8>
+    //   <5, 8>        ->  <5, 8, 10>
+    //   <5, 8, 10>    ->  <5, 8, 10-8>  =  <5, 8, 2>
+    n += 5
+    call run(ops, args, n, s)
+
+    // Inspect the top two and put them back so uncall sees the same state.
+    pop(top_val, s)
+    pop(below, s)
+    printf("after run:    top=%d below=%d\n", top_val, below)
+    push(below, s)
+    push(top_val, s)
+
+    uncall run(ops, args, n, s)
+    empty_check += size(s)
+    printf("after uncall: size=%d\n", empty_check)
