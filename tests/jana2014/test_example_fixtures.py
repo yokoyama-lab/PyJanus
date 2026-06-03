@@ -74,6 +74,19 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_cipher_sbox_feistel_with_key_schedule(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_cipher_sbox.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Master key 6 with constants (0, 5, 11, 14) gives round keys
+    # (6, 3, 13, 8) under XOR-mixing.
+    self.assertIn("round keys:  6 3 13 8", result.stdout)
+    # Four Feistel rounds with the PRESENT S-box encrypt (5, 10) to (4, 8).
+    self.assertIn("encrypt:     L=4 R=8", result.stdout)
+    # uncall encrypt decrypts back to the plaintext.
+    self.assertIn("decrypt:     L=5 R=10", result.stdout)
+    # uncall key_schedule clears the derived round keys.
+    self.assertIn("rk cleared:  0 0 0 0", result.stdout)
+
   def test_injective_ca_rule90_second_order(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_ca_rule90.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
