@@ -74,6 +74,16 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_sort_network_with_swap_log(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_sort_network.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Fully reversed input: all five comparators swap.
+    self.assertIn("sort4 a:   1 2 3 4  log=11111", result.stdout)
+    # uncall replays the log backwards to restore the original order.
+    self.assertIn("uncall a:  4 2 3 1  log=00000", result.stdout)
+    # Already-sorted input: no comparator swaps.
+    self.assertIn("sort4 b:   1 2 3 4  log=00000", result.stdout)
+
   def test_injective_gcd_reversible_euclidean(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_gcd.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
