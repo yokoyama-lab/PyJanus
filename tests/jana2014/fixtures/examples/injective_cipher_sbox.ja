@@ -1,0 +1,92 @@
+/*
+ * Level 12: a more cipher-like block cipher with S-box and round key
+ * schedule.
+ *
+ * 16-bit block (L, R) of two 4-bit nibbles, 4 rounds of Feistel,
+ * round function f(R, K) = sbox[R XOR K], round keys derived from an
+ * 8-bit master key by XOR with per-round constants. The S-box is the
+ * PRESENT cipher's 4-bit S-box (a well-studied lightweight crypto
+ * primitive); the inverse table is precomputed so the lookup
+ *
+ *     x <- sbox[x]
+ *
+ * is implemented by the standard "swap with table, subtract through the
+ * inverse" pattern, which is reversible because sbox is a bijection.
+ *
+ *      procedure apply_sbox(int x, int sbox[], int inv_sbox[])
+ *          local int u = 0
+ *              u += sbox[x]            // u  = sbox[x_old]
+ *              x <=> u                 // x  = sbox[x_old], u = x_old
+ *              u -= inv_sbox[x]        // u -= inv_sbox[sbox[x_old]] = 0
+ *          delocal int u = 0
+ *
+ * Each round mixes f(R, K) into L by XOR, uncomputes the ancilla, then
+ * swaps. uncall of the whole cipher is the decryption; uncall of the
+ * key schedule clears the derived round keys back to zeros, leaving
+ * only the master key.
+ *
+ * Worked example. Master key 6, plaintext (L=5, R=10):
+ *   round keys     = (6, 3, 13, 8)
+ *   ciphertext     = (4, 8)
+ *   decrypt back   = (5, 10)
+ *   rk cleared     = (0, 0, 0, 0)
+ */
+
+procedure apply_sbox(int x, int sbox[], int inv_sbox[])
+    local int u = 0
+        u += sbox[x]
+        x <=> u
+        u -= inv_sbox[x]
+    delocal int u = 0
+
+procedure feistel_round(int L, int R, int K, int sbox[], int inv_sbox[])
+    local int t = 0
+        t += R
+        t ^= K
+        call apply_sbox(t, sbox, inv_sbox)
+        L ^= t
+        uncall apply_sbox(t, sbox, inv_sbox)
+        t ^= K
+        t -= R
+    delocal int t = 0
+    L <=> R
+
+procedure encrypt(int L, int R, int rk[], int sbox[], int inv_sbox[], int rounds)
+    iterate int r = 0 to rounds - 1
+        call feistel_round(L, R, rk[r], sbox, inv_sbox)
+    end
+
+procedure key_schedule(int master_key, int rk[])
+    rk[0] ^= master_key
+    rk[1] ^= master_key
+    rk[1] ^= 5
+    rk[2] ^= master_key
+    rk[2] ^= 11
+    rk[3] ^= master_key
+    rk[3] ^= 14
+
+procedure main()
+    int L
+    int R
+    int master_key
+    int rk[4]
+    int sbox[16]     = {12, 5, 6, 11, 9, 0, 10, 13, 3, 14, 15, 8, 4, 7, 1, 2}
+    int inv_sbox[16] = {5, 14, 15, 8, 12, 1, 2, 13, 11, 4, 6, 3, 0, 7, 9, 10}
+    int rounds
+
+    L += 5
+    R += 10
+    master_key += 6
+    rounds += 4
+
+    call key_schedule(master_key, rk)
+    printf("round keys:  %d %d %d %d\n", rk[0], rk[1], rk[2], rk[3])
+
+    call encrypt(L, R, rk, sbox, inv_sbox, rounds)
+    printf("encrypt:     L=%d R=%d\n", L, R)
+
+    uncall encrypt(L, R, rk, sbox, inv_sbox, rounds)
+    printf("decrypt:     L=%d R=%d\n", L, R)
+
+    uncall key_schedule(master_key, rk)
+    printf("rk cleared:  %d %d %d %d\n", rk[0], rk[1], rk[2], rk[3])
