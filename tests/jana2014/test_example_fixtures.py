@@ -74,6 +74,16 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_bennett_divmod_garbage_free(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_bennett.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Forward: divmod_clean preserves x and d, fills q and r.
+    self.assertIn("divmod(17,5): x=17 d=5 q=3 r=2", result.stdout)
+    # uncall clears q and r without disturbing x or d.
+    self.assertIn("uncalled:     x=17 d=5 q=0 r=0", result.stdout)
+    # Edge case: x < d gives q=0, r=x.
+    self.assertIn("divmod(3,5):  x=3 q=0 r=3", result.stdout)
+
   def test_injective_arithmetic_factorial_ipow_horner(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_arithmetic.ja")
     self.assertEqual(result.returncode, 0, result.stderr)

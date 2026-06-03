@@ -1,0 +1,70 @@
+/*
+ * Level 5: Bennett's compute-uncompute trick.
+ *
+ * Janus guarantees that every procedure is bijective on its full state,
+ * but a "natural" algorithm often consumes some of its inputs to do
+ * useful work. The classical Bennett pattern restores cleanliness:
+ *
+ *   1. allocate a fresh ancilla
+ *   2. call f(input, ancilla)       -- corrupts input, fills ancilla
+ *   3. copy the answer to the output -- (e.g. `out += ancilla`)
+ *   4. uncall f(input, ancilla)      -- restores input, clears ancilla
+ *
+ * The end state has the answer in `out` and no garbage anywhere.
+ *
+ * Below we use integer divmod-by-subtraction as the destructive helper.
+ * Repeated `x -= d` is the most natural way to compute (q, r) but it
+ * eats x. The wrapper `divmod_clean` keeps x intact.
+ */
+
+// Destructive divmod by subtraction. Preconditions: x >= 0, d > 0.
+//
+// Forward:  (x, d, q=0) -> (x mod d, d, x / d)
+// Reverse:  (r, d, q)   -> (q*d + r, d, 0)
+//
+// Reversible because the entry condition `q = 0` holds only on the first
+// iteration, so the inverter knows where the loop began.
+procedure divmod_destructive(int x, int d, int q)
+    from q = 0 loop
+        x -= d
+        q += 1
+    until x < d
+
+// Bennett wrap: preserves x, deposits quotient into q_out and remainder
+// into r_out. q_out and r_out must be 0 on entry.
+procedure divmod_clean(int x, int d, int q_out, int r_out)
+    local int xc = x
+        local int q = 0
+            call divmod_destructive(xc, d, q)
+            // xc = x mod d, q = x / d.
+            q_out += q
+            r_out += xc
+            uncall divmod_destructive(xc, d, q)
+            // restored: xc = x, q = 0.
+        delocal int q = 0
+    delocal int xc = x
+
+procedure main()
+    int x
+    int d
+    int q
+    int r
+    int x2
+    int q2
+    int r2
+
+    // 17 = 3*5 + 2
+    x += 17
+    d += 5
+    call divmod_clean(x, d, q, r)
+    printf("divmod(17,5): x=%d d=%d q=%d r=%d\n", x, d, q, r)
+
+    // Reversibility: uncall the Bennett-wrapped procedure clears the
+    // outputs while leaving x and d untouched.
+    uncall divmod_clean(x, d, q, r)
+    printf("uncalled:     x=%d d=%d q=%d r=%d\n", x, d, q, r)
+
+    // Edge case: x < d gives quotient 0 and remainder x.
+    x2 += 3
+    call divmod_clean(x2, d, q2, r2)
+    printf("divmod(3,5):  x=%d q=%d r=%d\n", x2, q2, r2)
