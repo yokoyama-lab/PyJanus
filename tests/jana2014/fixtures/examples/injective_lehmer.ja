@@ -1,0 +1,77 @@
+/*
+ * Level 9: Lehmer code and factorial-base integer encoding of permutations.
+ *
+ * A permutation p of {0, ..., n-1} can be encoded bijectively as an
+ * integer in [0, n!) via two reversible steps:
+ *
+ *   1. perm_to_code(perm, n)
+ *        In-place transform of perm into its "left-rank" Lehmer code:
+ *        after the call, perm[k] = the rank of the original perm[k]
+ *        among the original perm[0..k].
+ *        Each iteration scans positions j < k and decrements perm[j]
+ *        when perm[j] > perm[k]; the post-condition `perm[j] >= perm[k]`
+ *        is exactly the entry test held to make the if-fi reversible.
+ *
+ *   2. code_to_int(code, n, result)
+ *        Read the Lehmer code as a factorial-base number:
+ *          result += sum_k code[k] * k!
+ *        Implemented Horner-style: starting from code[n-1] and walking
+ *        down, multiply the running total by (i+1) (via the standard
+ *        "local copy + add/sub" multiply-by-constant pattern) and add
+ *        code[i].
+ *
+ * Composition gives a bijection perm <-> integer in [0, n!).
+ * Both procedures are individually reversible, so decoding is just
+ * `uncall code_to_int` followed by `uncall perm_to_code` -- no separate
+ * decoder is needed.
+ *
+ * Worked example with p = [2, 0, 3, 1]:
+ *
+ *      perm_to_code  ->  code = [0, 0, 2, 1]
+ *      code_to_int   ->  0*0! + 0*1! + 2*2! + 1*3! = 4 + 6 = 10
+ *      uncall both   ->  perm and result fully restored
+ */
+
+procedure perm_to_code(int x[], int n)
+    local int k = n
+        from k = n loop
+            k -= 1
+            local int j = 0
+                from j = 0 loop
+                    if x[j] > x[k] then
+                        x[j] -= 1
+                    fi x[j] >= x[k]
+                    j += 1
+                until j = k
+            delocal int j = k
+        until k = 0
+    delocal int k = 0
+
+procedure code_to_int(int code[], int n, int result)
+    result += code[n - 1]
+    iterate int i = n - 2 by -1 to 0
+        local int t = result
+            result += t * (i + 1)
+            result -= t
+        delocal int t = result / (i + 1)
+        result += code[i]
+    end
+
+procedure main()
+    int perm[4] = {2, 0, 3, 1}
+    int n
+    int int_result
+
+    n += 4
+
+    call perm_to_code(perm, n)
+    printf("code:     %d %d %d %d\n", perm[0], perm[1], perm[2], perm[3])
+
+    call code_to_int(perm, n, int_result)
+    printf("integer:  %d\n", int_result)
+
+    // Reversibility: uncall the chain to restore (perm, int_result = 0).
+    uncall code_to_int(perm, n, int_result)
+    uncall perm_to_code(perm, n)
+    printf("restored: %d %d %d %d (int=%d)\n",
+           perm[0], perm[1], perm[2], perm[3], int_result)
