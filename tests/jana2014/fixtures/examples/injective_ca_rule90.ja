@@ -1,0 +1,75 @@
+/*
+ * Level 11: a reversible second-order Cellular Automaton (Rule 90).
+ *
+ * Wolfram Rule 90 has neighbor sum mod 2 as its update:
+ *
+ *     state[i, t+1] = state[i-1, t] XOR state[i+1, t]
+ *
+ * This is irreversible: many configurations collapse to the same
+ * successor. The Margolus / Fredkin "second-order" trick recovers
+ * reversibility by mixing the predecessor back into the update:
+ *
+ *     state[i, t+1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t-1]
+ *
+ * Because XOR is its own inverse the rule is exactly bijective on pairs
+ * (state[t-1], state[t]), and the same expression run with t->t-2 inverts it:
+ *
+ *     state[i, t-1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t+1]
+ *
+ * Implementation. We hold two parallel arrays `a` and `b` that take
+ * turns being "older" and "newer". Initially:
+ *     a = state[t = -1]    (all zeros for the impulse demo)
+ *     b = state[t =  0]    (the seed configuration)
+ * Each step XORs the Rule-90 contribution from the newer array into the
+ * older, which thereby becomes the newest generation. The parity of the
+ * loop variable picks which array plays which role; that parity is the
+ * if-fi post-condition, which is trivially preserved because t is the
+ * read-only iterate variable.
+ *
+ * Boundary handling is periodic (cyclic ring of n cells).
+ */
+
+procedure step_xor(int target[], int source[], int n)
+    iterate int i = 1 to n - 2
+        target[i] ^= source[i - 1]
+        target[i] ^= source[i + 1]
+    end
+    target[0] ^= source[n - 1]
+    target[0] ^= source[1]
+    target[n - 1] ^= source[n - 2]
+    target[n - 1] ^= source[0]
+
+procedure run(int a[], int b[], int n, int steps)
+    iterate int t = 0 to steps - 1
+        if t % 2 = 0 then
+            call step_xor(a, b, n)
+        else
+            call step_xor(b, a, n)
+        fi t % 2 = 0
+    end
+
+procedure main()
+    int a[8] = {0, 0, 0, 0, 0, 0, 0, 0}
+    int b[8] = {0, 0, 0, 0, 1, 0, 0, 0}
+    int n
+    int steps
+
+    n += 8
+    steps += 3
+
+    // After 3 (odd) steps:
+    //   a holds state[t=3] = 01010101  (the most recent generation)
+    //   b holds state[t=2] = 00101010
+    call run(a, b, n, steps)
+    printf("a (t=3):    %d%d%d%d%d%d%d%d\n",
+           a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+    printf("b (t=2):    %d%d%d%d%d%d%d%d\n",
+           b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7])
+
+    // uncall replays the rule backwards in time and recovers the
+    // original two-slot history (zeros and the impulse).
+    uncall run(a, b, n, steps)
+    printf("a restored: %d%d%d%d%d%d%d%d\n",
+           a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+    printf("b restored: %d%d%d%d%d%d%d%d\n",
+           b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7])

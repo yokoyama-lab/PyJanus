@@ -74,6 +74,17 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_ca_rule90_second_order(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_ca_rule90.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # After 3 second-order Rule-90 steps from a single-cell impulse, the
+    # newer slot (a) holds state[t=3], the older slot (b) holds state[t=2].
+    self.assertIn("a (t=3):    01010101", result.stdout)
+    self.assertIn("b (t=2):    00101010", result.stdout)
+    # uncall runs time backwards and recovers the (zeros, impulse) pair.
+    self.assertIn("a restored: 00000000", result.stdout)
+    self.assertIn("b restored: 00001000", result.stdout)
+
   def test_injective_vm_stack_machine_roundtrip(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_vm.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
