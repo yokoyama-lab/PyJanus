@@ -1,0 +1,58 @@
+/*
+ * Level 7: a reversible sorting network.
+ *
+ * Each comparator is a 2-element compare-and-swap. Sorting throws away the
+ * original ordering, so a *bare* comparator is not reversible. The standard
+ * Janus trick is to record the swap decision into a log bit per comparator
+ * and turn the if-fi post-condition into a check on that log:
+ *
+ *     if a > b then
+ *         a <=> b
+ *         log += 1
+ *     fi log = 1
+ *
+ * With distinct comparator outputs there is no value-level post-condition
+ * that distinguishes "swap happened" from "no swap" (both end with a <= b),
+ * so the per-comparator log is what makes the comparator — and hence the
+ * whole network — reversible. The inverter inspects each log[k] to know
+ * whether that comparator swapped, and undoes accordingly.
+ *
+ * We use the optimal 5-comparator network for 4 elements:
+ *
+ *     (0,1) (2,3) (0,2) (1,3) (1,2)
+ */
+
+procedure cswap(int a, int b, int log)
+    if a > b then
+        a <=> b
+        log += 1
+    fi log = 1
+
+procedure sort4(int arr[], int log[])
+    call cswap(arr[0], arr[1], log[0])
+    call cswap(arr[2], arr[3], log[1])
+    call cswap(arr[0], arr[2], log[2])
+    call cswap(arr[1], arr[3], log[3])
+    call cswap(arr[1], arr[2], log[4])
+
+procedure main()
+    int a[4] = {4, 2, 3, 1}
+    int log[5]
+    int b[4] = {1, 2, 3, 4}
+    int log_b[5]
+
+    // a fully reversed -> all five comparators swap.
+    call sort4(a, log)
+    printf("sort4 a:   %d %d %d %d  log=%d%d%d%d%d\n",
+           a[0], a[1], a[2], a[3], log[0], log[1], log[2], log[3], log[4])
+
+    // uncall reverses the network using the recorded log,
+    // restoring a to its original order and clearing log.
+    uncall sort4(a, log)
+    printf("uncall a:  %d %d %d %d  log=%d%d%d%d%d\n",
+           a[0], a[1], a[2], a[3], log[0], log[1], log[2], log[3], log[4])
+
+    // Already-sorted input: no comparator swaps, log stays zero.
+    call sort4(b, log_b)
+    printf("sort4 b:   %d %d %d %d  log=%d%d%d%d%d\n",
+           b[0], b[1], b[2], b[3], log_b[0], log_b[1], log_b[2], log_b[3], log_b[4])
