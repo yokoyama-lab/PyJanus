@@ -74,6 +74,16 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_mini_cipher_three_round_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_mini_cipher.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Three rounds of additive Feistel over Z/256 with round keys
+    # (200, 150, 91) map (100, 42) -> (250, 231). Round 0 triggers a
+    # modular overflow, recorded as logs[0] = 1.
+    self.assertIn("encrypt:  L=250 R=231  logs=100", result.stdout)
+    # uncall reverses the cipher and clears every log bit.
+    self.assertIn("decrypt:  L=100 R=42  logs=000", result.stdout)
+
   def test_injective_sort_network_with_swap_log(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_sort_network.ja")
     self.assertEqual(result.returncode, 0, result.stderr)

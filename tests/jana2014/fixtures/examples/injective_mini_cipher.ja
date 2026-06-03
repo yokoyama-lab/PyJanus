@@ -1,0 +1,67 @@
+/*
+ * Level 8: modular arithmetic and a 3-round Feistel mini block cipher.
+ *
+ * Modular addition (x + y) mod m is reversible if we record the "did we
+ * subtract m" overflow as a single log bit; after the subtract x < m, but
+ * x < m is also true in the no-subtract case, so no value-level
+ * post-condition distinguishes the two branches. Same `fi log = 1` trick
+ * as in the sort network.
+ *
+ * Using mod_add as the round-mixing primitive, we build a 3-round Feistel
+ * cipher operating on (L, R) in Z/m with round keys (K0, K1, K2):
+ *
+ *     for k in (K0, K1, K2):
+ *         t = R XOR k
+ *         L = (L + t) mod m
+ *         swap(L, R)
+ *
+ * The XOR is computed into a fresh ancilla, mod_add mutates L, then the
+ * ancilla is uncomputed (XOR is its own inverse). uncall of the whole
+ * cipher decrypts using the three log bits, one per round.
+ */
+
+procedure mod_add(int x, int y, int m, int log)
+    x += y
+    if x >= m then
+        x -= m
+        log += 1
+    fi log = 1
+
+procedure feistel_step(int L, int R, int K, int m, int log)
+    local int t = 0
+        t += R
+        t ^= K
+        call mod_add(L, t, m, log)
+        t ^= K
+        t -= R
+    delocal int t = 0
+    L <=> R
+
+procedure cipher3(int L, int R, int K0, int K1, int K2, int m, int logs[])
+    call feistel_step(L, R, K0, m, logs[0])
+    call feistel_step(L, R, K1, m, logs[1])
+    call feistel_step(L, R, K2, m, logs[2])
+
+procedure main()
+    int L
+    int R
+    int K0
+    int K1
+    int K2
+    int m
+    int logs[3]
+
+    m += 256
+    K0 += 200
+    K1 += 150
+    K2 += 91
+
+    // Plaintext block.
+    L += 100
+    R += 42
+
+    call cipher3(L, R, K0, K1, K2, m, logs)
+    printf("encrypt:  L=%d R=%d  logs=%d%d%d\n", L, R, logs[0], logs[1], logs[2])
+
+    uncall cipher3(L, R, K0, K1, K2, m, logs)
+    printf("decrypt:  L=%d R=%d  logs=%d%d%d\n", L, R, logs[0], logs[1], logs[2])
