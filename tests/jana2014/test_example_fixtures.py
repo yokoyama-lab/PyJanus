@@ -74,6 +74,16 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
+  def test_injective_lehmer_perm_to_factorial_base(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_lehmer.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # Lehmer left-rank code of [2, 0, 3, 1].
+    self.assertIn("code:     0 0 2 1", result.stdout)
+    # Factorial base: 0*0! + 0*1! + 2*2! + 1*3! = 4 + 6 = 10.
+    self.assertIn("integer:  10", result.stdout)
+    # uncall of the chain restores the permutation and clears the integer.
+    self.assertIn("restored: 2 0 3 1 (int=0)", result.stdout)
+
   def test_injective_mini_cipher_three_round_feistel(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_mini_cipher.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
