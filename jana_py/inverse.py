@@ -21,7 +21,7 @@ from .ast import Type
 from .ast import Vdecl
 from .invert import invert_stmts
 from .invert import invert_program
-from .parser_janus2026 import parse_program
+from .parser_jana2014 import parse_program
 from .runtime import Runtime
 from .validate import validate_program
 

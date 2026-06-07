@@ -106,9 +106,10 @@ def format_program(program: Program) -> str:
 
 def format_struct_def(struct_def: StructDef) -> str:
   lines = [f"struct {struct_def.ident.name} {{"]
-  for field in struct_def.fields:
-    lines.append(f"    {format_struct_field(field)};")
-  lines.append("};")
+  for index, field in enumerate(struct_def.fields):
+    suffix = "," if index < len(struct_def.fields) - 1 else ""
+    lines.append(f"    {format_struct_field(field)}{suffix}")
+  lines.append("}")
   return "\n".join(lines)
 
 
@@ -118,18 +119,16 @@ def format_struct_field(field: StructField) -> str:
 
 
 def format_main(main: ProcMain) -> str:
-  lines = ["void main() {"]
-  lines.extend(f"    {format_vdecl(vdecl)};" for vdecl in main.vdecls)
+  lines = ["procedure main()"]
+  lines.extend(f"    {format_vdecl(vdecl)}" for vdecl in main.vdecls)
   lines.extend(format_stmt(stmt, 1) for stmt in main.stmts)
-  lines.append("}")
   return "\n".join(lines)
 
 
 def format_proc(proc: Proc) -> str:
   params = ", ".join(format_vdecl(param, allow_init=False) for param in proc.params)
-  lines = [f"void {proc.procname.name}({params}) {{"]
+  lines = [f"procedure {proc.procname.name}({params})"]
   lines.extend(format_stmt(stmt, 1) for stmt in proc.body)
-  lines.append("}")
   return "\n".join(lines)
 
 
@@ -192,97 +191,73 @@ def format_type(typ: Type) -> str:
 def format_stmt(stmt, indent: int) -> str:
   pad = "    " * indent
   if isinstance(stmt, AssignStmt):
-    expr_text = format_expr(stmt.expr)
-    if isinstance(stmt.expr, TernaryExpr):
-      expr_text = f"({expr_text})"
-    return f"{pad}{format_lval(stmt.lval)} {stmt.mod_op.value} {expr_text};"
+    return f"{pad}{format_lval(stmt.lval)} {stmt.mod_op.value} {format_expr(stmt.expr)}"
   if isinstance(stmt, IfStmt):
-    lines = [f"{pad}if ({format_expr(stmt.entry_cond)}) {{"]
+    lines = [f"{pad}if {format_expr(stmt.entry_cond)} then"]
     lines.extend(format_stmt(s, indent + 1) for s in stmt.if_part)
-    lines.append(f"{pad}}}")
     if stmt.else_part:
-      lines.append(f"{pad}else {{")
+      lines.append(f"{pad}else")
       lines.extend(format_stmt(s, indent + 1) for s in stmt.else_part)
-      lines.append(f"{pad}}}")
-    lines.append(f"{pad}fi ({format_expr(stmt.exit_cond)});")
+    lines.append(f"{pad}fi {format_expr(stmt.exit_cond)}")
     return "\n".join(lines)
   if isinstance(stmt, FromStmt):
+    lines = [f"{pad}from {format_expr(stmt.entry_cond)}"]
     if stmt.do_part:
-      lines = [f"{pad}from ({format_expr(stmt.entry_cond)}) {{"]
+      lines.append(f"{pad}do")
       lines.extend(format_stmt(s, indent + 1) for s in stmt.do_part)
-      lines.append(f"{pad}}} loop {{")
-    else:
-      lines = [f"{pad}from ({format_expr(stmt.entry_cond)}) loop {{"]
-    lines.extend(format_stmt(s, indent + 1) for s in stmt.loop_part)
-    lines.append(f"{pad}}} until ({format_expr(stmt.exit_cond)});")
+    if stmt.loop_part:
+      lines.append(f"{pad}loop")
+      lines.extend(format_stmt(s, indent + 1) for s in stmt.loop_part)
+    lines.append(f"{pad}until {format_expr(stmt.exit_cond)}")
     return "\n".join(lines)
   if isinstance(stmt, IterateStmt):
-    lines = [
-      f"{pad}for ({format_type(stmt.typ)} {stmt.ident.name} = {format_expr(stmt.start_expr)}; "
-      f"{stmt.ident.name} < {format_expr(stmt.end_expr)}; "
-      f"{stmt.ident.name} += {format_expr(stmt.step_expr)}) {{"
-    ]
+    lines = [f"{pad}iterate {format_type(stmt.typ)} {stmt.ident.name} = {format_expr(stmt.start_expr)} by {format_expr(stmt.step_expr)} to {format_expr(stmt.end_expr)}"]
     lines.extend(format_stmt(s, indent + 1) for s in stmt.body)
-    lines.append(f"{pad}}}")
+    lines.append(f"{pad}end")
     return "\n".join(lines)
   if isinstance(stmt, PushStmt):
-    return f"{pad}push({format_expr(stmt.expr)}, {stmt.ident.name});"
+    return f"{pad}push({format_expr(stmt.expr)}, {stmt.ident.name})"
   if isinstance(stmt, PopStmt):
-    return f"{pad}pop({format_expr(stmt.expr)}, {stmt.ident.name});"
+    return f"{pad}pop({format_expr(stmt.expr)}, {stmt.ident.name})"
   if isinstance(stmt, LocalStmt):
-    chain = _collect_local_chain(stmt)
-    assert chain is not None
-    enters, exits, body = chain
-    lines = [f"{pad}local {', '.join(format_local_decl(decl) for decl in enters)} {{"]
-    lines.extend(format_stmt(s, indent + 1) for s in body)
-    lines.append(f"{pad}}} delocal {', '.join(format_local_decl(decl) for decl in exits)};")
-    return "\n".join(lines)
-  if isinstance(stmt, SwitchStmt):
-    lines = [f"{pad}switch ({format_expr(stmt.expr)}) {{"]
-    for case in stmt.cases:
-      lines.append(f"{pad}    case {format_expr(case.value)}:")
-      lines.extend(format_stmt(s, indent + 2) for s in case.body)
-      lines.append(f"{pad}        break;")
-    if stmt.default_part:
-      lines.append(f"{pad}    default:")
-      lines.extend(format_stmt(s, indent + 2) for s in stmt.default_part)
-      lines.append(f"{pad}        break;")
-    lines.append(f"{pad}}} switch ({format_expr(stmt.exit_expr)});")
+    lines = [f"{pad}local {format_local_decl(stmt.enter_decl)}"]
+    lines.extend(format_stmt(s, indent + 1) for s in stmt.body)
+    lines.append(f"{pad}delocal {format_local_decl(stmt.exit_decl)}")
     return "\n".join(lines)
   if isinstance(stmt, CallStmt):
     ext = "external " if stmt.external else ""
     args = ", ".join(format_expr(arg) for arg in stmt.args)
-    return f"{pad}call {ext}{stmt.ident.name}({args});"
+    return f"{pad}call {ext}{stmt.ident.name}({args})"
   if isinstance(stmt, UncallStmt):
     ext = "external " if stmt.external else ""
     args = ", ".join(format_expr(arg) for arg in stmt.args)
-    return f"{pad}uncall {ext}{stmt.ident.name}({args});"
+    return f"{pad}uncall {ext}{stmt.ident.name}({args})"
   if isinstance(stmt, UserErrorStmt):
-    return f'{pad}error("{stmt.message}");'
+    return f'{pad}error("{stmt.message}")'
   if isinstance(stmt, SwapStmt):
-    return f"{pad}{format_lval(stmt.left)} <=> {format_lval(stmt.right)};"
+    return f"{pad}{format_lval(stmt.left)} <=> {format_lval(stmt.right)}"
   if isinstance(stmt, PrintsStmt):
     kind = stmt.prints.kind
     if kind in {"printf", "scanf"}:
       args = ", ".join(_format_print_arg(a) for a in stmt.prints.args)
       fmt = _escape(stmt.prints.text or "")
       if args:
-        return f'{pad}{kind}("{fmt}", {args});'
-      return f'{pad}{kind}("{fmt}");'
+        return f'{pad}{kind}("{fmt}", {args})'
+      return f'{pad}{kind}("{fmt}")'
     if kind == "print":
-      return f'{pad}print("{_escape(stmt.prints.text or "")}");'
+      return f'{pad}print("{_escape(stmt.prints.text or "")}")'
     if kind == "show":
       args = ", ".join(_format_print_arg(a) for a in stmt.prints.args)
-      return f"{pad}show({args});"
+      return f"{pad}show({args})"
     if kind == "read":
-      return f"{pad}read {_format_print_arg(stmt.prints.args[0])};"
+      return f"{pad}read {_format_print_arg(stmt.prints.args[0])}"
     if kind == "write":
-      return f"{pad}write {_format_print_arg(stmt.prints.args[0])};"
+      return f"{pad}write {_format_print_arg(stmt.prints.args[0])}"
     raise TypeError(f"Unsupported print form for canonical formatter: {kind!r}")
   if isinstance(stmt, SkipStmt):
-    return f"{pad}skip;"
+    return f"{pad}skip"
   if isinstance(stmt, AssertStmt):
-    return f"{pad}assert {format_expr(stmt.expr)};"
+    return f"{pad}assert {format_expr(stmt.expr)}"
   raise TypeError(f"Unsupported stmt: {type(stmt)!r}")
 
 
