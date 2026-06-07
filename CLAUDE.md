@@ -62,7 +62,7 @@ source text
 | `janus2026`     | `parser_janus2026.py` (default, C-style) |
 | `jana2014`      | `parser_jana2014.py`        |
 | `jana2014basic` | `parser_jana2014basic.py`   |
-| `jana2014_in_out` | `parser_jana2014_in_out.py` (jana2014 + reversible `read`/`write` I/O) |
+| `jana2014_in_out` | `parser_jana2014_in_out.py` (subclasses the jana2014 parser; adds reversible `read`/`write` I/O) |
 | `janus1982`     | `parser_janus1982.py` (strict original) |
 | `janus1982ext`  | `parser_janus1982ext.py` (1982 + extensions) |
 

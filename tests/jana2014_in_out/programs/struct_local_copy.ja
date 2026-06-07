@@ -8,10 +8,10 @@
 // in:
 // out: 33
 struct Ref {
-    int dist,
-    int len,
-    int next
-}
+    int dist;
+    int len;
+    int next;
+};
 
 procedure main()
   Ref out[2]

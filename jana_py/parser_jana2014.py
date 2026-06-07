@@ -97,7 +97,7 @@ TOKEN_RE = re.compile(
   |(?P<MCOMMENT>/\*.*?\*/)
   |(?P<STRING>"(?:\\.|[^"\\])*")
   |(?P<NUMBER>0b[01]+|\d+)
-  |(?P<OP><=>|==|\+=|-=|\^=|!=|<<|>>|<=|>=|&&|\|\||\*\*|=|<|>|\+|-|\*|/|%|\^|&|\||!|,|\.|\?|:|\(|\)|\[|\]|\{|\}|;)
+  |(?P<OP><=>|==|\+=|-=|\^=|\*=|/=|!=|<<|>>|<=|>=|&&|\|\||\*\*|=|<|>|\+|-|\*|/|%|\^|&|\||!|,|\.|\?|:|\(|\)|\[|\]|\{|\}|;)
   |(?P<IDENT>[A-Za-z][A-Za-z0-9_']*)
   |(?P<MISMATCH>.)
   """,
@@ -173,7 +173,7 @@ class TokenStream:
     return token
 
 
-def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None) -> list[Token]:
+def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None, keywords: set[str] = KEYWORDS) -> list[Token]:
   line = 1
   col = 1
   tokens: list[Token] = []
@@ -194,7 +194,7 @@ def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None
       continue
     if kind == "IDENT":
       val_lower = value.lower()
-      if val_lower in KEYWORDS:
+      if val_lower in keywords:
         tokens.append(Token("KW", val_lower, pos))
         continue
     tokens.append(Token(kind, value, pos))
@@ -218,8 +218,11 @@ def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None
 
 
 class Parser:
+  # Subclasses (e.g. parser_jana2014_in_out) may extend the keyword set.
+  KEYWORDS: set[str] = KEYWORDS
+
   def __init__(self, filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None):
-    self.tokens = TokenStream(tokenize(filename, text, line_origins))
+    self.tokens = TokenStream(tokenize(filename, text, line_origins, keywords=self.KEYWORDS))
     self.struct_names: set[str] = set()
 
   def parse_program(self) -> Program:
@@ -246,10 +249,15 @@ class Parser:
     pos = self.expect_kw("struct").pos
     ident = self.parse_ident(allow_field_keywords=True)
     self.expect_op("{")
-    fields = [self.parse_struct_field()]
-    while self.tokens.match("OP", ","):
+    # C-style field list: each field is terminated by a semicolon.
+    fields = []
+    while not (self.tokens.peek().kind == "OP" and self.tokens.peek().value == "}"):
       fields.append(self.parse_struct_field())
+      self.expect_op(";")
+    if not fields:
+      raise JanaError(self.tokens.peek().pos, "Expecting struct field")
     self.expect_op("}")
+    self.tokens.match("OP", ";")  # optional trailing semicolon: struct Foo { ... };
     return StructDef(ident, fields, pos)
 
   def parse_struct_field(self) -> StructField:
@@ -347,6 +355,13 @@ class Parser:
       return Type("struct", token.pos, name=token.value)
     if token.kind != "KW":
       raise JanaError(token.pos, "Expecting type")
+    if token.value == "struct":
+      # Explicit C-style form: `struct Name`
+      self.tokens.consume()
+      name_tok = self.tokens.expect("IDENT")
+      if name_tok.value not in self.struct_names:
+        raise JanaError(name_tok.pos, f'Unknown struct "{name_tok.value}"')
+      return Type("struct", token.pos, name=name_tok.value)
     if token.value in TYPE_KEYWORDS:
       self.tokens.consume()
       return Type("int", token.pos, TYPE_KEYWORDS[token.value])
@@ -430,7 +445,7 @@ class Parser:
     if op := self.tokens.match("OP", "<=>"):
       right = self.parse_lval()
       return SwapStmt(left, right, op.pos)
-    for value, modop in [("+=", ModOp.ADD_EQ), ("-=", ModOp.SUB_EQ), ("^=", ModOp.XOR_EQ)]:
+    for value, modop in [("+=", ModOp.ADD_EQ), ("-=", ModOp.SUB_EQ), ("^=", ModOp.XOR_EQ), ("*=", ModOp.MUL_EQ), ("/=", ModOp.DIV_EQ)]:
       if self.tokens.match("OP", value):
         return AssignStmt(modop, left, self.parse_expression(), pos)
     raise JanaError(self.tokens.peek().pos, "Expecting statement")
