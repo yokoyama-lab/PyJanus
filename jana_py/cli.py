@@ -10,14 +10,32 @@ import math
 import signal
 
 from .ast import ProcMain, Program
-from .format import format_program
+from .format import formatter_for_std
 from .invert import invert_program, invert_proc_globally, invert_stmts
-from .parser_janus2026 import parse_program
 from .preprocess import preprocess_text
 from .c_codegen import format_program as format_c_program
 from .errors import JanaError, format_jana_error
 from .runtime import Runtime
 from .validate import validate_program
+
+
+# `--std` dialect -> dotted parser module (each exposes the same
+# `parse_program(filename, text, line_origins)`); the matching source
+# formatter comes from `format.formatter_for_std`.
+STD_PARSER_MODULES = {
+  "janus2026": "parser_janus2026",
+  "jana2014": "parser_jana2014",
+  "jana2014basic": "parser_jana2014basic",
+  "jana2014_in_out": "parser_jana2014_in_out",
+  "janus1982": "parser_janus1982",
+  "janus1982ext": "parser_janus1982ext",
+}
+
+
+def parse_for_std(std: str, filename: str, text: str, line_origins) -> Program:
+  import importlib
+  module = importlib.import_module(f".{STD_PARSER_MODULES[std]}", __package__)
+  return module.parse_program(filename, text, line_origins)
 
 
 class TimeoutAbort(Exception):
@@ -185,23 +203,7 @@ def main(argv: list[str] | None = None) -> int:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)
     phase = "parsing"
-    if args.std == "jana2014":
-      from .parser_jana2014 import parse_program as parse_program_jana
-      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
-    elif args.std == "jana2014basic":
-      from .parser_jana2014basic import parse_program as parse_program_jana
-      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
-    elif args.std == "jana2014_in_out":
-      from .parser_jana2014_in_out import parse_program as parse_program_jana
-      program = parse_program_jana(args.file, preprocessed.text, preprocessed.line_origins)
-    elif args.std in ("janus1982", "janus1982ext"):
-      if args.std == "janus1982":
-        from .parser_janus1982 import parse_program as parse_program_1982
-      else:
-        from .parser_janus1982ext import parse_program as parse_program_1982
-      program = parse_program_1982(args.file, preprocessed.text, preprocessed.line_origins)
-    else:
-      program = parse_program(args.file, preprocessed.text, preprocessed.line_origins)
+    program = parse_for_std(args.std, args.file, preprocessed.text, preprocessed.line_origins)
     phase = "validation"
     validate_program(program, require_main=not args.no_main)
     if args.circuit:
@@ -235,12 +237,8 @@ def main(argv: list[str] | None = None) -> int:
       print(format_c_program(args.header, program), end="")
     else:
       if args.invert:
-        if args.std == "janus2026":
-          print(format_program(program), end="")
-        else:
-          # Procedure-style dialects get procedure-style inverted source.
-          from .format_jana2014 import format_program as format_jana_program
-          print(format_jana_program(program), end="")
+        # Each dialect gets inverted source in its own surface syntax.
+        print(formatter_for_std(args.std).format_program(program), end="")
       else:
         mod_bits = _parse_optional_int(args.mod_bits)
         mod_prime = _parse_optional_int(args.mod_prime)

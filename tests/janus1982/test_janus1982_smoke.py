@@ -49,5 +49,41 @@ class Janus1982SmokeTests(unittest.TestCase):
       parse_program("bad.ja", "procedure inc(x)\n    x += 1\n\nprocedure main\n    skip\n")
 
 
+class InvertRoundTripTests(unittest.TestCase):
+  """`-i` output must re-parse under the same strict dialect."""
+
+  def _run(self, args: list[str], source: str | None = None, stdin: str | None = None):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT)
+    path = None
+    if source is not None:
+      with tempfile.NamedTemporaryFile("w", suffix=".ja", dir=ROOT, delete=False) as handle:
+        handle.write(textwrap.dedent(source))
+        path = handle.name
+      args = [*args, path]
+    try:
+      return subprocess.run(
+        [sys.executable, "-m", "jana_py.cli", "--std", "janus1982", *args],
+        cwd=ROOT, text=True, capture_output=True, env=env, input=stdin, check=False,
+      )
+    finally:
+      if path is not None:
+        Path(path).unlink(missing_ok=True)
+
+  def test_invert_emits_strict_1982_syntax(self) -> None:
+    result = self._run(["-i"], "x\nprocedure main\n    x += 1\n    call double\n\nprocedure double\n    x += x\n")
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    self.assertIn("procedure main\n", result.stdout)   # no parens
+    self.assertIn("call double\n", result.stdout)      # paren-less call
+    self.assertNotIn("int x", result.stdout)            # globals are typeless
+    self.assertTrue(result.stdout.startswith("x\n"), result.stdout)
+
+  def test_invert_output_reparses(self) -> None:
+    inverted = self._run(["-i"], "x\nprocedure main\n    x += 1\n    call double\n\nprocedure double\n    x += x\n")
+    self.assertEqual(inverted.returncode, 0, inverted.stdout + inverted.stderr)
+    reparse = self._run(["-a", "-"], stdin=inverted.stdout)
+    self.assertEqual(reparse.returncode, 0, reparse.stdout + reparse.stderr)
+
+
 if __name__ == "__main__":
   unittest.main()

@@ -56,5 +56,22 @@ class M1Tests(unittest.TestCase):
     self.assertIn("Expecting", result.stdout)
 
 
+class BareLocalInvertTests(unittest.TestCase):
+  def test_bare_local_invert_does_not_crash_and_reparses(self) -> None:
+    source = "procedure main()\n    int x\n    local int t = 0\n    t += 1\n    x += t\n"
+    inverted = subprocess.run(
+      [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-i", "-"],
+      cwd=ROOT, text=True, capture_output=True,
+      env={**os.environ, "PYTHONPATH": PYTHONPATH}, input=source, check=False,
+    )
+    self.assertEqual(inverted.returncode, 0, inverted.stdout + inverted.stderr)
+    reparse = subprocess.run(
+      [sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-a", "-"],
+      cwd=ROOT, text=True, capture_output=True,
+      env={**os.environ, "PYTHONPATH": PYTHONPATH}, input=inverted.stdout, check=False,
+    )
+    self.assertEqual(reparse.returncode, 0, reparse.stdout + reparse.stderr)
+
+
 if __name__ == "__main__":
   unittest.main()

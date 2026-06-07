@@ -236,6 +236,9 @@ class Prints:
   kind: str
   text: str | None = None
   args: list[Ident | Lval] = field(default_factory=list)
+  # True for the in_out dialects' reversible read/write pair: `read x`
+  # requires x == 0 and absorbs one input; `write x` emits x and zeroes it.
+  reversible: bool = False
 
 
 class Stmt:

@@ -356,6 +356,8 @@ def _synthesize_assign(circuit: Circuit, stmt: AssignStmt) -> None:
         _synthesize_add_assign(circuit, target, stmt.expr)
     elif stmt.mod_op == ModOp.SUB_EQ:
         _synthesize_sub_assign(circuit, target, stmt.expr)
+    else:
+        raise CircuitError(f"Unsupported assignment operator for circuit synthesis: {stmt.mod_op.value}")
 
 
 def _synthesize_xor_assign(circuit: Circuit, target: str, expr: Expr) -> None:

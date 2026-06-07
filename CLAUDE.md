@@ -47,8 +47,9 @@ source text
   → consumer:
       runtime.Runtime.run        (forward/backward execution + debugger)
       invert.invert_program      (AST→AST: swap call/uncall, reverse statement order)
-      format.format_program      (AST→Janus source, C-style; format_jana2014.py
-                                  emits procedure-style — cli picks by --std)
+      format.formatter_for_std   (AST→Janus source; CFormatter = C-style, with
+                                  ProcedureFormatter / Janus1982Formatter
+                                  subclasses overriding dialect-specific syntax)
       c_codegen.format_program   (AST→C++)
       circuit / pebble / inverse / bennett / equiv  (research tools)
 ```

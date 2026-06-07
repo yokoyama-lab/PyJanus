@@ -39,12 +39,12 @@ class Parser(_Jana2014Parser):
   def parse_read_stmt(self) -> PrintsStmt:
     pos = self.expect_kw("read").pos
     lval = self.parse_lval()
-    return PrintsStmt(Prints("read", args=[lval]), pos)
+    return PrintsStmt(Prints("read", args=[lval], reversible=True), pos)
 
   def parse_write_stmt(self) -> PrintsStmt:
     pos = self.expect_kw("write").pos
     lval = self.parse_lval()
-    return PrintsStmt(Prints("write", args=[lval]), pos)
+    return PrintsStmt(Prints("write", args=[lval], reversible=True), pos)
 
 
 def parse_program(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None) -> Program:
