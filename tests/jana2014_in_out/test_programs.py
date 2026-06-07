@@ -88,7 +88,10 @@ def run_program(path: Path, program_args: list[str], direction: str,
   env["PYTHONPATH"] = str(ROOT)
   flags = ["--std", "jana2014_in_out", "--direction", direction]
   if expect is not None:
-    flags += ["--expect", expect]
+    # `--expect=` form: on Python < 3.13 argparse rejects a separate value
+    # starting with `-` unless it parses as a plain negative number
+    # (e.g. "-9\n3" -> "error: argument --expect: expected one argument").
+    flags += [f"--expect={expect}"]
   return subprocess.run(
     [sys.executable, "-m", "jana_py.cli", *flags, str(path), *program_args],
     cwd=ROOT, text=True, capture_output=True, env=env, check=False,
