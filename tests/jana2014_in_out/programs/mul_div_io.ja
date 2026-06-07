@@ -9,6 +9,9 @@
 // case: zero_multiplicand
 // in: 0 2
 // error: Multiplicand is zero
+// case: indivisible
+// in: 5 3
+// error: Division remains
 procedure main()
     int x
     int y

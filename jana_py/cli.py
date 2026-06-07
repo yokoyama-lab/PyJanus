@@ -235,7 +235,12 @@ def main(argv: list[str] | None = None) -> int:
       print(format_c_program(args.header, program), end="")
     else:
       if args.invert:
-        print(format_program(program), end="")
+        if args.std == "janus2026":
+          print(format_program(program), end="")
+        else:
+          # Procedure-style dialects get procedure-style inverted source.
+          from .format_jana2014 import format_program as format_jana_program
+          print(format_jana_program(program), end="")
       else:
         mod_bits = _parse_optional_int(args.mod_bits)
         mod_prime = _parse_optional_int(args.mod_prime)
