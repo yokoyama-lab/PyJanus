@@ -29,6 +29,7 @@ from .ast import Lval
 from .ast import LvalField
 from .ast import LvalIndex
 from .ast import LvalExpr
+from .ast import ModOp
 from .ast import NilExpr
 from .ast import Number
 from .ast import PopStmt
@@ -54,10 +55,7 @@ from .ast import UncallStmt
 from .ast import UserErrorStmt
 from .ast import Vdecl
 from .errors import JanaError
-from .format import format_expr
-from .format import format_local_decl
-from .format import format_lval
-from .format import format_stmt
+from .format import formatter_for_std
 from .invert import invert_stmt
 from .invert import invert_stmts
 
@@ -126,6 +124,8 @@ class Runtime:
   ):
     self.program = program
     self.std = std
+    # Error/debug context renders source in the dialect the user wrote.
+    self._fmt = formatter_for_std(std)
     self.procs = {proc.procname.name: proc for proc in program.procs}
     self.struct_defs = {struct_def.ident.name: struct_def for struct_def in program.struct_defs}
     self.stdout: list[str] = []
@@ -162,8 +162,57 @@ class Runtime:
       return ((int(value) + (1 << (self.mod_bits - 1))) % modulus) - (1 << (self.mod_bits - 1))
     return int(value)
 
+  _SIZED_INT_TYPES = {
+    IntType.I8, IntType.I16, IntType.I32, IntType.I64,
+    IntType.U8, IntType.U16, IntType.U32, IntType.U64,
+  }
+
+  def _reversibility_modulus(self, int_type: IntType | None) -> int | None:
+    """The modulus governing *=//= reversibility for a cell, or None.
+
+    Only the global -m/-p modes are modular here; sized int types keep their
+    pre-existing exact-division semantics (their per-type wraparound takes
+    precedence over -m/-p in _normalize_int).
+    """
+    if int_type in self._SIZED_INT_TYPES:
+      return None
+    if self.mod_prime is not None:
+      return self.mod_prime
+    if self.mod_bits is not None:
+      return 1 << self.mod_bits
+    return None
+
+  def _apply_mod_op(self, old: int, op: ModOp, operand: int, int_type: IntType | None, pos: SourcePos) -> int:
+    """Apply a reversible update operator and return the new value."""
+    if op is ModOp.ADD_EQ:
+      return self._normalize_int(old + operand, int_type)
+    if op is ModOp.SUB_EQ:
+      return self._normalize_int(old - operand, int_type)
+    if op is ModOp.MUL_EQ:
+      if operand == 0:
+        raise JanaError(pos, "Multiplication by zero")
+      # old == 0 is allowed: x -> x*e is injective for e != 0
+      # (0 *= e -> 0, recovered by 0 /= e -> 0).
+      modulus = self._reversibility_modulus(int_type)
+      if modulus is not None and math.gcd(operand, modulus) != 1:
+        raise JanaError(pos, f"Multiplication by {operand} is not invertible modulo {modulus}")
+      return self._normalize_int(old * operand, int_type)
+    if op is ModOp.DIV_EQ:
+      if operand == 0:
+        raise JanaError(pos, "Division by zero")
+      modulus = self._reversibility_modulus(int_type)
+      if modulus is not None:
+        # The exact inverse of modular *=: multiply by the modular inverse.
+        if math.gcd(operand, modulus) != 1:
+          raise JanaError(pos, f"Division by {operand} is not invertible modulo {modulus}")
+        return self._normalize_int(old * pow(operand, -1, modulus), int_type)
+      if old % operand != 0:
+        raise JanaError(pos, f"Division remains: {old} % {operand} != 0")
+      return self._normalize_int(old // operand, int_type)
+    return self._normalize_int(old ^ operand, int_type)  # ModOp.XOR_EQ
+
   def _stmt_detail(self, stmt) -> str:
-    return "In statement:\n    " + format_stmt(stmt, 0).replace("\n", "\n    ")
+    return "In statement:\n    " + self._fmt.format_stmt(stmt, 0).replace("\n", "\n    ")
 
   def run(self, show_store: bool = False) -> str:
     if self.program.main is None:
@@ -506,45 +555,11 @@ class Runtime:
           if len(values) > len(cell.value):
             raise JanaError(stmt.pos, f"Array literal too large (got {len(values)}, max {len(cell.value)})")
           for i, v in enumerate(values):
-            if stmt.mod_op.value == "+=":
-              cell.value[i] = self._normalize_int(cell.value[i] + v, cell.elem_int_type)
-            elif stmt.mod_op.value == "-=":
-              cell.value[i] = self._normalize_int(cell.value[i] - v, cell.elem_int_type)
-            elif stmt.mod_op.value == "*=":
-              if v == 0:
-                raise JanaError(stmt.pos, "Multiplication by zero")
-              if cell.value[i] == 0:
-                raise JanaError(stmt.pos, "Multiplicand is zero")
-              cell.value[i] = self._normalize_int(cell.value[i] * v, cell.elem_int_type)
-            elif stmt.mod_op.value == "/=":
-              if v == 0:
-                raise JanaError(stmt.pos, "Division by zero")
-              if cell.value[i] % v != 0:
-                raise JanaError(stmt.pos, f"Division remains: {cell.value[i]} % {v} != 0")
-              cell.value[i] = self._normalize_int(cell.value[i] // v, cell.elem_int_type)
-            else:
-              cell.value[i] = self._normalize_int(cell.value[i] ^ v, cell.elem_int_type)
+            cell.value[i] = self._apply_mod_op(cell.value[i], stmt.mod_op, v, cell.elem_int_type, stmt.pos)
         else:
           value = self._eval_expr(frame, stmt.expr)
           self._check_assign_compat(stmt.pos, cell, value)
-          if stmt.mod_op.value == "+=":
-            cell.value = self._normalize_int(cell.value + value, cell.int_type)
-          elif stmt.mod_op.value == "-=":
-            cell.value = self._normalize_int(cell.value - value, cell.int_type)
-          elif stmt.mod_op.value == "*=":
-            if value == 0:
-              raise JanaError(stmt.pos, "Multiplication by zero")
-            if cell.value == 0:
-              raise JanaError(stmt.pos, "Multiplicand is zero")
-            cell.value = self._normalize_int(cell.value * value, cell.int_type)
-          elif stmt.mod_op.value == "/=":
-            if value == 0:
-              raise JanaError(stmt.pos, "Division by zero")
-            if cell.value % value != 0:
-              raise JanaError(stmt.pos, f"Division remains: {cell.value} % {value} != 0")
-            cell.value = self._normalize_int(cell.value // value, cell.int_type)
-          else:
-            cell.value = self._normalize_int(cell.value ^ value, cell.int_type)
+          cell.value = self._apply_mod_op(cell.value, stmt.mod_op, value, cell.int_type, stmt.pos)
         if record_stmt and self._is_recordable_stmt(stmt):
           self.executed_stmts.append((stmt.pos.line, stmt))
         return
@@ -587,7 +602,7 @@ class Runtime:
         self._exec_block(frame, branch, record_stmt=(record_stmt or record_nested), record_nested=record_nested)
         exit_val = self._eval_expr(frame, stmt.exit_expr)
         if exit_val != val:
-          detail = f"actual: {format_expr(stmt.exit_expr)} = {self._format_compare_value(exit_val)} (expected {self._format_compare_value(val)})"
+          detail = f"actual: {self._fmt.format_expr(stmt.exit_expr)} = {self._format_compare_value(exit_val)} (expected {self._format_compare_value(val)})"
           raise JanaError(stmt.exit_expr.pos, f"Assertion failed: should be {val}", [detail], contextual=True)
         return
       if isinstance(stmt, AncillaBlockStmt):
@@ -947,7 +962,7 @@ class Runtime:
       lval = prints.args[0]
       assert isinstance(lval, Lval)
       cell = self._resolve_lval(frame, lval)
-      if self.std == "jana2014_in_out":
+      if prints.reversible:
         # Reversible read: the target must be zero, then absorb one input value.
         if not self._is_zero_cell(cell):
           raise JanaError(
@@ -978,7 +993,7 @@ class Runtime:
       assert isinstance(lval, Lval)
       cell = self._resolve_lval(frame, lval)
       self.stdout.append(str(cell.value) + "\n")
-      if self.std == "jana2014_in_out":
+      if prints.reversible:
         # Reversible write: emitting the value consumes it (clears to zero).
         cell.value = self._zero_runtime_value(cell)
       return
@@ -1306,9 +1321,9 @@ class Runtime:
     if actual != expected:
       stmt_text = (
         "In statement:\n"
-        f"    local {format_local_decl(stmt.enter_decl)}\n"
+        f"    local {self._fmt.format_local_decl(stmt.enter_decl)}\n"
         "    skip\n"
-        f"    delocal {format_local_decl(stmt.exit_decl)}"
+        f"    delocal {self._fmt.format_local_decl(stmt.exit_decl)}"
       )
       raise JanaError(
         stmt.exit_decl.pos,
@@ -1417,7 +1432,7 @@ class Runtime:
       raise JanaError(
         exit.pos,
         f"Variable names does not match in local declaration:\n    `{enter.ident.name}' in `local'\n    `{exit.ident.name}' in `delocal'\n`delocal' statements must come in reverse order of the `local' statments",
-        [f"In statement:\n    local {format_local_decl(enter)}\n    ...\n    delocal {format_local_decl(exit)}"],
+        [f"In statement:\n    local {self._fmt.format_local_decl(enter)}\n    ...\n    delocal {self._fmt.format_local_decl(exit)}"],
         True,
       )
     enter_type = self._decl_type_name(enter)
@@ -1426,7 +1441,7 @@ class Runtime:
       raise JanaError(
         exit.pos,
         f"Type of variable `{enter.ident.name}' does not match local declaration:\n    `{enter_type}' in `local'\n    `{exit_type}' in `delocal'",
-        [f"In statement:\n    local {format_local_decl(enter)}\n    skip\n    delocal {format_local_decl(exit)}"],
+        [f"In statement:\n    local {self._fmt.format_local_decl(enter)}\n    skip\n    delocal {self._fmt.format_local_decl(exit)}"],
         True,
       )
 
@@ -1636,7 +1651,7 @@ class Runtime:
         if expr.op == UnaryOpKind.NOT:
           if not isinstance(value, bool):
             actual = self._describe_value(value)
-            raise JanaError(expr.pos, f"Couldn't match expected type `bool'\n            with actual type `{actual}'", [f"In expression:\n    {format_expr(expr)}"], True)
+            raise JanaError(expr.pos, f"Couldn't match expected type `bool'\n            with actual type `{actual}'", [f"In expression:\n    {self._fmt.format_expr(expr)}"], True)
           return not self._truthy(value)
         return self._normalize_int(~value, IntType.UNBOUND)
       if isinstance(expr, TypeCastExpr):
@@ -1659,13 +1674,13 @@ class Runtime:
           return self._eval_bin(expr.pos, expr.op, left, right)
         except JanaError as err:
           if err.contextual and not any(detail.startswith("In expression:") for detail in err.details):
-            raise err.add_detail(f"In expression:\n    {format_expr(expr)}")
+            raise err.add_detail(f"In expression:\n    {self._fmt.format_expr(expr)}")
           raise
       if isinstance(expr, TernaryExpr):
         cond = self._eval_expr(frame, expr.cond)
         if not isinstance(cond, bool):
           actual = self._describe_value(cond)
-          raise JanaError(expr.pos, f"Couldn't match expected type `bool'\n            with actual type `{actual}'", [f"In expression:\n    {format_expr(expr)}"], True)
+          raise JanaError(expr.pos, f"Couldn't match expected type `bool'\n            with actual type `{actual}'", [f"In expression:\n    {self._fmt.format_expr(expr)}"], True)
         branch = expr.then_expr if cond else expr.else_expr
         return self._eval_expr(frame, branch)
       if isinstance(expr, ArrayExpr):
@@ -1696,7 +1711,7 @@ class Runtime:
     except JanaError as err:
       if err.contextual:
         raise err
-      raise err.add_detail(f"In expression:\n    {format_expr(expr)}")
+      raise err.add_detail(f"In expression:\n    {self._fmt.format_expr(expr)}")
 
   def _eval_bin(self, pos: SourcePos, op: BinOpKind, left, right):
     self._check_bin_operands(pos, op, left, right)
@@ -1768,8 +1783,8 @@ class Runtime:
     except JanaError:
       return None
     return (
-      f"actual: {format_expr(expr.left)} = {self._format_compare_value(left)}, "
-      f"{format_expr(expr.right)} = {self._format_compare_value(right)}"
+      f"actual: {self._fmt.format_expr(expr.left)} = {self._format_compare_value(left)}, "
+      f"{self._fmt.format_expr(expr.right)} = {self._format_compare_value(right)}"
     )
 
   def _assertion_error(self, frame: Frame, pos: SourcePos, message: str, cond: Expr) -> JanaError:
@@ -1790,8 +1805,8 @@ class Runtime:
         if not ok:
           relation = "equal" if expr.op == BinOpKind.EQ else "not equal"
           details = [
-            f"left:  {format_expr(expr.left)} = {self._format_compare_value(left)}",
-            f"right: {format_expr(expr.right)} = {self._format_compare_value(right)}",
+            f"left:  {self._fmt.format_expr(expr.left)} = {self._format_compare_value(left)}",
+            f"right: {self._fmt.format_expr(expr.right)} = {self._format_compare_value(right)}",
           ]
           raise JanaError(expr.pos, f"Assertion failed: values should be {relation}", details, contextual=True)
         return
@@ -2004,7 +2019,7 @@ class Runtime:
           raise JanaError(
             stmt.pos,
             f"Identifiers `{stmt.lval.ident.name}' and `{expr_lval.ident.name}' are aliases",
-            [f"In expression:\n    {format_lval(expr_lval)}"],
+            [f"In expression:\n    {self._fmt.format_lval(expr_lval)}"],
             True,
           )
     for expr_lval in self._expr_lvals(stmt.expr):
@@ -2012,7 +2027,7 @@ class Runtime:
         raise JanaError(
           stmt.pos,
           f"Identifiers `{stmt.lval.ident.name}' and `{expr_lval.ident.name}' are aliases",
-          [f"In expression:\n    {format_lval(expr_lval)}"],
+          [f"In expression:\n    {self._fmt.format_lval(expr_lval)}"],
           True,
         )
 
@@ -2033,7 +2048,7 @@ class Runtime:
           raise JanaError(
             stmt.pos,
             f"Identifiers `{stmt.left.ident.name}' and `{expr_lval.ident.name}' are aliases",
-            [f"In expression:\n    {format_lval(expr_lval)}"],
+            [f"In expression:\n    {self._fmt.format_lval(expr_lval)}"],
             True,
           )
 

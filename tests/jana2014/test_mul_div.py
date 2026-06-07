@@ -1,8 +1,8 @@
 """Tests for the reversible `*=` / `/=` assignment operators (jana2014).
 
 `x *= e` multiplies x by e and is inverted to `x /= e`; both directions are
-only defined when neither side destroys information:
-  - `*=` requires e != 0 and x != 0 (zero would erase the old value)
+only defined when no information is destroyed:
+  - `*=` requires e != 0 (x == 0 is fine: x -> x*e is injective for e != 0)
   - `/=` requires e != 0 and exact divisibility (no remainder)
 """
 from __future__ import annotations
@@ -111,15 +111,16 @@ class MulDivRuntimeTests(unittest.TestCase):
         """)
     self.assertIn("Multiplication by zero", str(ctx.exception))
 
-  def test_mul_zero_multiplicand_fails(self) -> None:
-    with self.assertRaises(JanaError) as ctx:
-      run_and_get_store("""\
+  def test_mul_zero_multiplicand_ok(self) -> None:
+    # x == 0 is allowed: x -> x*c is injective for c != 0
+    # (0 *= 3 -> 0, recovered by 0 /= 3 -> 0).
+    store = run_and_get_store("""\
         procedure main()
             int x
             x *= 3
             x += 1
         """)
-    self.assertIn("Multiplicand is zero", str(ctx.exception))
+    self.assertEqual(store["x"], 1)
 
   def test_div_by_zero_fails(self) -> None:
     with self.assertRaises(JanaError) as ctx:
@@ -172,6 +173,77 @@ class MulDivReversibilityTests(unittest.TestCase):
     proc = inverted.procs[0]
     # Inversion reverses statement order and maps *= <-> /=.
     self.assertEqual([s.mod_op for s in proc.body], [ModOp.MUL_EQ, ModOp.DIV_EQ])
+
+
+def run_and_get_store_mod(source: str, mod_bits: int | None = None, mod_prime: int | None = None) -> dict[str, object]:
+  program = parse_program("mul_test.ja", textwrap.dedent(source))
+  validate_program(program)
+  rt = Runtime(program, mod_bits=mod_bits, mod_prime=mod_prime)
+  rt.run()
+  assert rt._root_frame is not None
+  return {k: copy.deepcopy(c.value) for k, c in rt._root_frame.vars.items()}
+
+
+class MulDivModularTests(unittest.TestCase):
+  """Under -m/-p, *= must stay injective and /= must be its exact inverse."""
+
+  def test_mod_bits_odd_factor_round_trips_through_wraparound(self) -> None:
+    # 200 *= 3 = 600 wraps mod 256; /= 3 must recover 200 via the modular inverse.
+    store = run_and_get_store_mod("""\
+      procedure main()
+          int x = 200
+          x *= 3
+          x /= 3
+          x -= 200
+      """, mod_bits=8)
+    self.assertEqual(store["x"], 0)
+
+  def test_mod_bits_even_factor_is_rejected(self) -> None:
+    # mod 256, x -> 2*x collapses x and x+128: not injective.
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store_mod("""\
+        procedure main()
+            int x = 128
+            x *= 2
+        """, mod_bits=8)
+    self.assertIn("not invertible", str(ctx.exception))
+
+  def test_mod_prime_any_nonzero_factor_round_trips(self) -> None:
+    # In a prime field every nonzero factor is invertible, including even ones.
+    store = run_and_get_store_mod("""\
+      procedure main()
+          int x = 5
+          x *= 2
+          x /= 2
+          x -= 5
+      """, mod_prime=7)
+    self.assertEqual(store["x"], 0)
+
+  def test_mod_prime_factor_divisible_by_p_is_rejected(self) -> None:
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store_mod("""\
+        procedure main()
+            int x = 5
+            x *= 7
+        """, mod_prime=7)
+    self.assertIn("not invertible", str(ctx.exception))
+
+
+class MulDivCodegenTests(unittest.TestCase):
+  """Generated C++ must carry the same reversibility guards as the interpreter."""
+
+  def test_cpp_guards_for_mul_and_div(self) -> None:
+    from jana_py.c_codegen import format_program as format_c_program
+    program = parse_program("mul_test.ja", textwrap.dedent("""\
+      procedure main()
+          int x = 21
+          x *= 2
+          x /= 6
+      """))
+    cpp = format_c_program(None, program)
+    self.assertIn('throw "Multiplication by zero"', cpp)
+    self.assertIn('throw "Division by zero"', cpp)
+    self.assertIn('throw "Division remains"', cpp)
 
 
 if __name__ == "__main__":

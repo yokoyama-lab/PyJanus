@@ -17,6 +17,7 @@ from .ast import Lval
 from .ast import LvalField
 from .ast import LvalIndex
 from .ast import LvalExpr
+from .ast import ModOp
 from .ast import NilExpr
 from .ast import Number
 from .ast import PopStmt
@@ -126,7 +127,24 @@ def format_type(typ: Type) -> str:
 def format_stmt(stmt, indent: int) -> list[str]:
   pad = "  " * indent
   if isinstance(stmt, AssignStmt):
-    return [f"{pad}{format_lval(stmt.lval)} {stmt.mod_op.value} {format_expr(stmt.expr)};"]
+    lval = format_lval(stmt.lval)
+    expr = format_expr(stmt.expr)
+    if stmt.mod_op == ModOp.MUL_EQ:
+      # Mirror the interpreter's reversibility guard (runtime.py): e != 0.
+      return [
+        f"{pad}{{ auto _rhs = ({expr});",
+        f'{pad}  if (_rhs == 0) throw "Multiplication by zero";',
+        f"{pad}  {lval} *= _rhs; }}",
+      ]
+    if stmt.mod_op == ModOp.DIV_EQ:
+      # Mirror the interpreter's guards: e != 0 and exact divisibility.
+      return [
+        f"{pad}{{ auto _rhs = ({expr});",
+        f'{pad}  if (_rhs == 0) throw "Division by zero";',
+        f'{pad}  if ({lval} % _rhs != 0) throw "Division remains";',
+        f"{pad}  {lval} /= _rhs; }}",
+      ]
+    return [f"{pad}{lval} {stmt.mod_op.value} {expr};"]
   if isinstance(stmt, SwapStmt):
     return [f"{pad}std::swap({format_lval(stmt.left)}, {format_lval(stmt.right)});"]
   if isinstance(stmt, IfStmt):

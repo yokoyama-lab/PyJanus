@@ -699,5 +699,30 @@ class TestNOTGate(unittest.TestCase):
         self.assertEqual(result["x"], 42)
 
 
+class TestUnsupportedOps(unittest.TestCase):
+    def test_mul_eq_raises_instead_of_silently_dropping(self) -> None:
+        """*=//= have no gate translation; synthesis must fail loudly."""
+        program = parse_program("test.ja", textwrap.dedent("""\
+            procedure main()
+                int x = 7
+                x *= 3
+            """))
+        validate_program(program)
+        with self.assertRaises(CircuitError) as ctx:
+            synthesize_program(program)
+        self.assertIn("*=", str(ctx.exception))
+
+    def test_div_eq_raises_instead_of_silently_dropping(self) -> None:
+        program = parse_program("test.ja", textwrap.dedent("""\
+            procedure main()
+                int x = 21
+                x /= 3
+            """))
+        validate_program(program)
+        with self.assertRaises(CircuitError) as ctx:
+            synthesize_program(program)
+        self.assertIn("/=", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

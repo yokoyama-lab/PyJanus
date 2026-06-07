@@ -80,9 +80,9 @@ def invert_stmt(stmt, global_mode: bool):
   if isinstance(stmt, PrintsStmt):
     # Reversible I/O: read and write are exact inverses of each other.
     if stmt.prints.kind == "read":
-      return PrintsStmt(Prints("write", text=stmt.prints.text, args=stmt.prints.args), stmt.pos)
+      return PrintsStmt(Prints("write", text=stmt.prints.text, args=stmt.prints.args, reversible=stmt.prints.reversible), stmt.pos)
     if stmt.prints.kind == "write":
-      return PrintsStmt(Prints("read", text=stmt.prints.text, args=stmt.prints.args), stmt.pos)
+      return PrintsStmt(Prints("read", text=stmt.prints.text, args=stmt.prints.args, reversible=stmt.prints.reversible), stmt.pos)
     return stmt
   if not global_mode and isinstance(stmt, CallStmt):
     return UncallStmt(stmt.ident, stmt.args, stmt.external, stmt.pos)
