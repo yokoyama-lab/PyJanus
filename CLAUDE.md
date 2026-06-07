@@ -32,8 +32,10 @@ python3 -m pytest tests/jana2014/test_reversibility.py::ReversibilityTests::test
 python3 tests/jana2014/test_reversibility.py                # unittest-style files also run directly
 ```
 
-There is no lint/build step; the package is pure Python (`pyproject.toml` defines
-the `pyjanus` console script → `jana_py.cli:main`).
+There is no lint step; the package is pure Python (`pyproject.toml` defines
+the `pyjanus` console script → `jana_py.cli:main`). CI
+(`.github/workflows/test.yml`) runs the pytest suite on every push/PR
+against Python 3.10/3.12/3.14 — install locally with `pip install -e ".[dev]"`.
 
 ## Architecture
 
