@@ -192,7 +192,10 @@ class Runtime:
       self.current_line = last_line
       self._at_end_break = True
       self._make_break(frame)
-    store = self._format_store(frame)
+    nonzero = self._nonzero_store_names(frame)
+    if nonzero:
+      sys.stderr.write("Warning: non-zero values remain at end of execution: " + ", ".join(nonzero) + "\n")
+    store = self._format_store(frame) if show_store else ""
     return "".join(self.stdout) + store + ("\n" if store else "")
 
   def _init_vdecls(self, frame: Frame, vdecls: list[Vdecl]) -> None:

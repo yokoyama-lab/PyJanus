@@ -11,6 +11,10 @@ htmlcov/
 dist/
 build/
 .DS_Store
+# Emacs autosave/backup files
+\#*\#
+.\#*
+*~
 # Tool binaries
 bfg.jar
 # AI confidential config

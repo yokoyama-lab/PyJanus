@@ -25,11 +25,11 @@ python3 -m jana_py.cli -d prog.ja        # step-debugger output
 python3 -m jana_py.cli --circuit prog.ja --profile prog.ja
 python3 -m jana_py.cli --inverse '{"x": 10}' prog.ja   # final store -> initial store
 
-# Tests (unittest-based, but run under pytest)
+# Tests (unittest-based, but run under pytest; organized per dialect under tests/<std>/)
 python3 -m pytest tests/ -q
-python3 -m pytest tests/test_reversibility.py -q          # single file
-python3 -m pytest tests/test_reversibility.py::ReversibilityTests::test_swap   # single test
-python3 -m unittest tests.test_reversibility               # also works
+python3 -m pytest tests/jana2014/test_reversibility.py -q          # single file
+python3 -m pytest tests/jana2014/test_reversibility.py::ReversibilityTests::test_swap   # single test
+python3 tests/jana2014/test_reversibility.py                # unittest-style files also run directly
 ```
 
 There is no lint/build step; the package is pure Python (`pyproject.toml` defines
@@ -62,6 +62,7 @@ source text
 | `janus2026`     | `parser_janus2026.py` (default, C-style) |
 | `jana2014`      | `parser_jana2014.py`        |
 | `jana2014basic` | `parser_jana2014basic.py`   |
+| `jana2014_in_out` | `parser_jana2014_in_out.py` (jana2014 + reversible `read`/`write` I/O) |
 | `janus1982`     | `parser_janus1982.py` (strict original) |
 | `janus1982ext`  | `parser_janus1982ext.py` (1982 + extensions) |
 
@@ -78,8 +79,19 @@ modular arithmetic (`-m` bits / `-p` prime), the debugger, and backward executio
 
 ### Tests
 
-Tests are `unittest.TestCase` classes (runnable under pytest). Most invoke the CLI
+Tests live in per-dialect directories mirroring the `--std` values
+(`tests/jana2014/`, `tests/jana2014_in_out/`, `tests/janus2026/`, ...). Most are
+`unittest.TestCase` classes (runnable under pytest), but a few files are
+pytest-style (fixtures like `capsys`) and silently run nothing under plain
+`python3 file.py` — use pytest to run the full suite. Most tests invoke the CLI
 via `subprocess` against `python3 -m jana_py.cli`, with `.ja` fixtures in
-`tests/fixtures/` (valid programs) and `tests/fixtures_errors/` (programs expected
-to fail, e.g. aliasing violations, assertion failures, parse errors). When adding a
-language feature, add a fixture and assert both forward result and reversibility.
+`tests/<std>/fixtures/` (valid programs) and `tests/<std>/fixtures_errors/`
+(programs expected to fail, e.g. aliasing violations, assertion failures, parse
+errors). `tests/jana2014_in_out/programs/` holds `.ja` programs with embedded
+`// case:/in:/out:` specs that `test_programs.py` runs forward AND backward.
+When adding a language feature, add a fixture and assert both forward result and
+reversibility.
+
+Note: library helpers `encode.py` and `inverse.py` hardcode the `janus2026`
+parser; `parser.py` is only a backwards-compat shim re-exporting
+`parser_jana2014.parse_program` for old external callers.
