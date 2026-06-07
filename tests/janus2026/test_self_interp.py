@@ -30,6 +30,20 @@ class TestEncoderBasic:
         result = encode_program(src)
         assert result.code[0] == S_XOREQ
 
+    def test_encode_muleq_raises_clean_error(self):
+        # *=//= have no opcodes.ja tags; encoding must fail with a clear
+        # message, not a bare KeyError.
+        import pytest
+        src = "void main() {\n    int x;\n    x *= 3;\n}\n"
+        with pytest.raises(ValueError, match=r"Unsupported assignment operator.*\*="):
+            encode_program(src)
+
+    def test_encode_diveq_raises_clean_error(self):
+        import pytest
+        src = "void main() {\n    int x;\n    x /= 3;\n}\n"
+        with pytest.raises(ValueError, match="Unsupported assignment operator"):
+            encode_program(src)
+
     def test_encode_swap(self):
         src = "void main() {\n    int x;\n    int y;\n    x <=> y;\n}\n"
         result = encode_program(src)

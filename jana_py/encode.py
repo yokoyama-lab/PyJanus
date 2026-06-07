@@ -169,7 +169,10 @@ class Encoder:
         raise ValueError(f"Unsupported statement type: {type(stmt).__name__}")
 
     def _encode_assign(self, stmt: AssignStmt) -> list[int]:
-        tag = MODOP_TAG[stmt.mod_op]
+        tag = MODOP_TAG.get(stmt.mod_op)
+        if tag is None:
+            # opcodes.ja has no tags for *=//=; fail loudly instead of KeyError.
+            raise ValueError(f"Unsupported assignment operator for self-interpreter encoding: {stmt.mod_op.value}")
         lval_code = self.encode_lval(stmt.lval)
         expr_code = self.encode_expr(stmt.expr)
         payload = lval_code + expr_code
