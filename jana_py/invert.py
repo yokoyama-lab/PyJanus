@@ -26,7 +26,7 @@ from .ast import UncallStmt
 
 
 def invert_program(program: Program) -> Program:
-  return Program(program.main, [invert_proc_globally(proc) for proc in program.procs])
+  return Program(program.main, [invert_proc_globally(proc) for proc in program.procs], program.struct_defs)
 
 
 def invert_proc_globally(proc: Proc) -> Proc:

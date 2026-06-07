@@ -41,11 +41,11 @@
 */
 
 struct DictEntry {
-    int parent,
-    int sym,
-    int depth,
-    int first
-}
+    int parent;
+    int sym;
+    int depth;
+    int first;
+};
 
 
 procedure init_dict_lzw(DictEntry d[], int n, int T[][], int alphSize)

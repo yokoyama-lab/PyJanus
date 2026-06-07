@@ -1,0 +1,20 @@
+// Reversible scaling with *= and /=: x is tripled, y is halved.
+// Backward execution turns read<->write and *= <-> /=.
+// case: positive
+// in: 7 8
+// out: 21 4
+// case: negative
+// in: -3 6
+// out: -9 3
+// case: zero_multiplicand
+// in: 0 2
+// error: Multiplicand is zero
+procedure main()
+    int x
+    int y
+    read x
+    read y
+    x *= 3
+    y /= 2
+    write x
+    write y
