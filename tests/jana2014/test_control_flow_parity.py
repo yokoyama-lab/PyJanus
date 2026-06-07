@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import unittest
@@ -9,6 +10,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 HASKELL_CMD = ["runhaskell", "-isrc", "src/Main.hs"]
+# The Haskell reference implementation lives outside the repo; without it the
+# comparison is vacuous (both sides exit non-zero), so skip outright.
+HAVE_HASKELL = shutil.which("runhaskell") is not None and (ROOT / "src" / "Main.hs").exists()
 
 
 def run_haskell(path: Path) -> subprocess.CompletedProcess[str]:
@@ -36,6 +40,7 @@ def run_python(path: Path) -> subprocess.CompletedProcess[str]:
   )
 
 
+@unittest.skipUnless(HAVE_HASKELL, "requires the Haskell reference implementation (runhaskell + src/Main.hs)")
 class ControlFlowParityTests(unittest.TestCase):
   maxDiff = None
 
