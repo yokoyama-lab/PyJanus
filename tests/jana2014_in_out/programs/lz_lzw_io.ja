@@ -1,0 +1,145 @@
+// LZ-family LZW (struct-based dict coder): reversible I/O.
+// Reads 4 symbols (in[0]=length prefix); rev_lzw_struct with dictSize=16,
+// alphSize=8; writes out[0..9] (out[0]=token count, then index/symbol pairs).
+// case: abab
+// in: 1 2 1 2
+// out: 3 1 2 8 0 0 0 0 0 0
+// case: aaaa
+// in: 1 1 1 1
+// out: 3 1 8 1 0 0 0 0 0 0
+// case: distinct_then_repeat
+// in: 1 2 3 1
+// out: 4 1 2 3 1 0 0 0 0 0
+/*
+  Reversible LZW for Jana-JanusInterp using struct-based dictionary entries.
+
+  DictEntry struct holds (parent, sym, depth, first) for each node.
+  - parent: index of parent node in dictionary
+  - sym: the symbol that extends the parent to this node
+  - depth: length of the string represented by this node
+  - first: first character of the string represented by this node
+
+  The T lookup table is a 2D int array for (parent, symbol) -> child.
+
+  LZW differences from LZ78:
+  - Dictionary is pre-initialized with single-character entries (codes 1..alphSize-1)
+  - Output is a stream of codeword indices only (not (index, symbol) pairs)
+  - New dictionary entry = current match + first character of next match
+  - Handles the "cScSc" special case in decoding
+
+  Input format:  {length, sym1, sym2, ..., 0}
+  Output format: {count, code1, code2, ..., 0, ...}
+
+  Symbols are 1-based (1..alphSize-1). Symbol 0 is the sentinel.
+
+  Overflow behavior:
+  - entry 0 is reserved as the root
+  - entries 1..alphSize-1 are single-character entries
+  - when n >= dictSize, new dictionary entries are not stored
+  - n still advances to preserve reversible state progression
+  - this degrades compression ratio but keeps rev_lzw_struct reversible
+*/
+
+struct DictEntry {
+    int parent,
+    int sym,
+    int depth,
+    int first
+}
+
+
+procedure init_dict_lzw(DictEntry d[], int n, int T[][], int alphSize)
+  from n = 0 loop
+    n += 1
+    d[n].sym += n
+    d[n].depth += 1
+    d[n].first += n
+    T[0][n] += n
+  until n = alphSize - 1
+  n += 1
+
+
+procedure add_to_dict_lzw(int c, int k, DictEntry d[], int n, int T[][])
+  local int len = d[c].depth + 1
+  d[n].parent ^= c
+  d[n].sym ^= k
+  d[n].depth <=> len
+  d[n].first ^= d[c].first
+  delocal int len
+  T[c][k] ^= n
+  n += 1
+
+
+procedure build_dict_lzw(int out[], int i, int j, DictEntry d[], int n, int T[][], int dictSize, int alphSize)
+  call init_dict_lzw(d, n, T, alphSize)
+  i += 1
+  from j = 0 loop
+    j += 1
+    i += d[out[j]].depth
+    if j < out[0] then
+      local int sym = 0
+      if out[j+1] < n then
+        sym += d[out[j+1]].first
+      else
+        sym += d[out[j]].first
+      fi out[j+1] < n
+      if n < dictSize then
+        call add_to_dict_lzw(out[j], sym, d, n, T)
+      else
+        n += 1
+      fi n <= dictSize
+      sym -= d[out[j+1]].first
+      delocal int sym = 0
+    fi j < out[0]
+  until j = out[0]
+
+
+procedure compress_lzw(int in[], int out[], int i, int j, DictEntry d[], int n, int T[][], int dictSize, int alphSize)
+  local int code = 0, int di = 0
+  call init_dict_lzw(d, n, T, alphSize)
+  i += 1
+  from i = 1 loop
+    di ^= T[code][in[i]]
+    if di != 0 && d[di].parent = code && d[di].sym = in[i] then
+      in[i] ^= d[di].sym
+      code ^= d[di].parent
+      code ^= di
+      di ^= T[d[code].parent][d[code].sym]
+      i += 1
+    else
+      di ^= T[code][in[i]]
+      out[j+1] <=> code
+      if in[i] != 0 then
+        if n < dictSize then
+          call add_to_dict_lzw(out[j+1], in[i], d, n, T)
+        else
+          n += 1
+        fi n <= dictSize
+      fi in[i] != 0
+      j += 1
+    fi code != 0
+  until in[i] = 0 && code = 0
+  in[0] -= i - 1
+  out[0] += j
+  delocal int code = 0, int di = 0
+
+
+procedure rev_lzw_struct(int in[], int out[], int dictSize, int alphSize)
+  local int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], DictEntry d[dictSize]
+  call compress_lzw(in, out, i, j, d, n, T, dictSize, alphSize)
+  uncall build_dict_lzw(out, i, j, d, n, T, dictSize, alphSize)
+  delocal int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], DictEntry d[dictSize]
+procedure main()
+  int in[10]
+  int out[20]
+  in[0] += 4
+  read in[1]
+  read in[2]
+  read in[3]
+  read in[4]
+  local int dictSize = 16, int alphSize = 8
+  call rev_lzw_struct(in, out, dictSize, alphSize)
+  delocal int dictSize = 16, int alphSize = 8
+  iterate int k = 0 to 9
+    write out[k]
+  end

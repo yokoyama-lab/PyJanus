@@ -88,6 +88,7 @@ KEYWORDS = {
   "nil",
   "assert",
   "iterate", "by", "to", "end",
+  "struct",
 }
 
 TOKEN_RE = re.compile(
@@ -220,11 +221,18 @@ def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None
 class Parser:
   def __init__(self, filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None):
     self.tokens = TokenStream(tokenize(filename, text, line_origins))
+    self.struct_names: set[str] = set()
 
   def parse_program(self) -> Program:
+    struct_defs: list[StructDef] = []
     mains: list[ProcMain] = []
     procs: list[Proc] = []
     while self.tokens.peek().kind != "EOF":
+      if self.tokens.peek().kind == "KW" and self.tokens.peek().value == "struct":
+        struct_def = self.parse_struct_def()
+        struct_defs.append(struct_def)
+        self.struct_names.add(struct_def.ident.name)
+        continue
       proc_or_main = self.parse_procedure()
       if isinstance(proc_or_main, ProcMain):
         mains.append(proc_or_main)
@@ -233,7 +241,29 @@ class Parser:
 
     if len(mains) > 1:
       raise JanaError(self.tokens.peek().pos, 'Unexpected end of input\n    Expecting "procedure" or end of input\n    Multiple main procedures has been defined')
-    return Program(mains[0] if mains else None, procs, [])
+    return Program(mains[0] if mains else None, procs, struct_defs)
+
+  def parse_struct_def(self) -> StructDef:
+    pos = self.expect_kw("struct").pos
+    ident = self.parse_ident(allow_field_keywords=True)
+    self.expect_op("{")
+    fields = []
+    while not (self.tokens.peek().kind == "OP" and self.tokens.peek().value == "}"):
+      fields.append(self.parse_struct_field())
+      if self.tokens.match("OP", ","):
+        continue
+      self.tokens.match("OP", ";")
+    self.expect_op("}")
+    self.tokens.match("OP", ";")
+    return StructDef(ident, fields, pos)
+
+  def parse_struct_field(self) -> StructField:
+    pos = self.tokens.peek().pos
+    typ = self.parse_type()
+    dimensions = self._parse_decl_dimensions()
+    ident = self.parse_ident(allow_field_keywords=True)
+    dimensions = self._merge_decl_dimensions(dimensions, self._parse_decl_dimensions())
+    return StructField(typ, ident, pos, dimensions)
 
   def parse_procedure(self) -> ProcMain | Proc:
     start = self.tokens.peek()
@@ -303,7 +333,12 @@ class Parser:
     return Vdecl(decl_type, typ, ident, dimensions, init_expr, pos)
 
   def _starts_shared_vdecl_tail(self) -> bool:
-    return self.tokens.peek(1).kind == "IDENT"
+    next_tok = self.tokens.peek(1)
+    if next_tok.kind != "IDENT":
+      return False
+    if next_tok.value in self.struct_names:
+      return False
+    return True
 
   def parse_decl_type(self) -> DeclType:
     if self.tokens.match("KW", "ancilla"):
@@ -314,6 +349,15 @@ class Parser:
 
   def parse_type(self) -> Type:
     token = self.tokens.peek()
+    if token.kind == "IDENT" and token.value in self.struct_names:
+      self.tokens.consume()
+      return Type("struct", token.pos, name=token.value)
+    if token.kind == "KW" and token.value == "struct":
+      self.tokens.consume()
+      name_tok = self.tokens.expect("IDENT")
+      if name_tok.value not in self.struct_names:
+        raise JanaError(name_tok.pos, f'Unknown struct "{name_tok.value}"')
+      return Type("struct", token.pos, name=name_tok.value)
     if token.kind != "KW":
       raise JanaError(token.pos, "Expecting type")
     if token.value in TYPE_KEYWORDS:
@@ -803,6 +847,8 @@ class Parser:
       return False
     token = self.tokens.tokens[idx]
     if token.kind == "IDENT":
+      if token.value not in self.struct_names:
+        return False
       next_idx = idx + 1
       while (next_idx < len(self.tokens.tokens)
              and self.tokens.tokens[next_idx].kind == "OP"
@@ -816,6 +862,10 @@ class Parser:
           next_idx += 1
       return (next_idx < len(self.tokens.tokens)
               and self.tokens.tokens[next_idx].kind == "IDENT")
+    if token.kind == "KW" and token.value == "struct":
+      return (idx + 1 < len(self.tokens.tokens)
+              and self.tokens.tokens[idx + 1].kind == "IDENT"
+              and self.tokens.tokens[idx + 1].value in self.struct_names)
     return token.kind == "KW" and token.value in set(TYPE_KEYWORDS) | {"stack", "bool"}
 
   def _starts_vdecl(self) -> bool:

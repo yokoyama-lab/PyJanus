@@ -1,0 +1,197 @@
+// LZ-family LZB (LZ77 variant, struct-free): reversible I/O.
+// Reads 13 symbols (in[13]=0 terminator); LZB with min_match=2; writes
+// 20 out[][4] records (80 tokens total). out fields are encoded as
+// (flag, dist, len, sym) ints.
+// case: canonical
+// in: 1 2 3 1 2 3 4 1 2 3 1 2 3
+// out: 0 0 0 1 0 0 0 2 0 0 0 3 1 3 3 0 0 0 0 4 1 7 6 0 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: no_match
+// in: 1 2 3 4 5 6 7 8 9 1 2 3 4
+// out: 0 0 0 1 0 0 0 2 0 0 0 3 0 0 0 4 0 0 0 5 0 0 0 6 0 0 0 7 0 0 0 8 0 0 0 9 1 9 4 0 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: all_same
+// in: 5 5 5 5 5 5 5 5 5 5 5 5 5
+// out: 0 0 0 5 1 1 12 0 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+/*
+  LZB (Lempel-Ziv-Bell, 1986) — Reversible core.
+
+  This models the tokenization stage of LZB:
+  - literal      -> {flag=0, dist=0, len=0, sym}
+  - back-ref     -> {flag=1, dist, len, sym=0}
+
+  LZB-specific choice:
+  - Search the full processed prefix [0, i), not a fixed sliding window.
+
+  Data format:
+  - in[]      : zero-terminated input
+  - out[][4]  : {flag, dist, len, sym}
+  - out[j][3] = -2 marks the output sentinel
+*/
+
+procedure max_seq(int arr[], stack ks, stack xs, int best_x, int best_k, int n)
+  local int k = 0
+  from k = 0 loop
+    if arr[k] > best_x then
+      push(best_x, xs)
+      push(best_k, ks)
+      best_x ^= arr[k]
+      best_k ^= k
+    fi best_k = k && best_k != 0
+    k += 1
+  until k = n
+  delocal int k = n
+
+procedure max(int arr[], int n, int x, int k)
+  if n = 0 then
+    skip
+  else
+    local int best_k = 0
+    local int best_x = arr[0]
+    local stack xs = nil
+    local stack ks = nil
+      call max_seq(arr, ks, xs, best_x, best_k, n)
+      k ^= best_k
+      x ^= best_x
+      uncall max_seq(arr, ks, xs, best_x, best_k, n)
+    delocal stack ks = nil
+    delocal stack xs = nil
+    delocal int best_x = arr[0]
+    delocal int best_k = 0
+  fi n = 0
+
+
+procedure find_match(int in[], int sb_i, int lb_i, int match_len)
+  from match_len = 0 loop
+    match_len += 1
+    sb_i += 1
+    lb_i += 1
+  until (in[lb_i] = 0) || (in[sb_i] != in[lb_i])
+  sb_i -= match_len
+  lb_i -= match_len
+
+
+procedure find_patterns(int in[], int i, int pat_lens[])
+  if i = 0 then
+    skip
+  else
+    local int sb_i = 0
+    local int pat_len = 0
+    local int k = 0
+    from sb_i = 0 loop
+      call find_match(in, sb_i, i, pat_len)
+      pat_lens[k] <=> pat_len
+      sb_i += 1
+      k += 1
+    until sb_i = i
+    delocal int k = i
+    delocal int pat_len = 0
+    delocal int sb_i = i
+  fi i = 0
+
+
+procedure insert_token(int in[], int out[][], int i, int j, int pat_len, int k, int min_match)
+  if pat_len < min_match then
+    out[j][0] ^= 0
+    out[j][1] ^= 0
+    out[j][2] ^= 0
+    out[j][3] ^= in[i]
+  else
+    out[j][0] ^= 1
+    out[j][1] ^= i - k
+    out[j][2] ^= pat_len
+    out[j][3] ^= 0
+    k       ^= i - out[j][1]
+    pat_len ^= out[j][2]
+  fi out[j][0] = 0
+
+
+procedure advance(int out[][], int j, int step)
+  if out[j][0] = 0 then
+    step += 1
+  else
+    step += out[j][2]
+  fi out[j][0] = 0
+
+
+procedure clear_input(int in[], int out[][], int i, int j)
+  from out[j][3] = -2 loop
+    j -= 1
+
+    local int flag = out[j][0]
+    local int dist = out[j][1]
+    local int len = out[j][2]
+    local int sym = out[j][3]
+
+    if flag = 0 then
+      i -= 1
+      in[i] ^= sym
+    else
+      local int p = len
+      from p = len do
+        i -= 1
+        p -= 1
+        in[i] ^= in[i - dist]
+      until p = 0
+      delocal int p = 0
+    fi flag = 0
+
+    delocal int sym = out[j][3]
+    delocal int len = out[j][2]
+    delocal int dist = out[j][1]
+    delocal int flag = out[j][0]
+  until j = 0
+
+
+procedure LZB(int in[], int out[][], int min_match)
+  local int i = 0
+  local int j = 0
+    from i = 0 loop
+      local int pat_lens[size(in)]
+      local int pat_len = 0
+      local int k = 0
+      local int step = 0
+
+      call find_patterns(in, i, pat_lens)
+      call max(pat_lens, i, pat_len, k)
+      uncall find_patterns(in, i, pat_lens)
+      call insert_token(in, out, i, j, pat_len, k, min_match)
+      call advance(out, j, step)
+      i += step
+      uncall advance(out, j, step)
+      j += 1
+
+      delocal int step = 0
+      delocal int k = 0
+      delocal int pat_len = 0
+      delocal int pat_lens[size(in)]
+    until i != 0 && in[i - 1] = 0
+
+    out[j][3] ^= -2
+    call clear_input(in, out, i, j)
+  delocal int j = 0
+  delocal int i = 0
+
+
+procedure main()
+  int in[14]
+  int out[20][4]
+  read in[0]
+  read in[1]
+  read in[2]
+  read in[3]
+  read in[4]
+  read in[5]
+  read in[6]
+  read in[7]
+  read in[8]
+  read in[9]
+  read in[10]
+  read in[11]
+  read in[12]
+  local int min_match = 2
+  call LZB(in, out, min_match)
+  delocal int min_match = 2
+  iterate int j = 0 to 19
+    iterate int k = 0 to 3
+      write out[j][k]
+    end
+  end

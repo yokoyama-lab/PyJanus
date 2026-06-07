@@ -1,0 +1,168 @@
+// LZ-family LZR (LZ77 with n as explicit length): reversible I/O.
+// Reads 11 symbols (in[11]=0); n=12 is the array length; writes
+// 16 out[][3] triples (48 tokens total) as (distance, length, next).
+// case: canonical
+// in: 1 2 3 1 4 1 5 1 2 3 1
+// out: 0 0 1 0 0 2 0 0 3 3 1 4 5 1 5 7 4 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: no_match
+// in: 1 2 3 4 5 6 7 8 9 1 2
+// out: 0 0 1 0 0 2 0 0 3 0 0 4 0 0 5 0 0 6 0 0 7 0 0 8 0 0 9 9 2 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: all_same
+// in: 7 7 7 7 7 7 7 7 7 7 7
+// out: 0 0 7 1 10 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+/*
+  LZR (Lempel-Ziv-Rodeh)
+  Based on Rodeh et al. (1981).
+
+  Rationale:
+  - Original LZ77 structure: (distance, length, next_symbol).
+  - Search buffer is defined as all previous positions.
+  - No fixed sliding window size.
+  - Reversible implementation (input cleared after compression).
+*/
+
+procedure find_match(int in[], int n, int sb_i, int lb_i, int match_len)
+  from match_len = 0 loop
+    match_len += 1
+    lb_i += 1
+    sb_i += 1
+  until (lb_i = n - 1) || (in[sb_i] != in[lb_i])
+  sb_i -= match_len
+  lb_i -= match_len
+
+procedure find_patterns(int in[], int n, int i, int pat_lens[])
+  if i = 0 then
+    skip
+  else
+    local int sb_i = 0
+    local int pat_len = 0
+    local int k = 0
+    from sb_i = 0 loop
+      call find_match(in, n, sb_i, i, pat_len)
+      pat_lens[k] <=> pat_len
+      sb_i += 1
+      k += 1
+    until sb_i = i
+    delocal int k = i
+    delocal int pat_len = 0
+    delocal int sb_i = i
+  fi i = 0
+
+procedure max_seq(int arr[], stack ks, stack xs, int best_x, int best_k, int n)
+  local int k = 0
+  from k = 0 loop
+    if arr[k] > best_x then
+      push(best_x, xs)
+      push(best_k, ks)
+      best_x ^= arr[k]
+      best_k ^= k
+    fi (best_k = k) && (best_k != 0)
+    k += 1
+  until k = n
+  delocal int k = n
+
+procedure max(int arr[], int n, int x, int k)
+  if n = 0 then
+    skip
+  else
+    local int best_k = 0
+    local int best_x = arr[0]
+    local stack xs = nil
+    local stack ks = nil
+      call max_seq(arr, ks, xs, best_x, best_k, n)
+      k ^= best_k
+      x ^= best_x
+      uncall max_seq(arr, ks, xs, best_x, best_k, n)
+    delocal stack ks = nil
+    delocal stack xs = nil
+    delocal int best_x = arr[0]
+    delocal int best_k = 0
+  fi n = 0
+
+procedure insert_ref(int in[], int out[][], int i, int j, int pat_len, int k)
+  if pat_len = 0 then
+    out[j][0] ^= 0
+    out[j][1] ^= 0
+    out[j][2] ^= in[i]
+  else
+    out[j][0] ^= i - k
+    out[j][1] ^= pat_len
+    out[j][2] ^= in[i + pat_len]
+    k       ^= i - out[j][0]
+    pat_len ^= out[j][1]
+  fi out[j][1] = 0
+
+procedure clear_input(int in[], int out[][], int i, int j)
+  from out[j][2] = -2 loop
+    j -= 1
+    local int dist = out[j][0]
+    local int len = out[j][1]
+    local int next_sym = out[j][2]
+
+    in[i-1] ^= next_sym
+    i -= 1
+
+    if len > 0 then
+      local int pat_len = len
+      from pat_len = len do
+        i -= 1
+        pat_len -= 1
+        in[i] ^= in[i - dist]
+      until pat_len = 0
+      delocal int pat_len = 0
+    fi len > 0
+
+    delocal int next_sym = out[j][2]
+    delocal int len = out[j][1]
+    delocal int dist = out[j][0]
+  until j = 0
+
+procedure LZR(int in[], int n, int out[][])
+  local int i = 0
+  local int j = 0
+    from i = 0 loop
+      local int pat_lens[i + 1]
+      local int pat_len = 0
+      local int k = 0
+
+      call find_patterns(in, n, i, pat_lens)
+      call max(pat_lens, i, pat_len, k)
+      uncall find_patterns(in, n, i, pat_lens)
+
+      call insert_ref(in, out, i, j, pat_len, k)
+
+      i += out[j][1] + 1
+      j += 1
+
+      delocal int k = 0
+      delocal int pat_len = 0
+      delocal int pat_lens[i - out[j-1][1]]
+    until i = n
+
+    out[j][2] ^= -2
+    call clear_input(in, out, i, j)
+  delocal int j = 0
+  delocal int i = 0
+
+procedure main()
+  int in[12]
+  int out[16][3]
+  read in[0]
+  read in[1]
+  read in[2]
+  read in[3]
+  read in[4]
+  read in[5]
+  read in[6]
+  read in[7]
+  read in[8]
+  read in[9]
+  read in[10]
+  local int n = 12
+  call LZR(in, n, out)
+  delocal int n = 12
+  iterate int j = 0 to 15
+    iterate int k = 0 to 2
+      write out[j][k]
+    end
+  end
