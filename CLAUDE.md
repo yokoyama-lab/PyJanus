@@ -65,10 +65,10 @@ source text
 |-----------------|-----------------------------|
 | `janus2026`     | `parser_janus2026.py` (default, C-style) |
 | `jana2014`      | `parser_jana2014.py`        |
-| `jana2014basic` | `parser_jana2014basic.py`   |
+| `jana2014basic` | `parser_jana2014basic.py` (subclasses the jana2014 parser; 1982-flavored hybrid grammar) |
 | `jana2014_in_out` | `parser_jana2014_in_out.py` (subclasses the jana2014 parser; adds reversible `read`/`write` I/O) |
 | `janus1982`     | `parser_janus1982.py` (strict original) |
-| `janus1982ext`  | `parser_janus1982ext.py` (1982 + extensions) |
+| `janus1982ext`  | `parser_janus1982ext.py` (re-exports `parser_jana2014basic`) |
 
 Because every consumer (runtime, invert, format, codegen, all analysis tools)
 operates on the shared AST, **changes to `ast.py` ripple across all of them** —

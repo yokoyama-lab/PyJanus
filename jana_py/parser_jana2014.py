@@ -173,11 +173,11 @@ class TokenStream:
     return token
 
 
-def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None, keywords: set[str] = KEYWORDS) -> list[Token]:
+def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None, keywords: set[str] = KEYWORDS, token_re: re.Pattern[str] = TOKEN_RE) -> list[Token]:
   line = 1
   col = 1
   tokens: list[Token] = []
-  for match in TOKEN_RE.finditer(text):
+  for match in token_re.finditer(text):
     kind = match.lastgroup
     value = match.group()
     origin = None
@@ -218,11 +218,14 @@ def tokenize(filename: str, text: str, line_origins: Sequence[LineOrigin] | None
 
 
 class Parser:
-  # Subclasses (e.g. parser_jana2014_in_out) may extend the keyword set.
+  # Subclasses (e.g. parser_jana2014_in_out, parser_jana2014basic) may swap
+  # the keyword set, token regex, and operator precedence table.
   KEYWORDS: set[str] = KEYWORDS
+  TOKEN_RE: re.Pattern[str] = TOKEN_RE
+  BIN_PRECEDENCE: list[dict] = BIN_PRECEDENCE
 
   def __init__(self, filename: str, text: str, line_origins: Sequence[LineOrigin] | None = None):
-    self.tokens = TokenStream(tokenize(filename, text, line_origins, keywords=self.KEYWORDS))
+    self.tokens = TokenStream(tokenize(filename, text, line_origins, keywords=self.KEYWORDS, token_re=self.TOKEN_RE))
     self.struct_names: set[str] = set()
 
   def parse_program(self) -> Program:
@@ -697,12 +700,12 @@ class Parser:
     return expr
 
   def parse_binary_level(self, level: int) -> Expr:
-    if level == len(BIN_PRECEDENCE):
+    if level == len(self.BIN_PRECEDENCE):
       return self.parse_prefix_expr()
     left = self.parse_binary_level(level + 1)
     while True:
       token = self.tokens.peek()
-      ops = BIN_PRECEDENCE[level]["ops"]
+      ops = self.BIN_PRECEDENCE[level]["ops"]
       if token.kind == "OP" and token.value in ops:
         self.tokens.consume()
         right = self.parse_binary_level(level + 1)
