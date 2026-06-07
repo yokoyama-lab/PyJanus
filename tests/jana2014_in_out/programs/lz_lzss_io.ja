@@ -1,0 +1,261 @@
+// LZ-family LZSS (LZ77 + literal/reference flag, struct-based): reversible I/O.
+// Reads 9 symbols (in[9]=0); LZSS with sb_len=lb_len=3, min_match=2; writes
+// 16 Token records (flag, dist, len, sym) = 64 tokens. Demonstrates struct
+// arrays + field access in jana2014_in_out.
+// case: canonical
+// in: 1 2 3 4 2 3 2 3 2
+// out: 0 0 0 1 0 0 0 2 0 0 0 3 0 0 0 4 1 3 2 0 1 2 3 0 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: no_match
+// in: 1 2 3 4 5 6 7 8 9
+// out: 0 0 0 1 0 0 0 2 0 0 0 3 0 0 0 4 0 0 0 5 0 0 0 6 0 0 0 7 0 0 0 8 0 0 0 9 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// case: all_same
+// in: 5 5 5 5 5 5 5 5 5
+// out: 0 0 0 5 1 1 3 0 1 3 3 0 1 3 2 0 0 0 0 0 0 0 0 -2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+/*
+  LZSS (Lempel-Ziv-Storer-Szymanski, 1982) — Reversible implementation.
+
+  Difference from LZ77:
+  - A flag bit distinguishes literals from back-references.
+  - Literals carry only a symbol (no wasted distance/length fields).
+  - A back-reference is emitted only when match length >= min_match.
+  - No mandatory 'next' character after a match: a match of length L
+    covers exactly L symbols (not L+1 as in LZ77).
+
+  Data format:
+  - in[]  : zero-terminated input array
+  - out[] : array of Token{flag, dist, len, sym}
+    - flag=0, sym=c             : literal symbol c
+    - flag=1, dist=d, len=l     : back-reference (copy l symbols from distance d)
+  - out[j].sym = -2             : sentinel marking end of output
+*/
+
+struct Token {
+    int flag,
+    int dist,
+    int len,
+    int sym
+}
+
+
+/*
+  max_seq / max: find the index and value of the maximum element in arr[].
+  Identical to the LZ77 version — scan left-to-right, push old bests onto
+  stacks for reversibility, ties go to the leftmost candidate.
+*/
+procedure max_seq(int arr[], stack ks, stack xs, int best_x, int best_k)
+  local int k = 0
+  from k = 0 loop
+    if arr[k] > best_x then
+      push(best_x, xs)
+      push(best_k, ks)
+      best_x ^= arr[k]
+      best_k ^= k
+    fi best_k = k && best_k != 0
+    k += 1
+  until k = size(arr)
+  delocal int k = size(arr)
+
+procedure max(int arr[], int x, int k)
+  local int best_k = 0
+  local int best_x = arr[0]
+  local stack xs = nil
+  local stack ks = nil
+    call max_seq(arr, ks, xs, best_x, best_k)
+    k ^= best_k
+    x ^= best_x
+    uncall max_seq(arr, ks, xs, best_x, best_k)
+  delocal stack ks = nil
+  delocal stack xs = nil
+  delocal int best_x = arr[0]
+  delocal int best_k = 0
+
+
+procedure find_match(int in[], int lb_len, int sb_i, int lb_i, int match_len)
+  from match_len = 0 loop
+    match_len += 1
+    lb_i += 1
+    sb_i += 1
+  until (match_len = lb_len) || (in[sb_i] != in[lb_i])
+  sb_i -= match_len
+  lb_i -= match_len
+
+
+procedure find_patterns(int in[], int i, int sb_len, int lb_len, int pat_lens[])
+  if i = 0 then
+    skip
+  else
+    local int sb_i = 0
+    local int pat_len = 0
+    local int k = 0
+
+    if i > sb_len then
+      sb_i ^= i - sb_len
+    fi sb_i != 0
+
+    from (sb_i = 0 || sb_i = i - sb_len) loop
+      call find_match(in, lb_len, sb_i, i, pat_len)
+      pat_lens[k] <=> pat_len
+      sb_i += 1
+      k += 1
+    until sb_i = i
+
+    if i <= sb_len then
+      k ^= i
+    else
+      k ^= sb_len
+    fi i <= sb_len
+
+    delocal int k = 0
+    delocal int pat_len = 0
+    delocal int sb_i = i
+  fi i = 0
+
+
+/*
+  insert_token: write one Token into out[j].
+
+  In LZSS, a match must be at least min_match long to be worth encoding
+  as a back-reference.  Shorter matches are emitted as individual literals.
+
+  When pat_len >= min_match:
+    flag=1, dist=i-k, len=pat_len, sym=0.
+    The token covers exactly pat_len input symbols.
+
+  When pat_len < min_match (including pat_len=0):
+    flag=0, dist=0, len=0, sym=in[i].
+    The token covers exactly 1 input symbol.
+*/
+procedure insert_token(int in[], Token out[], int i, int j, int sb_len, int pat_len, int k, int min_match)
+  if pat_len < min_match then
+    /* Literal: emit the single symbol at position i. */
+    out[j].flag ^= 0
+    out[j].dist ^= 0
+    out[j].len  ^= 0
+    out[j].sym  ^= in[i]
+  else
+    /* Back-reference: emit (dist, len). */
+    if i > sb_len then
+      k += i - sb_len
+    fi i > sb_len
+    out[j].flag ^= 1
+    out[j].dist ^= i - k
+    out[j].len  ^= pat_len
+    out[j].sym  ^= 0
+    k       ^= i - out[j].dist
+    pat_len ^= out[j].len
+  fi out[j].flag = 0
+
+
+/*
+  advance: compute how many input positions to skip after emitting out[j].
+  Literal: advance 1.  Back-reference: advance by len.
+*/
+procedure advance(Token out[], int j, int step)
+  if out[j].flag = 0 then
+    step += 1
+  else
+    step += out[j].len
+  fi out[j].flag = 0
+
+
+/*
+  clear_input: reconstruct in[] from out[] and then zero both.
+
+  Walk backwards from the sentinel.  For each token:
+  - Literal (flag=0): in[i] held the symbol stored in sym.
+  - Back-reference (flag=1): the len symbols at in[i..i+len-1] were copies
+    from in[i-dist..i-dist+len-1].  Unwind last-to-first.
+*/
+procedure clear_input(int in[], Token out[], int i, int j)
+  from out[j].sym = -2 loop
+    j -= 1
+
+    local int flag = out[j].flag
+    local int dist = out[j].dist
+    local int len  = out[j].len
+    local int sym  = out[j].sym
+
+    if flag = 0 then
+      /* Literal */
+      i -= 1
+      in[i] ^= sym
+    else
+      /* Back-reference: unwind len symbols in reverse. */
+      local int p = len
+      from p = len do
+        i -= 1
+        p -= 1
+        in[i] ^= in[i - dist]
+      until p = 0
+      delocal int p = 0
+    fi flag = 0
+
+    delocal int sym  = out[j].sym
+    delocal int len  = out[j].len
+    delocal int dist = out[j].dist
+    delocal int flag = out[j].flag
+  until j = 0
+
+
+/*
+  LZSS: compress in[] into out[].
+
+  Main loop: at each position i, find the best match.  If the match length
+  is >= min_match, emit a back-reference covering pat_len symbols.
+  Otherwise emit a literal covering 1 symbol.
+
+  After the loop completes (the zero terminator has been consumed),
+  mark the sentinel and call clear_input to zero in[].
+*/
+procedure LZSS(int in[], Token out[], int sb_len, int lb_len, int min_match)
+  local int i = 0
+  local int j = 0
+    from i = 0 loop
+      local int pat_lens[sb_len]
+      local int pat_len = 0
+      local int k = 0
+      local int step = 0
+
+      call find_patterns(in, i, sb_len, lb_len, pat_lens)
+      call max(pat_lens, pat_len, k)
+      uncall find_patterns(in, i, sb_len, lb_len, pat_lens)
+      call insert_token(in, out, i, j, sb_len, pat_len, k, min_match)
+      call advance(out, j, step)
+      i += step
+      uncall advance(out, j, step)
+
+      j += 1
+
+      delocal int step = 0
+      delocal int k = 0
+      delocal int pat_len = 0
+      delocal int pat_lens[sb_len]
+    until i != 0 && in[i - 1] = 0
+
+    out[j].sym ^= -2
+    call clear_input(in, out, i, j)
+  delocal int j = 0
+  delocal int i = 0
+
+
+procedure main()
+  int in[10]
+  Token out[16]
+  read in[0]
+  read in[1]
+  read in[2]
+  read in[3]
+  read in[4]
+  read in[5]
+  read in[6]
+  read in[7]
+  read in[8]
+  local int sb_len = 3, int lb_len = 3, int min_match = 2
+  call LZSS(in, out, sb_len, lb_len, min_match)
+  delocal int sb_len = 3, int lb_len = 3, int min_match = 2
+  iterate int j = 0 to 15
+    write out[j].flag
+    write out[j].dist
+    write out[j].len
+    write out[j].sym
+  end
