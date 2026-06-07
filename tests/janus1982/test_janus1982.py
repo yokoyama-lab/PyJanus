@@ -227,14 +227,19 @@ def test_1982_call_no_parens(capsys, tmp_path):
 
 
 def test_1982_uncall_reverses(capsys, tmp_path):
-    """uncall executes a procedure in reverse."""
+    """uncall executes a procedure in reverse.
+
+    write is reversible (consumes the value), so snapshot x into y for
+    output instead of writing x between call and uncall.
+    """
     source = """
-    x
+    x y
     procedure add3
         x += 3
     procedure main
         call add3
-        write x
+        y += x
+        write y
         uncall add3
         write x
     """
@@ -543,3 +548,58 @@ def test_1982_sort_n3(capsys, tmp_path):
     out, _ = capsys.readouterr()
     lines = out.strip().splitlines()
     assert lines == ["10", "20", "30"]
+
+
+# ---------------------------------------------------------------------------
+# Reversible I/O (read/write per the 1982 paper)
+# ---------------------------------------------------------------------------
+
+def test_1982_write_clears_the_variable(capsys, tmp_path):
+    """write emits the value and consumes it (clears back to zero)."""
+    source = """
+    x
+    procedure main
+        x += 42
+        write x
+        write x
+    """
+    path = tmp_path / "t.ja"
+    path.write_text(textwrap.dedent(source))
+    assert main(["--std", "janus1982", str(path)]) == 0
+    out, _ = capsys.readouterr()
+    assert out.strip().splitlines() == ["42", "0"]
+
+
+def test_1982_read_requires_zero_target(capsys, tmp_path, monkeypatch):
+    """read into a non-zero variable is an error."""
+    import io
+    source = """
+    x
+    procedure main
+        x += 5
+        read x
+    """
+    path = tmp_path / "t.ja"
+    path.write_text(textwrap.dedent(source))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("1\n"))
+    assert main(["--std", "janus1982", str(path)]) != 0
+    out, _ = capsys.readouterr()
+    assert "must be zero" in out
+
+
+def test_1982_read_write_runs_backward(capsys, tmp_path, monkeypatch):
+    """Backward execution turns read<->write: output 42 recovers input 41."""
+    import io
+    source = """
+    x
+    procedure main
+        read x
+        x += 1
+        write x
+    """
+    path = tmp_path / "t.ja"
+    path.write_text(textwrap.dedent(source))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("42\n"))
+    assert main(["--std", "janus1982", "--direction", "backward", str(path)]) == 0
+    out, _ = capsys.readouterr()
+    assert "41\n" in out

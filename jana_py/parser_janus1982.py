@@ -225,14 +225,16 @@ class Parser:
     return Proc(ident, [], body)
 
   def parse_read_stmt(self) -> PrintsStmt:
+    # Reversible I/O per the 1982 paper: read absorbs into a zero variable,
+    # write emits and clears; the two are exact inverses (see invert.py).
     pos = self.expect_kw("read").pos
     lval = self.parse_lval()
-    return PrintsStmt(Prints("read", args=[lval]), pos)
+    return PrintsStmt(Prints("read", args=[lval], reversible=True), pos)
 
   def parse_write_stmt(self) -> PrintsStmt:
     pos = self.expect_kw("write").pos
     lval = self.parse_lval()
-    return PrintsStmt(Prints("write", args=[lval]), pos)
+    return PrintsStmt(Prints("write", args=[lval], reversible=True), pos)
 
   def _parse_typeless_vdecl(self) -> Vdecl:
     pos = self.tokens.peek().pos
