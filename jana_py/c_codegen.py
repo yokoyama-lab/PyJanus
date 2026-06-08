@@ -179,8 +179,22 @@ def format_stmt(stmt, indent: int) -> list[str]:
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
-    args = ", ".join(format_expr(arg) for arg in stmt.args)
-    return [f"{pad}{stmt.ident.name}({args});"]
+    # Parameters are passed by reference, so a non-l-value (value) argument
+    # cannot bind directly. Mirror the interpreter: bind it to a temp and
+    # verify the expression reads back the same value on return.
+    pre: list[str] = []
+    post: list[str] = []
+    call_args: list[str] = []
+    for i, arg in enumerate(stmt.args):
+      if isinstance(arg, LvalExpr):
+        call_args.append(format_expr(arg))
+        continue
+      tmp = f"_va_{stmt.pos.line}_{i}"
+      expr = format_expr(arg)
+      pre.append(f"{pad}auto {tmp} = {expr};")
+      call_args.append(tmp)
+      post.append(f'{pad}if ({tmp} != ({expr})) throw "Value argument is not restored on return";')
+    return pre + [f"{pad}{stmt.ident.name}({', '.join(call_args)});"] + post
   if isinstance(stmt, UncallStmt):
     return [f"{pad}/* uncall {stmt.ident.name} not supported in generated C++ */"]
   if isinstance(stmt, PrintsStmt):

@@ -1,0 +1,20 @@
+// Expression (value) argument `a - 1` passed to a call.
+// `call addn(a - 1, acc)` binds a-1 to addn's first parameter; because a is
+// not modified, a-1 reads back the same value on return and the call stays
+// reversible (runs backward as `uncall addn(a - 1, acc)`).
+// case: four
+// in: 4
+// out: 3 4
+// case: one
+// in: 1
+// out: 0 1
+procedure addn(int n, int acc)
+    acc += n
+
+procedure main()
+    int a
+    int acc
+    read a
+    call addn(a - 1, acc)
+    write acc
+    write a
