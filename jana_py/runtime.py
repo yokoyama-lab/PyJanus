@@ -1235,19 +1235,39 @@ class Runtime:
     self._legacy_io_warned.add(kind)
     sys.stderr.write(f"Warning: `{kind}` is deprecated; use `printf` instead.\n")
 
-  def _call_proc(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos, record_stmt: bool = True, record_nested: bool = False) -> None:
+  def _scalar_param_cell(self, param: Vdecl, value) -> Cell:
+    """A fresh writable cell holding a value-argument bound to a scalar param."""
+    if param.typ.kind == "bool":
+      return Cell(value, kind="bool")
+    return Cell(self._normalize_int(value, param.typ.int_type), kind="int", int_type=param.typ.int_type)
+
+  def _bind_args(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos) -> tuple[Proc, Frame, list[tuple[Expr, Cell]]]:
+    """Build the callee frame for a call/uncall.
+
+    Returns the procedure, its frame, and the list of value-argument checks
+    (expr, cell) to run after the body executes. A non-l-value argument to a
+    non-constant parameter is a *value argument*: the expression is bound to a
+    fresh local on entry and must read back the same value on return, i.e.
+    `call f(n-1, r)` desugars to `local t = n-1; call f(t, r); delocal t = n-1`.
+    """
     proc = self.procs.get(name)
     if proc is None:
       raise JanaError(pos, f"Procedure `{name}' is not defined", contextual=True)
     if len(proc.params) != len(args):
       raise JanaError(pos, f"Procedure `{name}` expects {len(proc.params)} argument(s) but got {len(args)}")
     frame = Frame(vars={})
+    value_checks: list[tuple[Expr, Cell]] = []
     for param, arg in zip(proc.params, args):
       if not isinstance(arg, LvalExpr):
-        if param.decl_type != DeclType.CONSTANT:
-          raise JanaError(arg.pos, "Non-constant argument must be an l-value")
         val = self._eval_expr(caller, arg)
-        actual = Cell(val, writable=False)
+        if param.decl_type == DeclType.CONSTANT:
+          actual = Cell(val, writable=False)
+        elif param.dimensions or param.typ.kind in ("struct", "stack"):
+          raise JanaError(arg.pos, "Non-l-value argument must be a scalar (int/bool) expression")
+        else:
+          # Value argument: bind a fresh local, verify it is restored on return.
+          actual = self._scalar_param_cell(param, val)
+          value_checks.append((arg, actual))
       else:
         actual = self._resolve_lval(caller, arg.lval)
         try:
@@ -1264,38 +1284,29 @@ class Runtime:
       if param.decl_type == DeclType.CONSTANT:
         actual = ConstantParamProxy(actual)
       frame.vars[param.ident.name] = actual
+    return proc, frame, value_checks
+
+  def _verify_value_args(self, caller: Frame, value_checks: list[tuple[Expr, Cell]]) -> None:
+    """A value argument's expression must read back its bound value on return."""
+    for arg, cell in value_checks:
+      post = self._eval_expr(caller, arg)
+      if cell.value != post:
+        raise JanaError(
+          arg.pos,
+          f"Value argument is not restored on return: bound `{cell.value}' but the expression now evaluates to `{post}'",
+          ["A non-l-value argument must have the same value at the call and immediately after it returns"],
+          True,
+        )
+
+  def _call_proc(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos, record_stmt: bool = True, record_nested: bool = False) -> None:
+    proc, frame, value_checks = self._bind_args(caller, name, args, pos)
     self._exec_block(frame, proc.body, record_stmt=record_stmt, record_nested=record_nested)
+    self._verify_value_args(caller, value_checks)
 
   def _uncall_proc(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos, record_stmt: bool = True, record_nested: bool = False) -> None:
-    proc = self.procs.get(name)
-    if proc is None:
-      raise JanaError(pos, f"Procedure `{name}' is not defined", contextual=True)
-    if len(proc.params) != len(args):
-      raise JanaError(pos, f"Procedure `{name}` expects {len(proc.params)} argument(s) but got {len(args)}")
-    frame = Frame(vars={})
-    for param, arg in zip(proc.params, args):
-      if not isinstance(arg, LvalExpr):
-        if param.decl_type != DeclType.CONSTANT:
-          raise JanaError(arg.pos, "Non-constant argument must be an l-value")
-        val = self._eval_expr(caller, arg)
-        actual = Cell(val, writable=False)
-      else:
-        actual = self._resolve_lval(caller, arg.lval)
-        try:
-          self._check_param_compat(param, actual, arg.pos)
-        except JanaError as err:
-          if err.message.startswith("Expecting array of size"):
-            details = list(err.details)
-            if not any(detail.startswith("In an argument of") for detail in details):
-              details.append(f"In an argument of `{name}', namely `{param.ident.name}'")
-            if not any(detail.startswith("In procedure") for detail in details):
-              details.append(f"In procedure `{name}'")
-            raise JanaError(err.pos, err.message, details, True)
-          raise err
-      if param.decl_type == DeclType.CONSTANT:
-        actual = ConstantParamProxy(actual)
-      frame.vars[param.ident.name] = actual
+    proc, frame, value_checks = self._bind_args(caller, name, args, pos)
     self._exec_block(frame, invert_stmts(proc.body, global_mode=False), record_stmt=record_stmt, record_nested=record_nested)
+    self._verify_value_args(caller, value_checks)
 
   def _exec_local(self, frame: Frame, stmt: LocalStmt, record_stmt: bool = True, record_nested: bool = False) -> None:
     self._check_local_decl_match(stmt)
