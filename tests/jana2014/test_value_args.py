@@ -117,10 +117,55 @@ class ValueArgTests(unittest.TestCase):
       """))
     validate_program(program)
     cpp = format_c_program(None, program)
-    # value argument is bound to a temp (not passed by reference directly)...
-    self.assertIn("auto _va_", cpp)
+    # value argument is bound to a scoped temp (not passed by reference)...
+    self.assertIn("auto _va0", cpp)
     # ...and checked for restoration on return
     self.assertIn('throw "Value argument is not restored on return"', cpp)
+
+  def test_int_expression_to_bool_param_is_rejected(self) -> None:
+    # A value argument is type-checked like an l-value argument: an int
+    # expression must not silently bind to a bool parameter.
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store("""\
+        procedure use(bool flag, int acc)
+            if flag then
+                acc += 1
+            fi flag
+
+        procedure main()
+            int x = 5
+            int acc
+            call use(x + 2, acc)
+        """)
+    self.assertIn("bool", str(ctx.exception))
+
+  def test_bool_expression_to_int_param_is_rejected(self) -> None:
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store("""\
+        procedure addn(int n, int acc)
+            acc += n
+
+        procedure main()
+            int acc
+            call addn(2 < 3, acc)
+        """)
+    self.assertIn("int", str(ctx.exception))
+
+  def test_codegen_two_value_arg_calls_on_one_line_dont_collide(self) -> None:
+    # Each value-arg call wraps its temps in their own `{ }` scope, so two
+    # calls sharing a source line do not redeclare the same C++ temp.
+    from jana_py.c_codegen import format_program as format_c_program
+    from jana_py.parser_janus2026 import parse_program as parse_2026
+    program = parse_2026(
+      "vl.ja",
+      "void addn(int n, int acc) { acc += n; }\n"
+      "void main() { int x; int acc; x += 9; call addn(x - 1, acc); call addn(x - 2, acc); }\n",
+    )
+    validate_program(program)
+    cpp = format_c_program(None, program)
+    # exactly two scoped temps, both named _va0 but in separate blocks
+    self.assertEqual(cpp.count("auto _va0"), 2)
+    self.assertEqual(cpp.count("{"), cpp.count("}"))
 
   def test_lvalue_argument_still_mutable(self) -> None:
     # A plain l-value argument is still pass-by-reference (not a value arg).

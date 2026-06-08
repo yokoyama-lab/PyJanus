@@ -1235,11 +1235,23 @@ class Runtime:
     self._legacy_io_warned.add(kind)
     sys.stderr.write(f"Warning: `{kind}` is deprecated; use `printf` instead.\n")
 
-  def _scalar_param_cell(self, param: Vdecl, value) -> Cell:
-    """A fresh writable cell holding a value-argument bound to a scalar param."""
+  def _value_arg_cell(self, param: Vdecl, value, pos: SourcePos) -> Cell:
+    """A fresh writable cell for a value argument bound to a scalar parameter.
+
+    The value's runtime type is checked against the parameter exactly like an
+    l-value argument (via `_check_param_compat`), so e.g. an int expression to a
+    `bool` parameter is rejected rather than silently coerced.
+    """
+    probe = Cell(value, kind=self._describe_value(value))
+    self._check_param_compat(param, probe, pos)
     if param.typ.kind == "bool":
-      return Cell(value, kind="bool")
-    return Cell(self._normalize_int(value, param.typ.int_type), kind="int", int_type=param.typ.int_type)
+      return Cell(bool(value), kind="bool")
+    return Cell(
+      self._normalize_int(value, param.typ.int_type),
+      kind="int",
+      int_type=param.typ.int_type,
+      is_char=param.typ.is_char,
+    )
 
   def _bind_args(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos) -> tuple[Proc, Frame, list[tuple[Expr, Cell]]]:
     """Build the callee frame for a call/uncall.
@@ -1266,7 +1278,7 @@ class Runtime:
           raise JanaError(arg.pos, "Non-l-value argument must be a scalar (int/bool) expression")
         else:
           # Value argument: bind a fresh local, verify it is restored on return.
-          actual = self._scalar_param_cell(param, val)
+          actual = self._value_arg_cell(param, val, arg.pos)
           value_checks.append((arg, actual))
       else:
         actual = self._resolve_lval(caller, arg.lval)
