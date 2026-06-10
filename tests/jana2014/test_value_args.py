@@ -25,10 +25,10 @@ from jana_py.validate import validate_program
 from jana_py.runtime import Runtime
 
 
-def run_and_get_store(source: str) -> dict[str, object]:
+def run_and_get_store(source: str, mod_bits: int | None = None) -> dict[str, object]:
   program = parse_program("valarg.ja", textwrap.dedent(source))
   validate_program(program)
-  rt = Runtime(program)
+  rt = Runtime(program, mod_bits=mod_bits)
   rt.run()
   assert rt._root_frame is not None
   return {k: copy.deepcopy(c.value) for k, c in rt._root_frame.vars.items()}
@@ -254,6 +254,110 @@ class ValueArgTests(unittest.TestCase):
       input=cpp, capture_output=True, text=True,
     )
     self.assertEqual(proc.returncode, 0, proc.stderr)
+
+  def test_value_arg_to_array_param_is_rejected(self) -> None:
+    # A non-l-value argument is only valid for scalar (int/bool) parameters.
+    with self.assertRaises(JanaError) as ctx:
+      run_2026_and_get_store("""\
+        void f(int a[3], int acc) { acc += a[0]; }
+        void main() { int x; int acc; call f(x + 1, acc); }
+        """)
+    self.assertIn("scalar", str(ctx.exception))
+
+  def test_value_arg_to_stack_param_is_rejected(self) -> None:
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store("""\
+        procedure f(stack s, int acc)
+            acc += 1
+            acc -= 1
+
+        procedure main()
+            int x
+            int acc
+            call f(x + 1, acc)
+        """)
+    self.assertIn("scalar", str(ctx.exception))
+
+  def test_two_value_args_in_one_call(self) -> None:
+    store = run_and_get_store("""\
+      procedure add2(int a, int b, int acc)
+          acc += a
+          acc += b
+
+      procedure main()
+          int x = 10
+          int acc
+          call add2(x - 1, x + 1, acc)
+      """)
+    self.assertEqual(store["acc"], 20)  # 9 + 11
+    self.assertEqual(store["x"], 10)
+
+  def test_value_arg_invalidated_through_reference_param_is_error(self) -> None:
+    # The value argument `a + 1` reads `a`, which the callee net-modifies
+    # through the by-reference parameter — the expression no longer reads back
+    # its bound value on return, so the call is irreversible and must fail.
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store("""\
+        procedure f(int n, int a)
+            a += n
+
+        procedure main()
+            int a = 3
+            call f(a + 1, a)
+        """)
+    self.assertIn("not restored", str(ctx.exception))
+
+  def test_uncall_value_argument_not_restored_is_error(self) -> None:
+    # The restore check runs after uncall too: inverted `bump` net-modifies
+    # its first parameter, so the value argument cannot read back.
+    with self.assertRaises(JanaError) as ctx:
+      run_and_get_store("""\
+        procedure bump(int x, int acc)
+            x += 1
+            acc += x
+
+        procedure main()
+            int n = 5
+            int acc
+            uncall bump(n - 1, acc)
+        """)
+    self.assertIn("not restored", str(ctx.exception))
+
+  def test_value_arg_normalized_under_mod_bits(self) -> None:
+    # Under -m the bind normalizes the bound value; the restore check must
+    # normalize the re-evaluated expression the same way (the untyped-int
+    # branch of `_normalize_int`, as opposed to the sized `u8` test above).
+    store = run_and_get_store("""\
+      procedure addn(int n, int acc)
+          acc += n
+
+      procedure main()
+          int x
+          int acc
+          x += 100
+          call addn(x + 50, acc)
+      """, mod_bits=8)
+    self.assertEqual(store["acc"], -106)  # 150 mod 2^8, signed
+
+  def test_invert_preserves_expression_args(self) -> None:
+    # `-i` (global) inversion inverts procedure bodies and keeps calls; the
+    # expression argument must survive inversion + formatting verbatim.
+    from jana_py.invert import invert_program
+    from jana_py.format import formatter_for_std
+    program = parse_program("valarg.ja", textwrap.dedent("""\
+      procedure addn(int n, int acc)
+          acc += n
+
+      procedure main()
+          int x = 7
+          int acc
+          call addn(x - 2, acc)
+      """))
+    validate_program(program)
+    inverted = invert_program(program)
+    text = formatter_for_std("jana2014").format_program(inverted)
+    self.assertIn("call addn(x - 2, acc)", text)
+    self.assertIn("acc -= n", text)  # the body was inverted
 
   def test_lvalue_argument_still_mutable(self) -> None:
     # A plain l-value argument is still pass-by-reference (not a value arg).
