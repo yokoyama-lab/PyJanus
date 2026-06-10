@@ -1235,23 +1235,22 @@ class Runtime:
     self._legacy_io_warned.add(kind)
     sys.stderr.write(f"Warning: `{kind}` is deprecated; use `printf` instead.\n")
 
-  def _value_arg_cell(self, param: Vdecl, value, pos: SourcePos) -> Cell:
+  def _value_arg_cell(self, param: Vdecl, value) -> Cell:
     """A fresh writable cell for a value argument bound to a scalar parameter.
 
     The value's runtime type is checked against the parameter exactly like an
-    l-value argument (via `_check_param_compat`), so e.g. an int expression to a
-    `bool` parameter is rejected rather than silently coerced.
+    l-value argument (the scalar tail of `_check_param_compat` — the param is
+    already known to be scalar, so the array/struct branches cannot apply), so
+    e.g. an int expression to a `bool` parameter is rejected rather than
+    silently coerced. The cell's metadata is derived like a local variable's.
     """
-    probe = Cell(value, kind=self._describe_value(value))
-    self._check_param_compat(param, probe, pos)
-    if param.typ.kind == "bool":
+    actual = self._describe_value(value)
+    if param.typ.kind != actual:
+      raise JanaError(param.pos, f"Couldn't match expected type `{param.typ.kind}'\n            with actual type `{actual}'", contextual=True)
+    kind, int_type, is_char, _ = self._type_cell_metadata(param.typ)
+    if kind == "bool":
       return Cell(bool(value), kind="bool")
-    return Cell(
-      self._normalize_int(value, param.typ.int_type),
-      kind="int",
-      int_type=param.typ.int_type,
-      is_char=param.typ.is_char,
-    )
+    return Cell(self._normalize_int(value, int_type), kind="int", int_type=int_type, is_char=is_char)
 
   def _bind_args(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos) -> tuple[Proc, Frame, list[tuple[Expr, Cell]]]:
     """Build the callee frame for a call/uncall.
@@ -1278,7 +1277,7 @@ class Runtime:
           raise JanaError(arg.pos, "Non-l-value argument must be a scalar (int/bool) expression")
         else:
           # Value argument: bind a fresh local, verify it is restored on return.
-          actual = self._value_arg_cell(param, val, arg.pos)
+          actual = self._value_arg_cell(param, val)
           value_checks.append((arg, actual))
       else:
         actual = self._resolve_lval(caller, arg.lval)
