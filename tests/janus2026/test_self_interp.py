@@ -44,6 +44,17 @@ class TestEncoderBasic:
         with pytest.raises(ValueError, match="Unsupported assignment operator"):
             encode_program(src)
 
+    def test_encode_value_arg_raises_clean_error(self):
+        # Value (expression) arguments are outside the Janus-0 subset; encoding
+        # must fail with a clear message, not a bare type error.
+        import pytest
+        src = (
+            "void f(int n, int r) {\n    r += n;\n}\n"
+            "void main() {\n    int n;\n    int r;\n    n += 5;\n    call f(n - 1, r);\n}\n"
+        )
+        with pytest.raises(ValueError, match="not supported by self-interpreter encoding"):
+            encode_program(src)
+
     def test_encode_swap(self):
         src = "void main() {\n    int x;\n    int y;\n    x <=> y;\n}\n"
         result = encode_program(src)
