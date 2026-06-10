@@ -72,25 +72,28 @@ def format_program(header: str | None, program: Program) -> str:
   for sdef in program.struct_defs:
     lines.append(format_struct_def(sdef))
     lines.append("")
+  # Callee signatures are needed to emit value arguments (temp type, whether
+  # the parameter is `constant`), so thread the proc table down to format_stmt.
+  procs = {proc.procname.name: proc for proc in program.procs}
   for proc in program.procs:
-    lines.append(format_proc(proc))
+    lines.append(format_proc(proc, procs))
     lines.append("")
   lines.append("int main() {")
   if program.main is not None:
     for vdecl in program.main.vdecls:
       lines.append("  " + format_vdecl(vdecl) + ";")
     for stmt in program.main.stmts:
-      lines.extend(format_stmt(stmt, 1))
+      lines.extend(format_stmt(stmt, 1, procs))
   lines.append("  return 1;")
   lines.append("}")
   return "\n".join(lines) + "\n"
 
 
-def format_proc(proc: Proc) -> str:
+def format_proc(proc: Proc, procs: dict[str, Proc] | None = None) -> str:
   params = ", ".join(format_param(param) for param in proc.params)
   lines = [f"void {proc.procname.name}({params}) {{"]
   for stmt in proc.body:
-    lines.extend(format_stmt(stmt, 1))
+    lines.extend(format_stmt(stmt, 1, procs))
   lines.append("}")
   return "\n".join(lines)
 
@@ -124,7 +127,7 @@ def format_type(typ: Type) -> str:
   return C_TYPES[typ.int_type.value]
 
 
-def format_stmt(stmt, indent: int) -> list[str]:
+def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list[str]:
   pad = "  " * indent
   if isinstance(stmt, AssignStmt):
     lval = format_lval(stmt.lval)
@@ -150,32 +153,32 @@ def format_stmt(stmt, indent: int) -> list[str]:
   if isinstance(stmt, IfStmt):
     lines = [f"{pad}if ({format_expr(stmt.entry_cond)}) {{"]
     for nested in stmt.if_part:
-      lines.extend(format_stmt(nested, indent + 1))
+      lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     if stmt.else_part:
       lines.append(f"{pad}else {{")
       for nested in stmt.else_part:
-        lines.extend(format_stmt(nested, indent + 1))
+        lines.extend(format_stmt(nested, indent + 1, procs))
       lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, FromStmt):
     lines = [f"{pad}while (!({format_expr(stmt.exit_cond)})) {{"]
     for nested in stmt.do_part:
-      lines.extend(format_stmt(nested, indent + 1))
+      lines.extend(format_stmt(nested, indent + 1, procs))
     for nested in stmt.loop_part:
-      lines.extend(format_stmt(nested, indent + 1))
+      lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, IterateStmt):
     lines = [f"{pad}for ({format_type(stmt.typ)} {stmt.ident.name} = {format_expr(stmt.start_expr)}; {stmt.ident.name} <= {format_expr(stmt.end_expr)}; {stmt.ident.name} += {format_expr(stmt.step_expr)}) {{"]
     for nested in stmt.body:
-      lines.extend(format_stmt(nested, indent + 1))
+      lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, LocalStmt):
     lines = [f"{pad}{{", f"{pad}  {format_local_decl(stmt.enter_decl)};"]
     for nested in stmt.body:
-      lines.extend(format_stmt(nested, indent + 1))
+      lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
@@ -183,9 +186,13 @@ def format_stmt(stmt, indent: int) -> list[str]:
       args = ", ".join(format_expr(arg) for arg in stmt.args)
       return [f"{pad}{stmt.ident.name}({args});"]
     # A non-l-value (value) argument can't bind to a by-reference parameter, so
-    # mirror the interpreter: bind each to a temp and verify it reads back the
-    # same value on return. Wrap the whole call in a `{ }` block so the temps
+    # mirror the interpreter: bind each to a temp declared with the parameter's
+    # type (an `auto` temp deduces the promoted `int` and cannot bind to e.g. a
+    # `signed char&` parameter) and verify it reads back the same value on
+    # return — except for `constant` parameters, which the interpreter snapshots
+    # without a restore check. Wrap the whole call in a `{ }` block so the temps
     # are scoped and cannot collide with another call's temps on the same line.
+    proc = procs.get(stmt.ident.name) if procs else None
     inner = pad + "  "
     lines = [f"{pad}{{"]
     call_args: list[str] = []
@@ -194,11 +201,18 @@ def format_stmt(stmt, indent: int) -> list[str]:
       if isinstance(arg, LvalExpr):
         call_args.append(format_expr(arg))
         continue
+      param = proc.params[i] if proc is not None and i < len(proc.params) else None
       tmp = f"_va{i}"
       expr = format_expr(arg)
-      lines.append(f"{inner}auto {tmp} = {expr};")
+      ctype = "auto" if param is None else format_type(param.typ)
+      lines.append(f"{inner}{ctype} {tmp} = {expr};")
       call_args.append(tmp)
-      checks.append(f'{inner}if ({tmp} != ({expr})) throw "Value argument is not restored on return";')
+      if param is not None and param.decl_type == DeclType.CONSTANT:
+        continue
+      # Cast the re-evaluated expression like the interpreter normalizes it to
+      # the parameter's type, so e.g. a `u8` temp compares 255 with 255.
+      cast = "" if param is None else f"({ctype})"
+      checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
     lines.append(f"{inner}{stmt.ident.name}({', '.join(call_args)});")
     lines.extend(checks)
     lines.append(f"{pad}}}")

@@ -1302,6 +1302,10 @@ class Runtime:
     """A value argument's expression must read back its bound value on return."""
     for arg, cell in value_checks:
       post = self._eval_expr(caller, arg)
+      # Normalize exactly like the bind in `_value_arg_cell`, so e.g. `x - 1`
+      # to a `u8` parameter compares 255 with 255 (not with -1) when x is 0 —
+      # the desugared `delocal t = x - 1` normalizes the same way.
+      post = bool(post) if cell.kind == "bool" else self._normalize_int(post, cell.int_type)
       if cell.value != post:
         raise JanaError(
           arg.pos,
