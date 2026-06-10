@@ -558,6 +558,22 @@ class LocalDelocalTests(unittest.TestCase):
             }
             """)), "7\n")
 
+    def test_local_sized_int_normalizes_on_delocal(self) -> None:
+        # The delocal check must normalize the expected value to the declared
+        # type, exactly like the entry side: with x = 0, `u8 tmp = x - 1` binds
+        # 255, and `delocal u8 tmp = x - 1` must compare 255 (not -1).
+        self.assertEqual(run(textwrap.dedent("""\
+            void main() {
+                int x;
+                int acc;
+                local u8 tmp = x - 1 {
+                    acc += tmp;
+                } delocal u8 tmp = x - 1;
+                printf("%d\\n", acc);
+                acc -= 255;
+            }
+            """)), "255\n")
+
     def test_multi_local_roundtrip(self) -> None:
         source = textwrap.dedent("""\
             void main() {
