@@ -269,7 +269,10 @@ class Encoder:
         """Resolve a call argument to a store slot."""
         if isinstance(arg, LvalExpr):
             return self.slot_of(arg.lval.ident.name)
-        raise ValueError(f"Call arguments must be variables, got {type(arg).__name__}")
+        raise ValueError(
+            "Call arguments must be l-values; value (expression) arguments are "
+            f"not supported by self-interpreter encoding, got {type(arg).__name__}"
+        )
 
     def _proc_index(self, name: str) -> int:
         if name not in self._proc_map:

@@ -182,19 +182,16 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
-    if all(isinstance(arg, LvalExpr) for arg in stmt.args):
-      args = ", ".join(format_expr(arg) for arg in stmt.args)
-      return [f"{pad}{stmt.ident.name}({args});"]
     # A non-l-value (value) argument can't bind to a by-reference parameter, so
     # mirror the interpreter: bind each to a temp declared with the parameter's
     # type (an `auto` temp deduces the promoted `int` and cannot bind to e.g. a
     # `signed char&` parameter) and verify it reads back the same value on
     # return — except for `constant` parameters, which the interpreter snapshots
-    # without a restore check. Wrap the whole call in a `{ }` block so the temps
+    # without a restore check. Wrap such a call in a `{ }` block so the temps
     # are scoped and cannot collide with another call's temps on the same line.
     proc = procs.get(stmt.ident.name) if procs else None
     inner = pad + "  "
-    lines = [f"{pad}{{"]
+    temps: list[str] = []
     call_args: list[str] = []
     checks: list[str] = []
     for i, arg in enumerate(stmt.args):
@@ -205,7 +202,7 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       tmp = f"_va{i}"
       expr = format_expr(arg)
       ctype = "auto" if param is None else format_type(param.typ)
-      lines.append(f"{inner}{ctype} {tmp} = {expr};")
+      temps.append(f"{inner}{ctype} {tmp} = {expr};")
       call_args.append(tmp)
       if param is not None and param.decl_type == DeclType.CONSTANT:
         continue
@@ -213,10 +210,10 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       # the parameter's type, so e.g. a `u8` temp compares 255 with 255.
       cast = "" if param is None else f"({ctype})"
       checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
-    lines.append(f"{inner}{stmt.ident.name}({', '.join(call_args)});")
-    lines.extend(checks)
-    lines.append(f"{pad}}}")
-    return lines
+    call = f"{stmt.ident.name}({', '.join(call_args)});"
+    if not temps:
+      return [f"{pad}{call}"]
+    return [f"{pad}{{", *temps, f"{inner}{call}", *checks, f"{pad}}}"]
   if isinstance(stmt, UncallStmt):
     return [f"{pad}/* uncall {stmt.ident.name} not supported in generated C++ */"]
   if isinstance(stmt, PrintsStmt):
