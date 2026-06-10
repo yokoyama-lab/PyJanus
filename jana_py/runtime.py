@@ -1553,7 +1553,10 @@ class Runtime:
       return False if decl.init_expr is None else bool(self._eval_expr(frame, decl.init_expr))
     if decl.typ.kind == "stack":
       return [] if decl.init_expr is None else self._eval_expr(frame, decl.init_expr)
-    return 0 if decl.init_expr is None else self._eval_expr(frame, decl.init_expr)
+    # Normalize exactly like the entry side (`_initial_local_value`), so e.g.
+    # `delocal u8 t = x - 1` with x = 0 compares 255 with 255 (not with -1).
+    initial = 0 if decl.init_expr is None else self._eval_expr(frame, decl.init_expr)
+    return self._normalize_int(initial, decl.typ.int_type if decl.typ.kind == "int" else None)
 
   def _resolve_var(self, frame: Frame, name: str) -> Cell:
     if name not in frame.vars:
