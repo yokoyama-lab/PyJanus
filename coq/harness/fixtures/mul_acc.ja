@@ -1,0 +1,12 @@
+procedure main()
+    int a
+    int b
+    int p
+    int i
+    a += 6
+    b += 7
+    from i = 0 do
+        p += a
+    loop
+        i += 1
+    until i = b

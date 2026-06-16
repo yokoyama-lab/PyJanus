@@ -1,0 +1,11 @@
+procedure main()
+    int x
+    int y
+    x += 5
+    y += 3
+    if x > y then
+        x += y
+    else
+        skip
+    fi x > y
+    x <=> y

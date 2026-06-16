@@ -1,0 +1,8 @@
+procedure main()
+    int x
+    int y
+    x += 9
+    local int t = x
+    y += t
+    y += t
+    delocal int t = x

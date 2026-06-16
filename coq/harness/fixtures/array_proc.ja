@@ -1,0 +1,9 @@
+procedure setcell(int B[5], int k, int v)
+    B[k] += v
+procedure main()
+    int A[5]
+    int j
+    int val
+    j += 3
+    val += 99
+    call setcell(A, j, val)

@@ -1,0 +1,9 @@
+procedure main()
+    stack s
+    int x
+    x += 1
+    push(x, s)
+    x += 2
+    push(x, s)
+    x += 3
+    push(x, s)
