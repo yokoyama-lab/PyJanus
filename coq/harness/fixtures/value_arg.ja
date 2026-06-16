@@ -1,0 +1,7 @@
+procedure addc(int a, int c)
+    a += c
+    a += c
+procedure main()
+    int x
+    x += 5
+    call addc(x, 3)

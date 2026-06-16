@@ -1,0 +1,16 @@
+procedure main()
+    int x
+    int y
+    int i
+    x += 10
+    from i = 0 do
+        x += 2
+    loop
+        i += 1
+    until i = 3
+    if x > y then
+        x -= y
+    else
+        skip
+    fi x > y
+    x <=> y

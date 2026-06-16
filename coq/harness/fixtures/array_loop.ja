@@ -1,0 +1,9 @@
+procedure main()
+    int A[5]
+    int i
+    from i = 0 do
+        skip
+    loop
+        A[i] += 10
+        i += 1
+    until i = 5

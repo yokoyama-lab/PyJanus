@@ -1,0 +1,9 @@
+procedure addto(int a, int b)
+    a += b
+procedure main()
+    int p
+    int q
+    p += 3
+    q += 4
+    call addto(p, q)
+    p <=> q

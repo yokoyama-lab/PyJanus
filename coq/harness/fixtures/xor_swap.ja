@@ -1,0 +1,7 @@
+procedure main()
+    int x
+    int y
+    x += 4
+    y += 7
+    x <=> y
+    x ^= y
