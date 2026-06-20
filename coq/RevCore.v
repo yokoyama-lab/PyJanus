@@ -27,7 +27,12 @@
     The point of the abstraction: *the control-flow skeleton of structured
     reversible programming is language-independent — a language is reversible
     exactly when its atoms are locally invertible.*  Instantiations:
-    [RevJanus.v] recovers core Janus; [RevToy.v] a reversible counter over Z. *)
+    [RevJanus.v] recovers core Janus; [RevExt.v] adds arrays and local/delocal;
+    [RevToy.v] a reversible counter over Z; [RevStack.v] a reversible stack
+    machine (state = [list Z]); [RevCA.v] a reversible second-order cellular
+    automaton (state = a pair of bi-infinite configurations).  The last three
+    share no state space or primitives with Janus, yet inherit reversibility
+    verbatim from this functor. *)
 
 Module Type REV_PRIM.
   Parameter state : Type.

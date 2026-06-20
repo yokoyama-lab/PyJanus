@@ -29,6 +29,7 @@ def cli(args, ja):
 
 ARR_RE = re.compile(r"^(\w+)(?:\[\d+\])+\s*=\s*(\{.*\})\s*$")     # possibly nested
 STK_RE = re.compile(r"^(\w+)\s*=\s*<(.*)\]\s*$")                  # stack: <top, …, bottom]
+NIL_RE = re.compile(r"^(\w+)\s*=\s*nil\s*$")                      # empty stack
 SCA_RE = re.compile(r"^(\w+)\s*=\s*(-?\d+)\s*$")
 
 
@@ -45,6 +46,10 @@ def parse_store(res):
         m = STK_RE.match(line)
         if m:
             stk[m.group(1)] = [int(x) for x in m.group(2).split(",") if x.strip()]
+            continue
+        m = NIL_RE.match(line)                               # `s = nil`: empty stack
+        if m:
+            stk[m.group(1)] = []
             continue
         m = SCA_RE.match(line)
         if m and not line.startswith(("Warning", "PyJanus")):
@@ -88,6 +93,7 @@ class T:
         self.procmap = {}
         self.tmpn = 0
         self.stacks = set()                                  # (scope, name) that are stacks
+        self.arrlen = {}                                     # (scope, name) -> length, for size()
 
     def stack_ids(self, sc, name):                           # a stack = array + top counter
         self.stacks.add((sc, name))
@@ -153,8 +159,21 @@ class T:
             return self.read(sc, e["lval"])
         if "ident" in e:                                     # bare ident in a value context
             nm = e["ident"]["name"]
-            if self.is_stack(sc, nm):                         # stack truthiness/size = its depth
-                return f"(v {self.stack_ids(sc, nm)[1]})"
+            if self.is_stack(sc, nm):
+                arr, top = self.stack_ids(sc, nm)
+                # `top(s)`/`empty(s)`/`size(s)` all parse to a bare stack ident;
+                # the source keyword distinguishes them:
+                #   top(s)   = peek the top element  arr[depth-1]
+                #   empty(s) = truthy iff depth == 0
+                #   size(s)  = the depth itself (also the bare-ident default)
+                kw = self.kw_at(e.get("pos", e["ident"]["pos"]), "top", "empty", "size")
+                if kw == "top":
+                    return f"(ar {arr} (b sub (v {top}) (c 1)))"
+                if kw == "empty":
+                    return f"(b eq (v {top}) (c 0))"
+                return f"(v {top})"
+            if (sc, nm) in self.arrlen:                       # size(A): statically-known length
+                return f"(c {self.arrlen[(sc, nm)]})"
             raise Unsupported("size() / array length")
         raise Unsupported(f"expr {sorted(e)}")
 
@@ -304,6 +323,50 @@ def translate(ja):
     procs = ast.get("procs", [])
     for i, proc in enumerate(procs):
         p.procmap[proc["procname"]["name"]] = i
+
+    # --- size(A): resolve statically-known array lengths --------------------
+    # main's array declarations give lengths; then propagate them to procedure
+    # array formals via call sites (to a fixpoint, for transitive passing).
+    pnames = {pr["procname"]["name"]: [par["ident"]["name"] for par in pr["params"]]
+              for pr in procs}
+    for vd in ast["main"].get("vdecls", []):
+        if vd["typ"]["kind"] != "stack" and vd.get("dimensions"):
+            L = 1
+            for d in vd["dimensions"]:
+                L *= int(d["value"])
+            p.arrlen[("main", vd["ident"]["name"])] = L
+
+    def calls_in(node):                                      # (callee, args) of every call
+        out = []
+        def walk(o):
+            if isinstance(o, dict):
+                if "ident" in o and "args" in o and o["ident"].get("name") in p.procmap:
+                    out.append((o["ident"]["name"], o["args"]))
+                for v in o.values():
+                    walk(v)
+            elif isinstance(o, list):
+                for x in o:
+                    walk(x)
+        walk(node)
+        return out
+
+    scoped = [("main", c) for c in calls_in(ast["main"].get("stmts", []))]
+    for pr in procs:
+        scoped += [(pr["procname"]["name"], c) for c in calls_in(pr["body"])]
+    changed = True
+    while changed:                                          # bind formals to actual lengths
+        changed = False
+        for sc, (callee, args) in scoped:
+            for i, a in enumerate(args):
+                if i >= len(pnames.get(callee, [])):
+                    continue
+                lv = a.get("lval") if isinstance(a, dict) else None
+                if lv and not lv.get("selectors"):
+                    src_key = (sc, lv["ident"]["name"])
+                    dst_key = (callee, pnames[callee][i])
+                    if src_key in p.arrlen and dst_key not in p.arrlen:
+                        p.arrlen[dst_key] = p.arrlen[src_key]; changed = True
+
     proc_out = []
     for proc in procs:
         if recursive_with_locals(proc):

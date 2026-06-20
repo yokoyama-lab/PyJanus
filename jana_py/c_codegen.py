@@ -105,13 +105,17 @@ def format_param(vdecl: Vdecl) -> str:
 
 
 def format_vdecl(vdecl: Vdecl) -> str:
+  # Janus default-initializes every variable to 0; C++ leaves uninitialized
+  # locals indeterminate, so emit an explicit zero initializer when none is given
+  # (otherwise the generated program reads garbage instead of 0).
   if vdecl.dimensions:
     dims = "".join(f"[{format_expr(dim)}]" for dim in vdecl.dimensions if dim is not None)
-    init = ""
     if vdecl.init_expr is not None:
       init = f" = {format_expr(vdecl.init_expr)}"
+    else:
+      init = " = {}"
     return f"{format_type(vdecl.typ)} {vdecl.ident.name}{dims}{init}"
-  init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else ""
+  init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else " = 0"
   return f"{format_type(vdecl.typ)} {vdecl.ident.name}{init}"
 
 
