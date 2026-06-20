@@ -65,6 +65,17 @@ def format_struct_def(sdef) -> str:
   return "\n".join(lines)
 
 
+# Janus keeps procedures and variables in separate namespaces, but C++ does not,
+# so a procedure named like a variable in scope (e.g. `procedure root` with a
+# variable `root`) makes `root(...)` parse as a call on the int. Rename only the
+# colliding procedures (leaving the common case byte-identical).
+_PROC_RENAMES: dict[str, str] = {}
+
+
+def _cname(name: str) -> str:
+  return _PROC_RENAMES.get(name, name)
+
+
 def format_program(header: str | None, program: Program) -> str:
   lines = ["#include <iostream>", "#include <utility>"]
   if header:
@@ -76,22 +87,36 @@ def format_program(header: str | None, program: Program) -> str:
   # Callee signatures are needed to emit value arguments (temp type, whether
   # the parameter is `constant`), so thread the proc table down to format_stmt.
   procs = {proc.procname.name: proc for proc in program.procs}
+
+  varnames = {vd.ident.name for vd in (program.main.vdecls if program.main else [])}
+  for proc in program.procs:
+    varnames |= {p.ident.name for p in proc.params}
+  pnames = {p.procname.name for p in program.procs}
+  _PROC_RENAMES.clear()
+  for proc in program.procs:
+    n = proc.procname.name
+    if n in varnames:
+      cand = n + "_proc"
+      while cand in varnames or cand in pnames or cand in _PROC_RENAMES.values():
+        cand += "_"
+      _PROC_RENAMES[n] = cand
+
   # Forward declarations first, so (mutually) recursive calls and `uncall`s of a
   # later procedure (or of the procedure itself) resolve.
   for proc in program.procs:
     sig = ", ".join(format_param(param) for param in proc.params)
-    lines.append(f"void {proc.procname.name}({sig});")
-    lines.append(f"void {proc.procname.name}__inv({sig});")
+    lines.append(f"void {_cname(proc.procname.name)}({sig});")
+    lines.append(f"void {_cname(proc.procname.name)}__inv({sig});")
   if program.procs:
     lines.append("")
   for proc in program.procs:
-    lines.append(format_proc(proc, procs))
+    lines.append(format_proc(proc, procs, name=_cname(proc.procname.name)))
     lines.append("")
   # Inverse functions, so `uncall p` can run p backwards (p__inv = invert p).
   for proc in program.procs:
     # local inversion (global_mode=False): a `call q` inside p inverts to
     # `uncall q`, which we emit as `q__inv` -- so p__inv composes correctly.
-    lines.append(format_proc(proc, procs, name=proc.procname.name + "__inv",
+    lines.append(format_proc(proc, procs, name=_cname(proc.procname.name) + "__inv",
                              body=invert_stmts(proc.body, global_mode=False)))
     lines.append("")
   lines.append("int main() {")
@@ -251,11 +276,11 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
-    return _emit_call(stmt.ident.name, stmt, indent, procs)
+    return _emit_call(_cname(stmt.ident.name), stmt, indent, procs)
   if isinstance(stmt, UncallStmt):
     # `uncall p` runs p backwards; we emit an inverse function `p__inv` (its body
     # is the program inverter applied to p's body) and call that.
-    return _emit_call(stmt.ident.name + "__inv", stmt, indent, procs)
+    return _emit_call(_cname(stmt.ident.name) + "__inv", stmt, indent, procs)
   if isinstance(stmt, PrintsStmt):
     if stmt.prints.kind == "print":
       return [f'{pad}std::cout << "{escape_cpp(stmt.prints.text or "")}";']
