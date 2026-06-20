@@ -142,6 +142,23 @@ class CodegenRunTests(unittest.TestCase):
             uncall fib(x1, x2, n)
         """)
 
+  def test_proc_var_name_collision(self) -> None:
+    # Janus keeps procedures and variables in separate namespaces; C++ does not,
+    # so a procedure named like an in-scope variable must be renamed.
+    program = _build("""\
+        procedure root(int num, int r)
+            r += num
+        procedure main()
+            int num
+            int root
+            num += 7
+            call root(num, root)
+        """)
+    cpp = format_program(None, program)
+    self.assertNotIn("void root(", cpp)        # renamed to avoid the clash
+    got = self._run_cpp(program)
+    self.assertEqual(got["root"], 7)
+
   def test_descending_iterate(self) -> None:
     got = self._assert_matches("""\
         procedure main()
