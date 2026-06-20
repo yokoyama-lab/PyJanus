@@ -38,6 +38,7 @@ from .ast import UncallStmt
 from .ast import UserErrorStmt
 from .ast import Ident
 from .ast import Vdecl
+from .invert import invert_stmts
 
 
 C_TYPES = {
@@ -75,8 +76,23 @@ def format_program(header: str | None, program: Program) -> str:
   # Callee signatures are needed to emit value arguments (temp type, whether
   # the parameter is `constant`), so thread the proc table down to format_stmt.
   procs = {proc.procname.name: proc for proc in program.procs}
+  # Forward declarations first, so (mutually) recursive calls and `uncall`s of a
+  # later procedure (or of the procedure itself) resolve.
+  for proc in program.procs:
+    sig = ", ".join(format_param(param) for param in proc.params)
+    lines.append(f"void {proc.procname.name}({sig});")
+    lines.append(f"void {proc.procname.name}__inv({sig});")
+  if program.procs:
+    lines.append("")
   for proc in program.procs:
     lines.append(format_proc(proc, procs))
+    lines.append("")
+  # Inverse functions, so `uncall p` can run p backwards (p__inv = invert p).
+  for proc in program.procs:
+    # local inversion (global_mode=False): a `call q` inside p inverts to
+    # `uncall q`, which we emit as `q__inv` -- so p__inv composes correctly.
+    lines.append(format_proc(proc, procs, name=proc.procname.name + "__inv",
+                             body=invert_stmts(proc.body, global_mode=False)))
     lines.append("")
   lines.append("int main() {")
   if program.main is not None:
@@ -89,13 +105,47 @@ def format_program(header: str | None, program: Program) -> str:
   return "\n".join(lines) + "\n"
 
 
-def format_proc(proc: Proc, procs: dict[str, Proc] | None = None) -> str:
+def format_proc(proc: Proc, procs: dict[str, Proc] | None = None,
+                name: str | None = None, body=None) -> str:
   params = ", ".join(format_param(param) for param in proc.params)
-  lines = [f"void {proc.procname.name}({params}) {{"]
-  for stmt in proc.body:
+  lines = [f"void {name or proc.procname.name}({params}) {{"]
+  for stmt in (proc.body if body is None else body):
     lines.extend(format_stmt(stmt, 1, procs))
   lines.append("}")
   return "\n".join(lines)
+
+
+def _emit_call(call_name: str, stmt, indent: int,
+               procs: dict[str, Proc] | None) -> list[str]:
+  # A non-l-value (value) argument can't bind to a by-reference parameter, so
+  # mirror the interpreter: bind each to a temp declared with the parameter's
+  # type and verify it reads back the same value on return (except `constant`
+  # parameters, which are snapshotted without a restore check).  Param types come
+  # from the *original* procedure (its inverse shares the signature).
+  pad = "  " * indent
+  proc = procs.get(stmt.ident.name) if procs else None
+  inner = pad + "  "
+  temps: list[str] = []
+  call_args: list[str] = []
+  checks: list[str] = []
+  for i, arg in enumerate(stmt.args):
+    if isinstance(arg, LvalExpr):
+      call_args.append(format_expr(arg))
+      continue
+    param = proc.params[i] if proc is not None and i < len(proc.params) else None
+    tmp = f"_va{i}"
+    expr = format_expr(arg)
+    ctype = "auto" if param is None else format_type(param.typ)
+    temps.append(f"{inner}{ctype} {tmp} = {expr};")
+    call_args.append(tmp)
+    if param is not None and param.decl_type == DeclType.CONSTANT:
+      continue
+    cast = "" if param is None else f"({ctype})"
+    checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
+  call = f"{call_name}({', '.join(call_args)});"
+  if not temps:
+    return [f"{pad}{call}"]
+  return [f"{pad}{{", *temps, f"{inner}{call}", *checks, f"{pad}}}"]
 
 
 def format_param(vdecl: Vdecl) -> str:
@@ -166,15 +216,30 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, FromStmt):
-    lines = [f"{pad}while (!({format_expr(stmt.exit_cond)})) {{"]
+    # Janus `from e1 do s1 loop s2 until e2` runs s1, exits when e2 holds, else
+    # runs s2 and repeats: s1; while(!e2){ s2; s1 } -- the do-part executes once
+    # more than the loop-part (the loop off-by-one).  The earlier
+    # `while(!e2){ s1; s2 }` dropped that trailing s1, computing a wrong result.
+    lines = []
     for nested in stmt.do_part:
-      lines.extend(format_stmt(nested, indent + 1, procs))
+      lines.extend(format_stmt(nested, indent, procs))
+    lines.append(f"{pad}while (!({format_expr(stmt.exit_cond)})) {{")
     for nested in stmt.loop_part:
+      lines.extend(format_stmt(nested, indent + 1, procs))
+    for nested in stmt.do_part:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, IterateStmt):
-    lines = [f"{pad}for ({format_type(stmt.typ)} {stmt.ident.name} = {format_expr(stmt.start_expr)}; {stmt.ident.name} <= {format_expr(stmt.end_expr)}; {stmt.ident.name} += {format_expr(stmt.step_expr)}) {{"]
+    # `to end` is inclusive in both directions; a negative step counts down, so
+    # the bound test must follow the step's sign (a fixed `<=` dropped every
+    # descending loop -- including the inverse of an ascending one).
+    var = stmt.ident.name
+    end = format_expr(stmt.end_expr)
+    step = format_expr(stmt.step_expr)
+    cond = f"(({step}) >= 0 ? {var} <= ({end}) : {var} >= ({end}))"
+    lines = [f"{pad}for ({format_type(stmt.typ)} {var} = {format_expr(stmt.start_expr)}; "
+             f"{cond}; {var} += ({step})) {{"]
     for nested in stmt.body:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
@@ -186,40 +251,11 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
-    # A non-l-value (value) argument can't bind to a by-reference parameter, so
-    # mirror the interpreter: bind each to a temp declared with the parameter's
-    # type (an `auto` temp deduces the promoted `int` and cannot bind to e.g. a
-    # `signed char&` parameter) and verify it reads back the same value on
-    # return — except for `constant` parameters, which the interpreter snapshots
-    # without a restore check. Wrap such a call in a `{ }` block so the temps
-    # are scoped and cannot collide with another call's temps on the same line.
-    proc = procs.get(stmt.ident.name) if procs else None
-    inner = pad + "  "
-    temps: list[str] = []
-    call_args: list[str] = []
-    checks: list[str] = []
-    for i, arg in enumerate(stmt.args):
-      if isinstance(arg, LvalExpr):
-        call_args.append(format_expr(arg))
-        continue
-      param = proc.params[i] if proc is not None and i < len(proc.params) else None
-      tmp = f"_va{i}"
-      expr = format_expr(arg)
-      ctype = "auto" if param is None else format_type(param.typ)
-      temps.append(f"{inner}{ctype} {tmp} = {expr};")
-      call_args.append(tmp)
-      if param is not None and param.decl_type == DeclType.CONSTANT:
-        continue
-      # Cast the re-evaluated expression like the interpreter normalizes it to
-      # the parameter's type, so e.g. a `u8` temp compares 255 with 255.
-      cast = "" if param is None else f"({ctype})"
-      checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
-    call = f"{stmt.ident.name}({', '.join(call_args)});"
-    if not temps:
-      return [f"{pad}{call}"]
-    return [f"{pad}{{", *temps, f"{inner}{call}", *checks, f"{pad}}}"]
+    return _emit_call(stmt.ident.name, stmt, indent, procs)
   if isinstance(stmt, UncallStmt):
-    return [f"{pad}/* uncall {stmt.ident.name} not supported in generated C++ */"]
+    # `uncall p` runs p backwards; we emit an inverse function `p__inv` (its body
+    # is the program inverter applied to p's body) and call that.
+    return _emit_call(stmt.ident.name + "__inv", stmt, indent, procs)
   if isinstance(stmt, PrintsStmt):
     if stmt.prints.kind == "print":
       return [f'{pad}std::cout << "{escape_cpp(stmt.prints.text or "")}";']
