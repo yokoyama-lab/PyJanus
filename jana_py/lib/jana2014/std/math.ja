@@ -1,0 +1,22 @@
+// GENERATED from std/math.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure mul_acc(int a, int b, int acc)
+    acc += a * b
+
+procedure divmod(int n, int d, int q, int r)
+    q += n / d
+    r += n % d
+
+procedure gcd_step(int a, int b, stack hist)
+    a <=> b
+    local int quo = b / a
+        b -= quo * a
+        push(quo, hist)
+    delocal int quo
+
+procedure gcd(int a, int b, stack hist)
+    from empty(hist)
+    loop
+        call gcd_step(a, b, hist)
+    until b == 0

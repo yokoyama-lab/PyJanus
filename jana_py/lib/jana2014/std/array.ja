@@ -1,0 +1,48 @@
+// GENERATED from std/array.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure reverse(int a[], int n)
+    if n > 1 then
+        local int i
+            from i == 0
+            do
+                a[i] <=> a[n - 1 - i]
+                i += 1
+            until i + i + 1 >= n
+        delocal int i = n / 2
+    fi n > 1
+
+procedure rotate_left(int a[], int n)
+    if n > 1 then
+        local int i
+            from i == 0
+            do
+                a[i] <=> a[i + 1]
+                i += 1
+            until i + 1 >= n
+        delocal int i = n - 1
+    fi n > 1
+
+procedure xor_into(int dst[], int src[], int n)
+    local int i
+        from i == 0
+        do
+            dst[i] ^= src[i]
+            i += 1
+        until i >= n
+    delocal int i = n
+
+procedure add_into(int dst[], int src[], int n)
+    local int i
+        from i == 0
+        do
+            dst[i] += src[i]
+            i += 1
+        until i >= n
+    delocal int i = n
+
+procedure cswap(int x, int y, int did)
+    if x > y then
+        x <=> y
+        did ^= 1
+    fi did

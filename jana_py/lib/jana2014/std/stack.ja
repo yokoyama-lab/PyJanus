@@ -1,0 +1,14 @@
+// GENERATED from std/stack.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure copy_top(stack s, int x)
+    x += top(s)
+
+procedure move_all(stack src, stack dst)
+    from empty(dst)
+    loop
+        local int x
+            pop(x, src)
+            push(x, dst)
+        delocal int x
+    until empty(src)

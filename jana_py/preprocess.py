@@ -60,12 +60,18 @@ def preprocess_text(
   filename: str,
   text: str,
   include_dirs: list[Path] | None = None,
+  std: str | None = None,
 ) -> PreprocessedText:
   current_path = Path(filename).resolve() if filename not in {"", "-"} else None
   include_stack = [current_path] if current_path is not None else []
-  # User-supplied -I directories take precedence; the bundled stdlib is the
-  # always-available fallback.
-  search_dirs = [Path(d) for d in (include_dirs or [])] + [STDLIB_DIR]
+  # Search order: user `-I` directories, then the dialect-specific bundled
+  # stdlib (e.g. lib/jana2014 for `--std jana2014`), then the canonical janus2026
+  # stdlib (lib/std).  So `#include "std/array.ja"` picks up the right dialect's
+  # copy automatically and falls back to the janus2026 source otherwise.
+  search_dirs = [Path(d) for d in (include_dirs or [])]
+  if std and (STDLIB_DIR / std).is_dir():
+    search_dirs.append(STDLIB_DIR / std)
+  search_dirs.append(STDLIB_DIR)
   return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH, search_dirs) # Pass initial depth and max_depth
 
 

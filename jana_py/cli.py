@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
   phase = "preprocessing"
   try:
     from pathlib import Path as _Path
-    preprocessed = preprocess_text(args.file, text, include_dirs=[_Path(d) for d in args.include_dirs])
+    preprocessed = preprocess_text(args.file, text, include_dirs=[_Path(d) for d in args.include_dirs], std=args.std)
     if timeout_enabled:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)

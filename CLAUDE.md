@@ -38,7 +38,10 @@ python3 tests/jana2014/test_reversibility.py                # unittest-style fil
 A bundled, all-reversible standard library lives in `jana_py/lib/std/` (it ships
 with the package). `#include "std/array.ja"` resolves through the preprocessor's
 search path — relative to the including file first, then any `-I DIR`, then the
-packaged `jana_py/lib`. `preprocess.STDLIB_DIR` points at it. Modules:
+**dialect-specific** stdlib (`jana_py/lib/<std>/`, e.g. `lib/jana2014/`), then the
+canonical janus2026 stdlib (`jana_py/lib/std`). `preprocess.STDLIB_DIR` points at
+`jana_py/lib`; the dialect is threaded via `preprocess_text(..., std=args.std)`.
+Modules:
 
 | module           | procedures |
 |------------------|------------|
@@ -59,6 +62,14 @@ flag bit instead; (2) **history** — operations that discard information (`gcd`
 (a quotient stack, a flag array, a stack of deltas) for `uncall` to replay them
 backwards. Clean accumulators (`sum_into` etc.) need neither: they preserve their
 input, so `uncall` simply subtracts.
+
+The library is authored **once** in janus2026; copies for other dialects are
+*generated* by re-emitting the parsed AST with that dialect's formatter
+(`jana_py/_gen_stdlib.py` → `jana_py/lib/jana2014/std/*.ja`). Edit only the
+janus2026 source, then run `python -m jana_py._gen_stdlib`;
+`tests/janus2026/test_stdlib_dialects.py` asserts the copies are current AND that
+each computes the same store as the janus2026 original — it is the correctness
+check for the AST→dialect-source formatters.
 
 There is no lint step; the package is pure Python (`pyproject.toml` defines
 the `pyjanus` console script → `jana_py.cli:main`). CI
