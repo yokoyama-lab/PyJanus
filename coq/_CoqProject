@@ -26,3 +26,4 @@ RevPipelineArr.v
 RevGolomb.v
 RevVarint.v
 RevZigzag.v
+RevDeltaN.v
