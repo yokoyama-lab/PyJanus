@@ -1,0 +1,36 @@
+// std/sort.ja — reversible sorting for Janus (janus2026 dialect).
+//
+//   #include "std/sort.ja"
+//
+// A sort cannot be reversible on its own: collapsing a permutation to the
+// sorted order discards which permutation it was.  `sort` therefore records
+// every comparison's swap decision (1 = swapped, 0 = not) in `flags`, which is
+// exactly the history needed to undo it: `uncall sort` replays the decisions in
+// reverse and restores the original order, clearing `flags` back to zero.
+//
+// Bubble sort makes n*(n-1)/2 comparisons, so `flags` must enter all-zero with
+// at least that many entries (e.g. for n = 5, flags[10]).
+//
+// The inlined comparator is the robust one: it branches on a[j] > a[j+1] and
+// closes on the recorded flag bit (`fi (flags[k])`), so — unlike a value-only
+// `fi (a[j] < a[j+1])` — it stays reversible even on already-ordered pairs.
+
+void sort(int a[], int n, int flags[]) {
+    if (n > 1) {
+        local int i = 0, int k = 0 {
+            from (i == 0) loop {
+                local int j = 0 {
+                    from (j == 0) loop {
+                        if (a[j] > a[j + 1]) {
+                            a[j] <=> a[j + 1];
+                            flags[k] ^= 1;
+                        } fi (flags[k]);
+                        j += 1;
+                        k += 1;
+                    } until (j + 1 + i >= n)
+                } delocal int j = (n - 1 - i);
+                i += 1;
+            } until (i + 1 >= n)
+        } delocal int i = (n - 1), int k = (n * (n - 1) / 2);
+    } fi (n > 1);
+}

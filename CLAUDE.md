@@ -46,6 +46,8 @@ packaged `jana_py/lib`. `preprocess.STDLIB_DIR` points at it. Modules:
 | `std/bits.ja`    | flip_bit, swap_bits, bit_reverse, rotate_bits_left |
 | `std/math.ja`    | mul_acc, divmod, gcd (reversible Euclid w/ quotient stack) |
 | `std/stack.ja`   | copy_top, move_all |
+| `std/reduce.ja`  | sum_into, dot_into, count_into (preserve input, uncall subtracts) |
+| `std/sort.ja`    | sort (reversible bubble sort recording swap decisions in flags[]) |
 
 Every library procedure must be reversible (`uncall` undoes `call` exactly) and
 have a forward-AND-backward test (`tests/janus2026/test_stdlib_*.py`). Two
