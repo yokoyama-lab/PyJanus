@@ -1,0 +1,40 @@
+// std/reduce.ja — reversible array reductions for Janus (janus2026 dialect).
+//
+//   #include "std/reduce.ja"
+//
+// Each reduction accumulates into an output that should enter 0 and *preserves
+// its input array*, so `uncall` simply subtracts the result back out.  The
+// loops use the `from (i == 0) loop { ... } until (i >= n)` shape, whose body
+// runs zero times when n == 0 (a clean no-op).
+
+// acc += sum of a[0..n-1].  Preserves a.
+void sum_into(int a[], int n, int acc) {
+    local int i = 0 {
+        from (i == 0) loop {
+            acc += a[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// acc += dot product of a and b over [0, n).  Preserves a and b.
+void dot_into(int a[], int b[], int n, int acc) {
+    local int i = 0 {
+        from (i == 0) loop {
+            acc += a[i] * b[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// cnt += number of i in [0, n) with a[i] == val.  Preserves a.
+void count_into(int a[], int n, int val, int cnt) {
+    local int i = 0 {
+        from (i == 0) loop {
+            if (a[i] == val) {
+                cnt += 1;
+            } fi (a[i] == val);
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
