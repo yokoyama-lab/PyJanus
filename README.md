@@ -44,6 +44,43 @@ No external dependencies are required — only Python 3.10+.
 | Preprocessor | `#define`, `#include`, `#ifdef` / `#endif` |
 | Types | `int`, `i8`..`u64`, `bool`, `stack`, `char` |
 
+## Standard Library
+
+PyJanus ships a small **reversible standard library** (it installs with the
+package). Every procedure is reversible — `uncall` undoes `call` exactly:
+
+```janus
+#include "std/array.ja"
+
+void main() {
+    int a[5] = {10, 20, 30, 40, 50};
+    call reverse(a, 5);     // a = {50, 40, 30, 20, 10}
+    uncall reverse(a, 5);   // a = {10, 20, 30, 40, 50}
+}
+```
+
+`#include "std/..."` resolves through the preprocessor's search path: relative
+to the including file first, then any `-I DIR` (repeatable), then the bundled
+library. So the include above works from any directory.
+
+| Module | Procedures |
+|--------|------------|
+| `std/array.ja` | `reverse`, `rotate_left`, `xor_into`, `add_into`, `cswap` |
+| `std/bits.ja` | `flip_bit`, `swap_bits`, `bit_reverse`, `rotate_bits_left` |
+| `std/math.ja` | `mul_acc`, `divmod`, `gcd` (reversible Euclid with a quotient stack) |
+| `std/reduce.ja` | `sum_into`, `dot_into`, `count_into`, `min_into`, `max_into` |
+| `std/sort.ja` | `sort` (reversible bubble sort, recording swap decisions) |
+| `std/stack.ja` | `copy_top`, `move_all` |
+
+Two reversibility patterns recur in the library and are worth knowing:
+
+- **Ancilla flags.** A value-only comparator (`if x > y ... fi x < y`) breaks its
+  reversibility assertion on an already-ordered pair, so `cswap` and `sort`
+  record each swap decision in an extra flag bit.
+- **History.** Operations that discard information (`gcd`, `min_into`, `sort`)
+  are made reversible by keeping just enough history — a quotient stack, a flag
+  array, a stack of deltas — for `uncall` to replay them backwards.
+
 ## Analysis Tools
 
 PyJanus includes five research modules for studying reversible computation:
