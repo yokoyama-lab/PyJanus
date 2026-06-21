@@ -169,6 +169,69 @@ class CodegenRunTests(unittest.TestCase):
         """)
     self.assertEqual(got["s"], 15)
 
+  # --- edge cases of the generated inverse (`uncall`) machinery ---
+
+  def test_uncall_with_value_argument(self) -> None:
+    # uncall passing an expression: the inverse is called with the value-arg temp.
+    got = self._assert_matches("""\
+        procedure add(int a, int b)
+            a += b
+        procedure main()
+            int x
+            int y
+            x += 10
+            y += 3
+            call add(x, y + 1)
+            uncall add(x, y + 1)
+        """)
+    self.assertEqual(got["x"], 10)
+    self.assertEqual(got["y"], 3)
+
+  def test_nested_call_then_uncall(self) -> None:
+    self._assert_matches("""\
+        procedure inc(int a)
+            a += 1
+        procedure twice(int a)
+            call inc(a)
+            call inc(a)
+        procedure main()
+            int x
+            x += 5
+            call twice(x)
+            uncall twice(x)
+        """)
+
+  def test_internal_call_and_uncall_invert(self) -> None:
+    # net's body mixes call and uncall; its inverse must swap both consistently.
+    self._assert_matches("""\
+        procedure inc(int a)
+            a += 1
+        procedure net(int a)
+            call inc(a)
+            call inc(a)
+            uncall inc(a)
+        procedure main()
+            int x
+            x += 5
+            call net(x)
+            uncall net(x)
+        """)
+
+  def test_local_delocal_in_uncalled_proc(self) -> None:
+    got = self._assert_matches("""\
+        procedure dbl(int a)
+            local int t = 0
+                t += a
+                a += t
+            delocal int t = a / 2
+        procedure main()
+            int x
+            x += 4
+            call dbl(x)
+            uncall dbl(x)
+        """)
+    self.assertEqual(got["x"], 4)
+
 
 if __name__ == "__main__":
   unittest.main()
