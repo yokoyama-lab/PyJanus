@@ -97,11 +97,35 @@ Definition acell (d : nat) (r : ref) (i : Z) : loc :=
   | RF k => GA k i  (* dummy; never reached post-subst *)
   end.
 
+(* name-based test: is [l] some cell of the array that [r] denotes at depth [d]?
+   (conservative — ignores the index, like RevArr's occ on array names). *)
+Definition arr_hit (d : nat) (r : ref) (l : loc) : bool :=
+  match l, r with
+  | GA a _, RG n => Nat.eqb a n
+  | GA a _, RN (NG n) => Nat.eqb a n
+  | GA a _, RF k => Nat.eqb a k
+  | LA e a _, RL x => Nat.eqb e d && Nat.eqb a x
+  | LA e a _, RN (NL e' x) => Nat.eqb e e' && Nat.eqb a x
+  | _, _ => false
+  end.
+
+(* if [l] is not in [r]'s array, it cannot be the specific cell [acell d r j]. *)
+Lemma arr_miss : forall d r l j, arr_hit d r l = false -> loceqb (acell d r j) l = false.
+Proof.
+  intros d r l j H; destruct r as [n|x|k|[n|e x]], l as [m|e' y|m i|e' m i];
+    simpl in H |- *; try reflexivity.
+  - now rewrite (Nat.eqb_sym n m), H.
+  - now rewrite (Nat.eqb_sym d e'), (Nat.eqb_sym x m), H.
+  - now rewrite (Nat.eqb_sym k m), H.
+  - now rewrite (Nat.eqb_sym n m), H.
+  - now rewrite (Nat.eqb_sym e e'), (Nat.eqb_sym x m), H.
+Qed.
+
 Inductive aop := OAdd | OSub.
 Definition app (o : aop) (a b : Z) : Z := match o with OAdd => a + b | OSub => a - b end.
 Definition ainv (o : aop) : aop := match o with OAdd => OSub | OSub => OAdd end.
 
-Inductive expr := Cst (z : Z) | Rd (r : ref) | Bin (o : aop) (a b : expr).
+Inductive expr := Cst (z : Z) | Rd (r : ref) | ARd (r : ref) (idx : expr) | Bin (o : aop) (a b : expr).
 
 Inductive stmt :=
 | Skip
@@ -122,22 +146,27 @@ Fixpoint eval (d : nat) (s : store) (e : expr) : Z :=
   match e with
   | Cst z => z
   | Rd r => s (loc_of_ref d r)
+  | ARd r idx => s (acell d r (eval d s idx))
   | Bin o a b => app o (eval d s a) (eval d s b)
   end.
 
-(* does [e] read location [l] at depth [d]? — exact occurrence check *)
+(* does [e] read location [l] at depth [d]?  Exact for scalars; conservative
+   (name-based, index-agnostic) for array reads, via [arr_hit]. *)
 Fixpoint reads (d : nat) (l : loc) (e : expr) : bool :=
   match e with
   | Cst _ => false
   | Rd r => loceqb (loc_of_ref d r) l
+  | ARd r idx => arr_hit d r l || reads d l idx
   | Bin _ a b => reads d l a || reads d l b
   end.
 
 Lemma eval_stable : forall d l v s e, reads d l e = false -> eval d (update s l v) e = eval d s e.
 Proof.
-  intros d l v s; induction e as [z | r | o e1 IH1 e2 IH2]; intro H; simpl in *.
+  intros d l v s; induction e as [z | r | r idx IHidx | o e1 IH1 e2 IH2]; intro H; simpl in *.
   - reflexivity.
   - apply update_neq; rewrite loceqb_sym; exact H.
+  - apply orb_false_iff in H as [Hhit Hidx]. rewrite (IHidx Hidx).
+    apply update_neq; rewrite loceqb_sym; apply arr_miss; exact Hhit.
   - apply orb_false_iff in H as [H1 H2]; rewrite (IH1 H1), (IH2 H2); reflexivity.
 Qed.
 
@@ -189,7 +218,11 @@ Definition subst1 (nms : list nm) (r : ref) : ref :=
   match r with RF i => RN (nth i nms (NG 0)) | _ => r end.
 
 Fixpoint sexpr (nms : list nm) (e : expr) : expr :=
-  match e with Cst z => Cst z | Rd r => Rd (subst1 nms r) | Bin o a b => Bin o (sexpr nms a) (sexpr nms b) end.
+  match e with
+  | Cst z => Cst z | Rd r => Rd (subst1 nms r)
+  | ARd r idx => ARd (subst1 nms r) (sexpr nms idx)
+  | Bin o a b => Bin o (sexpr nms a) (sexpr nms b)
+  end.
 
 Fixpoint subst (nms : list nm) (s : stmt) : stmt :=
   match s with
