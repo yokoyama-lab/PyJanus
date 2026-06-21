@@ -114,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("-e", action="store_true", dest="debug_on_error", help="break into debug mode only when an error occurs")
   parser.add_argument("-s", "--store", action="store_true", dest="show_store", help="print the final store after normal execution")
   parser.add_argument("--no-main", action="store_true", dest="no_main", help="allow a library file without a main procedure (for -a/-c/-i and validation; cannot be executed)")
+  parser.add_argument("-I", dest="include_dirs", metavar="DIR", action="append", default=[], help="add DIR to the `#include` search path (repeatable); the bundled standard library is always searched")
   parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
   parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
@@ -198,7 +199,8 @@ def main(argv: list[str] | None = None) -> int:
   timeout_enabled = timeout_sec > 0
   phase = "preprocessing"
   try:
-    preprocessed = preprocess_text(args.file, text)
+    from pathlib import Path as _Path
+    preprocessed = preprocess_text(args.file, text, include_dirs=[_Path(d) for d in args.include_dirs])
     if timeout_enabled:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)
