@@ -1,0 +1,54 @@
+// std/bits.ja — reversible bit utilities for Janus (janus2026 dialect).
+//
+//   #include "std/bits.ja"
+//
+// All procedures are reversible.  `flip_bit`, `swap_bits` and `bit_reverse`
+// are self-inverse (calling twice is the identity); `rotate_bits_left` rotates
+// the low `width` bits up by one (the top bit wraps to bit 0), and its uncall
+// rotates the other way.
+
+// Toggle bit i of x.  Self-inverse.
+void flip_bit(int x, int i) {
+    x ^= (1 << i);
+}
+
+// Swap bits i and j of x.  Self-inverse.
+//
+// The local `d` is 1 exactly when the two bits differ; flipping both bits then
+// exchanges them.  Because a swap leaves the two bits' XOR unchanged, `d` is
+// recomputed identically at the delocal, so the ancilla closes cleanly.
+void swap_bits(int x, int i, int j) {
+    local int d = ((x >> i) ^ (x >> j)) & 1 {
+        x ^= (d << i);
+        x ^= (d << j);
+    } delocal int d = ((x >> i) ^ (x >> j)) & 1;
+}
+
+// Reverse the low `width` bits of x (bit k <-> bit width-1-k).  Self-inverse.
+// No-op for width <= 1.
+void bit_reverse(int x, int width) {
+    if (width > 1) {
+        local int k = 0 {
+            from (k == 0) {
+                call swap_bits(x, k, width - 1 - k);
+                k += 1;
+            } until (k + k + 1 >= width)
+        } delocal int k = (width / 2);
+    } fi (width > 1);
+}
+
+// Rotate the low `width` bits of x up by one position; the top bit wraps to
+// bit 0.  No-op for width <= 1.  uncall rotates the opposite way.
+//
+// Adjacent transpositions applied from the top down compose into a one-step
+// left rotation: swap(width-2,width-1), ..., swap(0,1).
+void rotate_bits_left(int x, int width) {
+    if (width > 1) {
+        local int k = 0 {
+            from (k == 0) {
+                call swap_bits(x, width - 2 - k, width - 1 - k);
+                k += 1;
+            } until (k + 1 >= width)
+        } delocal int k = (width - 1);
+    } fi (width > 1);
+}
