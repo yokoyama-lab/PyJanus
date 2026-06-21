@@ -43,6 +43,17 @@ SCENARIOS = {
   "minmax":    '#include "std/reduce.ja"\nvoid main(){int a[5]={3,1,4,1,5};int m;int fl[4];stack h;int M;int fl2[4];stack h2;call min_into(a,5,m,fl,h);call max_into(a,5,M,fl2,h2);}\n',
   "sort":      '#include "std/sort.ja"\nvoid main(){int a[5]={3,1,4,1,5};int fl[10];call sort(a,5,fl);}\n',
   "stack":     '#include "std/stack.ja"\nvoid main(){stack s;stack t;int a=1;int b=2;int c=3;int x;push(a,s);push(b,s);push(c,s);call copy_top(s,x);call move_all(s,t);}\n',
+  # Roundtrip (call;uncall) scenarios — these exercise reversibility (uncall)
+  # under jana2014 too, matching the uncall coverage of the janus2026 suites.
+  "rt_reverse":  '#include "std/array.ja"\nvoid main(){int a[5]={5,4,3,2,1};call reverse(a,5);uncall reverse(a,5);}\n',
+  "rt_rotate":   '#include "std/array.ja"\nvoid main(){int a[4]={1,2,3,4};call rotate_left(a,4);uncall rotate_left(a,4);}\n',
+  "rt_cswap":    '#include "std/array.ja"\nvoid main(){int x=5;int y=2;int f;call cswap(x,y,f);uncall cswap(x,y,f);}\n',
+  "rt_bitrev":   '#include "std/bits.ja"\nvoid main(){int x=13;call bit_reverse(x,4);uncall bit_reverse(x,4);}\n',
+  "rt_divmod":   '#include "std/math.ja"\nvoid main(){int n=23;int d=5;int q;int r;call divmod(n,d,q,r);uncall divmod(n,d,q,r);}\n',
+  "rt_gcd":      '#include "std/math.ja"\nvoid main(){int a=12;int b=8;stack h;call gcd(a,b,h);uncall gcd(a,b,h);}\n',
+  "rt_min":      '#include "std/reduce.ja"\nvoid main(){int a[5]={3,1,4,1,5};int m;int fl[4];stack h;call min_into(a,5,m,fl,h);uncall min_into(a,5,m,fl,h);}\n',
+  "rt_sort":     '#include "std/sort.ja"\nvoid main(){int a[5]={3,1,4,1,5};int fl[10];call sort(a,5,fl);uncall sort(a,5,fl);}\n',
+  "rt_moveall":  '#include "std/stack.ja"\nvoid main(){stack s;stack t;int a=1;int b=2;int c=3;push(a,s);push(b,s);push(c,s);call move_all(s,t);uncall move_all(s,t);}\n',
 }
 
 
@@ -90,6 +101,18 @@ def test_include_resolves_to_jana2014_copy(tmp_path):
              '    int a[3]\n    a[0] += 1\n    a[1] += 2\n    a[2] += 3\n'
              '    call reverse(a, 3)\n', tmp_path)
   assert any("a[3] = {3, 2, 1}" in line for line in out)
+
+
+def test_jana2014_reversibility_is_direct(tmp_path):
+  # Beyond the equivalence check: run a call;uncall directly under jana2014 and
+  # assert the store is fully restored (array back, flag cleared, stack empty).
+  out = _run("jana2014",
+             '#include "std/sort.ja"\n\nprocedure main()\n'
+             '    int a[5]\n    int fl[10]\n'
+             '    a[0] += 3\n    a[1] += 1\n    a[2] += 4\n    a[3] += 1\n    a[4] += 5\n'
+             '    call sort(a, 5, fl)\n    uncall sort(a, 5, fl)\n', tmp_path)
+  assert any("a[5] = {3, 1, 4, 1, 5}" in line for line in out)
+  assert any("fl[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}" in line for line in out)
 
 
 def test_janus2026_still_uses_canonical_source(tmp_path):
