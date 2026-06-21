@@ -130,6 +130,7 @@ Inductive expr := Cst (z : Z) | Rd (r : ref) | ARd (r : ref) (idx : expr) | Bin 
 Inductive stmt :=
 | Skip
 | Asn (r : ref) (o : aop) (e : expr)
+| AAsn (r : ref) (idx : expr) (o : aop) (e : expr)   (* array cell: r[idx] op= e *)
 | Seq (s1 s2 : stmt)
 | If (e1 : expr) (s1 s2 : stmt) (e2 : expr)
 | Enter (x : nat) (e : expr)
@@ -189,12 +190,40 @@ Proof.
   rewrite update_shadow, update_same; reflexivity.
 Qed.
 
+(* array assignment r[idx] op= e: admissible when the written cell is read by
+   neither e nor the index idx.  Because [reads] is store-free (name-based on
+   array ids), this condition is automatically stable under the update — no
+   reads_cell_stable lemma needed. *)
+Definition wf_aasn (d : nat) (s : store) (r : ref) (idx e : expr) : bool :=
+  negb (reads d (acell d r (eval d s idx)) e) && negb (reads d (acell d r (eval d s idx)) idx).
+
+Lemma aasn_inv_store : forall d s r idx o e,
+  reads d (acell d r (eval d s idx)) e = false ->
+  reads d (acell d r (eval d s idx)) idx = false ->
+  update (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
+    (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx))
+    (app (ainv o)
+      (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))
+        (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)))
+      (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) e))
+  = s.
+Proof.
+  intros d s r idx o e He Hi.
+  set (c := acell d r (eval d s idx)) in *.
+  set (v0 := app o (s c) (eval d s e)).
+  assert (Hc : acell d r (eval d (update s c v0) idx) = c) by (unfold c; f_equal; apply eval_stable; exact Hi).
+  rewrite Hc, update_eq, (eval_stable d c v0 s e He).
+  replace (app (ainv o) v0 (eval d s e)) with (s c) by (unfold v0; destruct o; simpl; lia).
+  rewrite update_shadow, update_same; reflexivity.
+Qed.
+
 (* ---------- inversion ---------- *)
 
 Fixpoint invert (s : stmt) : stmt :=
   match s with
   | Skip => Skip
   | Asn r o e => Asn r (ainv o) e
+  | AAsn r idx o e => AAsn r idx (ainv o) e
   | Seq a b => Seq (invert b) (invert a)
   | If e1 s1 s2 e2 => If e2 (invert s1) (invert s2) e1
   | Enter x e => Exit x e
@@ -228,6 +257,7 @@ Fixpoint subst (nms : list nm) (s : stmt) : stmt :=
   match s with
   | Skip => Skip
   | Asn r o e => Asn (subst1 nms r) o (sexpr nms e)
+  | AAsn r idx o e => AAsn (subst1 nms r) (sexpr nms idx) o (sexpr nms e)
   | Seq a b => Seq (subst nms a) (subst nms b)
   | If e1 s1 s2 e2 => If (sexpr nms e1) (subst nms s1) (subst nms s2) (sexpr nms e2)
   | Enter x e => Enter x (sexpr nms e)
@@ -250,6 +280,9 @@ Inductive exec : nat -> stmt -> store -> store -> Prop :=
 | E_Skip : forall d s, exec d Skip s s
 | E_Asn  : forall d r o e s, wf_asn d r e = true ->
     exec d (Asn r o e) s (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)))
+| E_AAsn : forall d r idx o e s, wf_aasn d s r idx e = true ->
+    exec d (AAsn r idx o e) s
+      (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
 | E_Seq  : forall d s1 s2 a m b, exec d s1 a m -> exec d s2 m b -> exec d (Seq s1 s2) a b
 | E_IfT  : forall d e1 s1 s2 e2 a b,
     eval d a e1 <> 0 -> exec d s1 a b -> eval d b e2 <> 0 -> exec d (If e1 s1 s2 e2) a b
@@ -281,6 +314,22 @@ Proof.
                        (eval d (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) e)))).
     + intro Hc; rewrite (asn_inv_store d r o e s H) in Hc; exact Hc.
     + apply E_Asn; unfold wf_asn; now apply negb_true_iff.
+  - (* AAsn -> AAsn with the inverse operator *)
+    unfold wf_aasn in H; apply andb_true_iff in H as [He Hi];
+      apply negb_true_iff in He; apply negb_true_iff in Hi.
+    cut (exec d (AAsn r idx (ainv o) e)
+          (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
+          (update (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
+            (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx))
+            (app (ainv o)
+              (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))
+                (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)))
+              (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) e)))).
+    + intro Hc; rewrite (aasn_inv_store d s r idx o e He Hi) in Hc; exact Hc.
+    + apply E_AAsn; unfold wf_aasn.
+      assert (Hcell : acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)
+                    = acell d r (eval d s idx)) by (f_equal; apply eval_stable; exact Hi).
+      rewrite Hcell; apply andb_true_iff; split; apply negb_true_iff; assumption.
   - eapply E_Seq; eassumption.
   - eapply E_IfT; eassumption.
   - eapply E_IfF; eassumption.
@@ -337,6 +386,9 @@ Fixpoint run (f d : nat) (s : stmt) (st : store) {struct f} : option store :=
     | Asn r o e => if wf_asn d r e
                    then Some (update st (loc_of_ref d r) (app o (st (loc_of_ref d r)) (eval d st e)))
                    else None
+    | AAsn r idx o e => if wf_aasn d st r idx e
+                        then Some (update st (acell d r (eval d st idx)) (app o (st (acell d r (eval d st idx))) (eval d st e)))
+                        else None
     | Seq a b => match run f d a st with Some m => run f d b m | None => None end
     | If e1 s1 s2 e2 =>
         if negb (Z.eqb (eval d st e1) 0)
@@ -359,6 +411,7 @@ Proof.
   destruct s; simpl in H.
   - inversion H; subst; apply E_Skip.
   - destruct (wf_asn d r e) eqn:W; [|discriminate]. inversion H; subst. now apply E_Asn.
+  - destruct (wf_aasn d st r idx e) eqn:W; [|discriminate]. inversion H; subst. now apply E_AAsn.
   - destruct (run f d s1 st) as [m|] eqn:R1; [|discriminate].
     eapply E_Seq; [apply IH; exact R1 | apply IH; exact H].
   - destruct (negb (Z.eqb (eval d st e1) 0)) eqn:G1.
