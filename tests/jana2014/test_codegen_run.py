@@ -217,6 +217,19 @@ class CodegenRunTests(unittest.TestCase):
             uncall net(x)
         """)
 
+  def test_size_of_array_parameter(self) -> None:
+    # C++ array params are raw pointers; size(a) must resolve to the declared
+    # length of the bound actual (b has 5 cells).
+    got = self._assert_matches("""\
+        procedure addsize(int a[], int acc)
+            acc += size(a)
+        procedure main()
+            int b[5]
+            int total
+            call addsize(b, total)
+        """)
+    self.assertEqual(got["total"], 5)
+
   def test_local_delocal_in_uncalled_proc(self) -> None:
     got = self._assert_matches("""\
         procedure dbl(int a)

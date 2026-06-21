@@ -50,7 +50,10 @@ def check(ja: str):
     except Exception as e:
         return ("CGERR", f"{type(e).__name__}: {e}")
 
-    prints = "".join(f'std::cout << "@{n}=" << {n} << "\\n";' for n in scal)
+    # Lead with a newline: a `show(...)` left over in the program may print
+    # without a trailing newline, which would merge with the first marker line.
+    prints = 'std::cout << "\\n";'
+    prints += "".join(f'std::cout << "@{n}=" << {n} << "\\n";' for n in scal)
     prints += "".join(f'std::cout << "@{n}[{i}]=" << {n}[{i}] << "\\n";'
                       for n, d in arrs1.items() for i in range(d))
     cpp2 = cpp.replace("return 1;", prints + "return 0;")
