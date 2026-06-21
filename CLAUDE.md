@@ -24,6 +24,7 @@ python3 -m jana_py.cli -c prog.ja        # emit C++ code
 python3 -m jana_py.cli -d prog.ja        # step-debugger output
 python3 -m jana_py.cli --circuit prog.ja --profile prog.ja
 python3 -m jana_py.cli --inverse '{"x": 10}' prog.ja   # final store -> initial store
+python3 -m jana_py.cli -I mylib prog.ja   # add an #include search dir (repeatable)
 
 # Tests (unittest-based, but run under pytest; organized per dialect under tests/<std>/)
 python3 -m pytest tests/ -q
@@ -31,6 +32,18 @@ python3 -m pytest tests/jana2014/test_reversibility.py -q          # single file
 python3 -m pytest tests/jana2014/test_reversibility.py::ReversibilityTests::test_swap   # single test
 python3 tests/jana2014/test_reversibility.py                # unittest-style files also run directly
 ```
+
+### Standard library
+
+A bundled, all-reversible standard library lives in `jana_py/lib/` (it ships
+with the package). `#include "std/array.ja"` resolves through the preprocessor's
+search path — relative to the including file first, then any `-I DIR`, then the
+packaged `jana_py/lib`. `preprocess.STDLIB_DIR` points at it. Every library
+procedure must be reversible (`uncall` undoes `call` exactly) and have a
+forward-AND-backward test (`tests/janus2026/test_stdlib_array.py`). Note the
+reversible-comparator pitfall: a value-only `cswap` with `fi (x < y)` breaks its
+reversibility assertion on an already-ordered pair, so the library's `cswap`
+records its swap decision in an ancilla flag instead.
 
 There is no lint step; the package is pure Python (`pyproject.toml` defines
 the `pyjanus` console script → `jana_py.cli:main`). CI

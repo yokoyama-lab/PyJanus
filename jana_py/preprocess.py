@@ -51,10 +51,22 @@ class ConditionalFrame:
   seen_else: bool = False
 
 
-def preprocess_text(filename: str, text: str) -> PreprocessedText:
+# The bundled standard library ships inside the package so `#include "std/..."`
+# resolves no matter the current working directory.
+STDLIB_DIR = Path(__file__).resolve().parent / "lib"
+
+
+def preprocess_text(
+  filename: str,
+  text: str,
+  include_dirs: list[Path] | None = None,
+) -> PreprocessedText:
   current_path = Path(filename).resolve() if filename not in {"", "-"} else None
   include_stack = [current_path] if current_path is not None else []
-  return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH) # Pass initial depth and max_depth
+  # User-supplied -I directories take precedence; the bundled stdlib is the
+  # always-available fallback.
+  search_dirs = [Path(d) for d in (include_dirs or [])] + [STDLIB_DIR]
+  return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH, search_dirs) # Pass initial depth and max_depth
 
 
 def _preprocess_text(
@@ -65,7 +77,9 @@ def _preprocess_text(
   include_stack: list[Path],
   depth: int, # Add depth parameter
   max_depth: int, # Add max_depth parameter
+  search_dirs: list[Path] | None = None,
 ) -> PreprocessedText:
+  search_dirs = search_dirs or []
   out_lines: list[str] = []
   line_origins: list[LineOrigin] = []
   in_block_comment = False
@@ -148,17 +162,23 @@ def _preprocess_text(
         if not in_preamble:
           raise JanaError(SourcePos(filename, lineno, 1), '#include is only allowed in the file-leading declaration preamble')
         include_target = include_match.group(1)
-        if current_path is None:
-          raise JanaError(SourcePos(filename, lineno, 1), f'Cannot resolve include from stdin: "{include_target}"')
-        include_path = (current_path.parent / include_target).resolve()
+        # Resolution order: relative to the including file (if any), then each
+        # search directory (-I dirs first, then the bundled stdlib).
+        candidates: list[Path] = []
+        if current_path is not None:
+          candidates.append((current_path.parent / include_target).resolve())
+        candidates.extend((d / include_target).resolve() for d in search_dirs)
+        include_path = next((c for c in candidates if c.exists()), None)
+        if include_path is None:
+          if current_path is None and not search_dirs:
+            raise JanaError(SourcePos(filename, lineno, 1), f'Cannot resolve include from stdin: "{include_target}"')
+          raise JanaError(SourcePos(filename, lineno, 1), f'Included file not found: "{include_target}"')
         if include_path in include_stack:
           chain = " -> ".join(str(path) for path in include_stack + [include_path])
           raise JanaError(SourcePos(filename, lineno, 1), f"Cyclic include detected: {chain}")
-        if not include_path.exists():
-          raise JanaError(SourcePos(filename, lineno, 1), f'Included file not found: "{include_target}"')
         included_text = include_path.read_text(encoding="utf-8")
         # Pass depth and max_depth to recursive call for included files
-        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path], depth, max_depth)
+        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path], depth, max_depth, search_dirs)
         if included.text:
           out_lines.append(included.text)
           line_origins.extend(included.line_origins)
