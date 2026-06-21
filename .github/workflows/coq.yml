@@ -27,3 +27,12 @@ jobs:
         run: |
           eval "$(opam env)"
           bash coq/audit.sh
+
+      - name: Build vjanus + conformance vs PyJanus
+        # The standalone verified interpreter (own OCaml parser + extracted run)
+        # must agree with PyJanus on the whole jana2014 corpus.
+        run: |
+          eval "$(opam env)"
+          bash coq/vjanus/build.sh
+          python3 -m pip install -e ".[dev]"
+          python3 -m pytest tests/jana2014/test_vjanus_corpus.py -q
