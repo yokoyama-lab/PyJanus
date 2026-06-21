@@ -22,17 +22,31 @@ Open Scope Z_scope.
 
 (* ---------- locations and store ---------- *)
 
-Inductive loc := G (n : nat) | L (d : nat) (x : nat).
+(* scalar slots G/L, and array cells GA/LA (global / depth-d local), ahead of the
+   array layer that will read and assign them. *)
+Inductive loc :=
+| G  (n : nat)
+| L  (d : nat) (x : nat)
+| GA (a : nat) (i : Z)
+| LA (d : nat) (a : nat) (i : Z).
 
 Definition loceqb (a b : loc) : bool :=
   match a, b with
   | G m, G n => Nat.eqb m n
   | L d x, L e y => Nat.eqb d e && Nat.eqb x y
+  | GA m i, GA n j => Nat.eqb m n && Z.eqb i j
+  | LA d m i, LA e n j => Nat.eqb d e && Nat.eqb m n && Z.eqb i j
   | _, _ => false
   end.
 
 Lemma loceqb_refl : forall l, loceqb l l = true.
-Proof. destruct l; simpl; [now rewrite Nat.eqb_refl | now rewrite !Nat.eqb_refl]. Qed.
+Proof.
+  destruct l; simpl.
+  - now rewrite Nat.eqb_refl.
+  - now rewrite !Nat.eqb_refl.
+  - now rewrite Nat.eqb_refl, Z.eqb_refl.
+  - now rewrite !Nat.eqb_refl, Z.eqb_refl.
+Qed.
 
 Lemma loceqb_true : forall a b, loceqb a b = true -> a = b.
 Proof.
@@ -40,13 +54,19 @@ Proof.
   - now intro H; apply Nat.eqb_eq in H; subst.
   - intro H; apply andb_true_iff in H as [H1 H2];
     apply Nat.eqb_eq in H1; apply Nat.eqb_eq in H2; subst; reflexivity.
+  - intro H; apply andb_true_iff in H as [H1 H2];
+    apply Nat.eqb_eq in H1; apply Z.eqb_eq in H2; subst; reflexivity.
+  - intro H; apply andb_true_iff in H as [H12 H3]; apply andb_true_iff in H12 as [H1 H2];
+    apply Nat.eqb_eq in H1; apply Nat.eqb_eq in H2; apply Z.eqb_eq in H3; subst; reflexivity.
 Qed.
 
 Lemma loceqb_sym : forall a b, loceqb a b = loceqb b a.
 Proof.
-  destruct a as [m|d x], b as [n|e y]; simpl; try reflexivity.
+  destruct a as [m|d x|m i|d m i], b as [n|e y|n j|e n j]; simpl; try reflexivity.
   - apply Nat.eqb_sym.
   - now rewrite (Nat.eqb_sym d e), (Nat.eqb_sym x y).
+  - now rewrite (Nat.eqb_sym m n), (Z.eqb_sym i j).
+  - now rewrite (Nat.eqb_sym d e), (Nat.eqb_sym m n), (Z.eqb_sym i j).
 Qed.
 
 Definition store := loc -> Z.
@@ -68,6 +88,14 @@ Proof. intros; apply functional_extensionality; intro m; unfold update;
 
 Inductive nm := NG (n : nat) | NL (d : nat) (x : nat).
 Inductive ref := RG (n : nat) | RL (x : nat) | RF (i : nat) | RN (a : nm).
+
+(* resolve an array base [ref] + index to its cell, at the current depth *)
+Definition acell (d : nat) (r : ref) (i : Z) : loc :=
+  match r with
+  | RG n => GA n i | RL x => LA d x i
+  | RN (NG n) => GA n i | RN (NL e x) => LA e x i
+  | RF k => GA k i  (* dummy; never reached post-subst *)
+  end.
 
 Inductive aop := OAdd | OSub.
 Definition app (o : aop) (a b : Z) : Z := match o with OAdd => a + b | OSub => a - b end.
