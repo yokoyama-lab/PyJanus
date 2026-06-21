@@ -166,9 +166,15 @@ rocq makefile -f _CoqProject -o Makefile && make
 
 # or a single file
 rocq compile RevCore.v
+
+# build + assert every headline theorem is axiom-clean (this is what CI runs)
+./audit.sh
 ```
 
-The build is light (whole development ≈ 3 s, < 0.5 GB RAM).
+The build is light (whole development ≈ 3 s, < 0.5 GB RAM). `audit.sh` builds the
+development and runs `Print Assumptions` on every headline theorem, failing on any
+axiom beyond `functional_extensionality` or any `Admitted`; it is wired into CI
+(`.github/workflows/coq.yml`), alongside the Python test workflow.
 
 ## Trust / axioms
 
@@ -203,6 +209,26 @@ big-step semantics:
 Combined with `exec_rev`/`exec_injective` (RevCore), reversibility transfers to
 the small-step semantics for free.
 
+## Further results (claims-to-theorem map)
+
+Built on top of the framework; `audit.sh` checks every one of these (with the
+core results) on each build.
+
+| Result | Rocq name | File | Axioms |
+|---|---|---|---|
+| Stack-machine instance (state = `list Z`) | `stack_reversible` | `RevStack.v` | none |
+| 2nd-order cellular-automaton instance | `ca_reversible` | `RevCA.v` | funext |
+| Executable invert correctness (extracted `run`) | `run_invert_iff` | `RevInvert.v` | funext |
+| Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
+| Full abstraction | `full_abstraction` | `RevDenote.v` | none |
+| Inverter = relational converse, denotationally | `denote_invert` | `RevDenote.v` | none |
+| Inverse-monoid / dagger structure | `inv_law1` | `RevInverse.v` | none |
+| Multi-object dagger restriction category (PInj) | `pinj_inverse_law` | `RevCat.v` | none |
+| Bennett reversibilization (compute–copy–uncompute) | `bennett_correct` | `RevBennett.v` | none |
+
+The stack machine and the cellular automaton share **no state space and no
+primitives** with Janus, yet inherit reversibility verbatim from the functor.
+
 ## Scope and next steps
 
 This covers **core Janus** (integer variables, reversible updates
@@ -210,7 +236,9 @@ This covers **core Janus** (integer variables, reversible updates
 `skip`) plus **arrays and `local`/`delocal`** (`RevExt.v`) and **parameterized
 reference procedures** — both as a concrete instance (`RevProc.v`) and in the
 **generic framework** (`RevCoreP.v`). A **verified interpreter** is extracted to
-OCaml (`RevExtract.v`). Note that `RevExt.v`'s array cells carry a resolved
-(constant) index; index-*expression* resolution `A[i]` is a surface concern
-layered above the atoms. Remaining future work: a driver that runs the extracted
-interpreter on `.ja` fixtures and diffs against PyJanus end-to-end.
+OCaml (`RevExtract*.v`) and **differentially tested against PyJanus** end-to-end
+(`harness/`, wired into the Python test suite as
+`tests/jana2014/test_verified_corpus.py`): the two agree on every in-subset
+program of the example corpus. The development also includes a denotational
+semantics with full abstraction, the inverse-category (dagger) structure, and a
+machine-checked Bennett reversibilization (see *Further results* above).
