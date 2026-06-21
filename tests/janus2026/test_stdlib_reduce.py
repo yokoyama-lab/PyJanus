@@ -91,5 +91,51 @@ class TestCountInto:
     assert "cnt = 0" in out
 
 
+class TestMinMaxInto:
+  """min/max are the history-needing reductions: flags + hist record enough to
+  undo them, and the input array is preserved (never modified)."""
+
+  def test_min_value_and_input_preserved(self, tmp_path):
+    out = run_store(_prog(
+      "    int a[5] = {3, 1, 4, 1, 5};\n"
+      "    int m;\n    int flags[4];\n    stack hist;\n"
+      "    call min_into(a, 5, m, flags, hist);\n"), tmp_path)
+    assert "m = 1" in out
+    assert "a[5] = {3, 1, 4, 1, 5}" in out
+
+  def test_max_value(self, tmp_path):
+    out = run_store(_prog(
+      "    int a[5] = {3, 1, 4, 1, 5};\n"
+      "    int m;\n    int flags[4];\n    stack hist;\n"
+      "    call max_into(a, 5, m, flags, hist);\n"), tmp_path)
+    assert "m = 5" in out
+
+  def test_min_roundtrip_clears_history(self, tmp_path):
+    out = run_store(_prog(
+      "    int a[5] = {3, 1, 4, 1, 5};\n"
+      "    int m;\n    int flags[4];\n    stack hist;\n"
+      "    call min_into(a, 5, m, flags, hist);\n"
+      "    uncall min_into(a, 5, m, flags, hist);\n"), tmp_path)
+    assert "m = 0" in out
+    assert "flags[4] = {0, 0, 0, 0}" in out
+    assert "hist = nil" in out
+
+  def test_max_roundtrip(self, tmp_path):
+    out = run_store(_prog(
+      "    int a[4] = {2, 9, 3, 9};\n"
+      "    int m;\n    int flags[3];\n    stack hist;\n"
+      "    call max_into(a, 4, m, flags, hist);\n"
+      "    uncall max_into(a, 4, m, flags, hist);\n"), tmp_path)
+    assert "m = 0" in out
+    assert "hist = nil" in out
+
+  def test_singleton(self, tmp_path):
+    out = run_store(_prog(
+      "    int a[1] = {42};\n"
+      "    int m;\n    int flags[1];\n    stack hist;\n"
+      "    call min_into(a, 1, m, flags, hist);\n"), tmp_path)
+    assert "m = 42" in out
+
+
 if __name__ == "__main__":
   raise SystemExit(pytest.main([__file__, "-q"]))
