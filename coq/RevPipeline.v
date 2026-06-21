@@ -57,3 +57,58 @@ Theorem R_reversible :
 Proof.
   intros Γ p. apply (proj1 (exec_iff Γ R (enc p) (enc (f p)))). apply R_computes_f.
 Qed.
+
+(* ===================================================================== *)
+(** ** さらなる例: in-place アフィン/XOR 全単射の族                        *)
+(* ===================================================================== *)
+
+(* --- 可逆線形ステップ（Fibonacci 用）: (a,b) ↦ (b, a+b) --- *)
+(* Janus: a += b ; swap a b *)
+
+Definition ffib (p : Z * Z) : Z * Z := (snd p, fst p + snd p).
+Definition gfib (p : Z * Z) : Z * Z := (snd p - fst p, fst p).
+Lemma ffib_injective : forall p, gfib (ffib p) = p.
+Proof. intros [a b]; unfold ffib, gfib; simpl; f_equal; ring. Qed.
+
+Definition Rfib : stmt := Seq (Assign 0%nat AAdd (Var 1%nat)) (Swap 0%nat 1%nat).
+
+Theorem Rfib_computes_f :
+  forall (Γ : pname -> stmt) (p : Z * Z),
+    exec Γ Rfib (enc p) (enc (ffib p)).
+Proof.
+  intros Γ [a b]. unfold Rfib.
+  eapply E_Seq.
+  - apply E_Assign. reflexivity.
+  - assert (Hsw :
+      sw (update (enc (a, b)) 0%nat (adenote AAdd (enc (a, b) 0%nat) (eval (enc (a, b)) (Var 1%nat)))) 0%nat 1%nat
+      = enc (ffib (a, b))).
+    { apply functional_extensionality; intro x.
+      unfold enc, update, sw, ffib, eval, adenote; simpl.
+      destruct x as [|[|x]]; simpl; try reflexivity; ring. }
+    rewrite <- Hsw. apply E_Swap.
+Qed.
+
+(* --- XOR（自己逆）: (a,b) ↦ (a, b ⊕ a) --- Janus: b ^= a --- *)
+
+Definition fxor (p : Z * Z) : Z * Z := (fst p, Z.lxor (snd p) (fst p)).
+Lemma fxor_injective : forall p, fxor (fxor p) = p.
+Proof.
+  intros [a b]; unfold fxor; simpl; f_equal.
+  rewrite Z.lxor_assoc, Z.lxor_nilpotent, Z.lxor_0_r; reflexivity.
+Qed.
+
+Definition Rxor : stmt := Assign 1%nat AXor (Var 0%nat).
+
+Theorem Rxor_computes_f :
+  forall (Γ : pname -> stmt) (p : Z * Z),
+    exec Γ Rxor (enc p) (enc (fxor p)).
+Proof.
+  intros Γ [a b].
+  assert (Hs :
+    update (enc (a, b)) 1%nat (adenote AXor (enc (a, b) 1%nat) (eval (enc (a, b)) (Var 0%nat)))
+    = enc (fxor (a, b))).
+  { apply functional_extensionality; intro x.
+    unfold enc, update, fxor, eval, adenote; simpl.
+    destruct x as [|[|x]]; simpl; reflexivity. }
+  unfold Rxor. rewrite <- Hs. apply E_Assign. reflexivity.
+Qed.
