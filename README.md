@@ -61,7 +61,9 @@ void main() {
 
 `#include "std/..."` resolves through the preprocessor's search path: relative
 to the including file first, then any `-I DIR` (repeatable), then the bundled
-library. So the include above works from any directory.
+library. So the include above works from any directory. The library is written
+in janus2026 and re-emitted for other dialects automatically, so the same
+`#include "std/array.ja"` also works under `--std jana2014`.
 
 | Module | Procedures |
 |--------|------------|
