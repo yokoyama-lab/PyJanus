@@ -21,3 +21,6 @@ RevInvert.v
 RevExtractP.v
 RevArr.v
 RevExtractAr.v
+RevPipeline.v
+RevPipelineArr.v
+RevGolomb.v
