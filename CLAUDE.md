@@ -35,15 +35,25 @@ python3 tests/jana2014/test_reversibility.py                # unittest-style fil
 
 ### Standard library
 
-A bundled, all-reversible standard library lives in `jana_py/lib/` (it ships
+A bundled, all-reversible standard library lives in `jana_py/lib/std/` (it ships
 with the package). `#include "std/array.ja"` resolves through the preprocessor's
 search path — relative to the including file first, then any `-I DIR`, then the
-packaged `jana_py/lib`. `preprocess.STDLIB_DIR` points at it. Every library
-procedure must be reversible (`uncall` undoes `call` exactly) and have a
-forward-AND-backward test (`tests/janus2026/test_stdlib_array.py`). Note the
-reversible-comparator pitfall: a value-only `cswap` with `fi (x < y)` breaks its
-reversibility assertion on an already-ordered pair, so the library's `cswap`
-records its swap decision in an ancilla flag instead.
+packaged `jana_py/lib`. `preprocess.STDLIB_DIR` points at it. Modules:
+
+| module           | procedures |
+|------------------|------------|
+| `std/array.ja`   | reverse, rotate_left, xor_into, add_into, cswap |
+| `std/bits.ja`    | flip_bit, swap_bits, bit_reverse, rotate_bits_left |
+| `std/math.ja`    | mul_acc, divmod, gcd (reversible Euclid w/ quotient stack) |
+| `std/stack.ja`   | copy_top, move_all |
+
+Every library procedure must be reversible (`uncall` undoes `call` exactly) and
+have a forward-AND-backward test (`tests/janus2026/test_stdlib_*.py`). Two
+recurring reversibility lessons the library encodes: (1) a value-only comparator
+(`cswap` with `fi (x < y)`) breaks its reversibility assertion on an
+already-ordered pair, so `cswap` records its swap decision in an ancilla flag;
+(2) destructive algorithms (gcd) are made reversible by keeping just enough
+history (the quotient sequence on a stack) to run them backwards.
 
 There is no lint step; the package is pure Python (`pyproject.toml` defines
 the `pyjanus` console script → `jana_py.cli:main`). CI
