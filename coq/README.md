@@ -109,10 +109,36 @@ extensions* are absorbed by the framework **without touching `RevCore.v`**:
   `local x=e'; invert S; delocal x=e` (`invert_LocalBlock`, by computation),
   and `exec_injective` gives reversibility of array/local programs for free.
 
+## Verified clean-reversible construction (contribution ⑤)
+
+A separate layer turns the framework into a **constructive methodology**:
+
+> given a non-reversible spec `f` *proven injective* (a left inverse `g` with
+> `g ∘ f = id`), build a **clean (garbage-free) reversible Janus program** that
+> is *proven correct on the formal semantics* — and get its reversibility **for
+> free** from `exec_iff`.
+
+The pattern (each coder is `spec + injectivity proof ⟹ Janus program +
+`exec`-correctness, reversibility free):
+
+| file | coder | reversibility shape |
+|---|---|---|
+| `RevPipeline.v` | 2-var delta / Fibonacci-step / XOR | in-place affine & self-inverse atoms |
+| `RevPipelineArr.v` | multi-cell delta (Seq **and** a Janus `Loop`, n=3) | array l-values + a real loop |
+| `RevGolomb.v` | Golomb/Rice `n ↦ (n/d, n mod d)` | **divmod consume** (uses `ODiv`/`OMod`) |
+| `RevVarint.v` | LEB128/varint (iterated divmod, fixed 3 digits) | two divmod-consume stages |
+| `RevZigzag.v` | ZigZag `ℤ ↔ ℕ` | a reversible **`If`** (parity exit predicate) |
+| `RevDeltaN.v` | **general length `N`** backward delta | a Janus `Loop` proved by **loop-invariant induction** (`opn`) |
+
+The injectivity proof is reused verbatim as the cleanliness/reversibility
+certificate; `denote`'s `ODiv`/`OMod` are read-only (never inverted), so adding
+them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
+
 ## Files
 
 - `Janus.v` — standalone, self-contained core-Janus development (concrete
-  stores/expressions; the original reference proof).
+  stores/expressions; the original reference proof). `binop` includes read-only
+  `ODiv`/`OMod` (total; used by the construction-pipeline coders).
 - `RevCore.v` — the generic `REV_PRIM` / `RevLang` framework.
 - `RevJanus.v` — Janus as an instance of `RevLang`.
 - `RevToy.v` — a reversible counter over `Z`, a second unrelated instance.
@@ -157,6 +183,13 @@ extensions* are absorbed by the framework **without touching `RevCore.v`**:
 - `RevSmallStep.v` — a small-step (structural operational) semantics for the
   framework, **proved equivalent** to the big-step `exec`
   (`exec Γ s a b ↔ multistep Γ (embed s) a RSkip b`).
+- `RevPipeline.v`, `RevPipelineArr.v`, `RevGolomb.v`, `RevVarint.v`,
+  `RevZigzag.v`, `RevDeltaN.v` — the **verified clean-reversible construction
+  pipeline** (see the section above): proven-injective specs compiled to
+  clean-reversible Janus programs proved correct on `exec`, with reversibility
+  free from `exec_iff`. Covers in-place affine/XOR atoms, array l-values, divmod
+  consume (`ODiv`/`OMod`), a reversible `If`, and a general-`N` `Loop` proved by
+  loop-invariant induction.
 
 ## Building
 

@@ -23,6 +23,7 @@ trap cleanup EXIT
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevInverse RevCat RevBennett.
+Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
@@ -47,6 +48,20 @@ Print Assumptions rst_comp.
 (* Bennett reversibilization *)
 Print Assumptions bennett_correct.
 Print Assumptions bennett_pinj.
+(* verified clean-reversible construction pipeline:
+   proven-injective spec  ==>  proven clean-reversible Janus (exec) + free reversibility *)
+Print Assumptions RevPipeline.R_reversible.
+Print Assumptions RevPipelineArr.Rdelta_reversible.
+Print Assumptions RevPipelineArr.Rloop_reversible.
+Print Assumptions RevGolomb.golomb_encode.
+Print Assumptions RevGolomb.golomb_decode.
+Print Assumptions RevGolomb.f_gr_injective.
+Print Assumptions RevVarint.varint_decode.
+Print Assumptions RevVarint.f_vi_injective.
+Print Assumptions RevZigzag.zigzag_decode.
+Print Assumptions RevZigzag.zig_unzig.
+Print Assumptions RevDeltaN.deltaN_computes.
+Print Assumptions RevDeltaN.deltaN_reversible.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"
