@@ -10,6 +10,7 @@ import copy
 import itertools
 from dataclasses import dataclass, replace
 
+from .ast import ArrayExpr
 from .ast import DeclType
 from .ast import Ident
 from .ast import IntType
@@ -46,10 +47,17 @@ def _extract_store(rt: Runtime) -> dict[str, object]:
   return store
 
 
-def _make_init_expr(value: object) -> "Number | None":
-  """Create an AST init expression for a scalar int value."""
+def _make_init_expr(value: object) -> "Number | ArrayExpr | None":
+  """AST initializer for a value: a scalar int, or a (possibly nested) array."""
+  if isinstance(value, bool):
+    return Number(int(value), _DUMMY_POS)
   if isinstance(value, int):
     return Number(value, _DUMMY_POS)
+  if isinstance(value, list):
+    items = [_make_init_expr(v) for v in value]
+    if any(it is None for it in items):
+      return None
+    return ArrayExpr(items, _DUMMY_POS)
   return None
 
 
@@ -66,17 +74,21 @@ def _build_inverted_main(
   new_vdecls: list[Vdecl] = []
   for vdecl in original_main.vdecls:
     name = vdecl.ident.name
-    if name in final_store:
-      init_expr = _make_init_expr(final_store[name])
-      new_vdecl = Vdecl(
+    value = final_store.get(name)
+    # Seed scalars and arrays from the final store; leave other shapes (e.g.
+    # stacks) with their original declaration.
+    seed = (vdecl.dimensions and isinstance(value, list)) or \
+           (not vdecl.dimensions and isinstance(value, (int, bool)))
+    init_expr = _make_init_expr(value) if seed else None
+    if init_expr is not None:
+      new_vdecls.append(Vdecl(
         decl_type=vdecl.decl_type,
         typ=vdecl.typ,
         ident=vdecl.ident,
         dimensions=vdecl.dimensions,
         init_expr=init_expr,
         pos=vdecl.pos,
-      )
-      new_vdecls.append(new_vdecl)
+      ))
     else:
       new_vdecls.append(vdecl)
 
