@@ -1,0 +1,43 @@
+// std/math.ja — reversible arithmetic for Janus (janus2026 dialect).
+//
+//   #include "std/math.ja"
+//
+// Reversibility note: irreversible textbook functions (abs, min, popcount, a
+// destructive in-place gcd, ...) lose information and cannot be Janus
+// procedures as-is.  The clean reversible shapes are:
+//   * accumulators that *preserve their inputs* (uncall subtracts);
+//   * algorithms that keep just enough history to be undone — here `gcd`
+//     records its quotient sequence on a stack.
+
+// acc += a * b, preserving a and b.  uncall subtracts.
+void mul_acc(int a, int b, int acc) {
+    acc += a * b;
+}
+
+// Quotient and remainder of n / d into q and r (which should enter 0),
+// preserving n and d.  Requires d != 0.  uncall subtracts them back out.
+void divmod(int n, int d, int q, int r) {
+    q += n / d;
+    r += n % d;
+}
+
+// One reversible Euclid step on (a, b) with b != 0: (a, b) -> (b, a % b),
+// pushing the quotient a / b onto `hist` so the step (and the whole loop) can
+// be undone.  Internal helper for `gcd`.
+void gcd_step(int a, int b, stack hist) {
+    a <=> b;                     // now a = old b, b = old a
+    local int quo = b / a {
+        b -= quo * a;            // b = old_a % old_b
+        push(quo, hist);         // hist <- quo, quo := 0
+    } delocal int quo = 0;
+}
+
+// Reversible greatest common divisor of a, b >= 0 (not both zero).  Transforms
+// (a, b) -> (gcd(a, b), 0) and leaves the quotient sequence on `hist`, which is
+// exactly the history needed to run the computation backwards: `uncall gcd`
+// consumes `hist` and restores the original a and b.
+void gcd(int a, int b, stack hist) {
+    from (empty(hist)) loop {
+        call gcd_step(a, b, hist);
+    } until (b == 0)
+}
