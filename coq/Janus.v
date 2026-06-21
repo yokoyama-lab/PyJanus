@@ -77,8 +77,16 @@ Qed.
 (* ************************************************************************* *)
 (** ** Expressions *)
 
-Inductive binop := OAdd | OSub | OMul | OEq | OLt.
+Inductive binop := OAdd | OSub | OMul | OEq | OLt | ODiv | OMod.
 
+(** [denote] is a *total* read-only function on values.  Adding [ODiv]/[OMod]
+    keeps it total ([Z.div a 0 = 0], [Z.modulo a 0 = a]) and does NOT affect
+    reversibility: [binop] only appears inside [eval] (expressions are pure and
+    are never inverted by [invert]).  The reversibility of an update [x op= e]
+    rests solely on the [aop] inverse and the [occurs x e = false] side
+    condition (see [eval_update_notin]), which hold for any expression [e]
+    regardless of which [binop]s it contains.  Cf. [RevArr.v] which already
+    uses the same [ODiv]/[OMod] denotation. *)
 Definition denote (o : binop) (a b : Z) : Z :=
   match o with
   | OAdd => a + b
@@ -86,6 +94,8 @@ Definition denote (o : binop) (a b : Z) : Z :=
   | OMul => a * b
   | OEq  => if Z.eqb a b then 1 else 0
   | OLt  => if Z.ltb a b then 1 else 0
+  | ODiv => Z.div a b
+  | OMod => Z.modulo a b
   end.
 
 Inductive expr :=
@@ -119,6 +129,20 @@ Proof.
   - apply orb_false_iff in H; destruct H as [H1 H2].
     rewrite IHe1 by assumption; rewrite IHe2 by assumption; reflexivity.
 Qed.
+
+(** *** Tests for the [ODiv]/[OMod] additions (computational sanity). *)
+Example denote_div_ex  : denote ODiv 17 5 = 3.  Proof. reflexivity. Qed.
+Example denote_mod_ex  : denote OMod 17 5 = 2.  Proof. reflexivity. Qed.
+Example denote_div0_ex : denote ODiv 17 0 = 0.  Proof. reflexivity. Qed.  (* total *)
+Example denote_mod0_ex : denote OMod 17 0 = 17. Proof. reflexivity. Qed.  (* total *)
+(* divmod identity used by the consume pattern: for d>0, d*(n/d) + n mod d = n. *)
+Example divmod_recovers : forall n d, d > 0 -> d * (n / d) + n mod d = n.
+Proof. intros n d Hd. symmetry. apply Z.div_mod. lia. Qed.
+(* a [binop] with [ODiv] inside an expression still satisfies the side condition
+   that makes [x op= e] reversible (occurs-check is structural, op-agnostic). *)
+Example occurs_div_ex :
+  occurs 2%nat (Bin OAdd (Bin ODiv (Var 0%nat) (Var 1%nat)) (Var 0%nat)) = false.
+Proof. reflexivity. Qed.
 
 (* ************************************************************************* *)
 (** ** Reversible update operators *)
