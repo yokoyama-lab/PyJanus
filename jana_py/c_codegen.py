@@ -71,9 +71,55 @@ def format_struct_def(sdef) -> str:
 # colliding procedures (leaving the common case byte-identical).
 _PROC_RENAMES: dict[str, str] = {}
 
+# Declared length of each array (by name), used to resolve `size(A)` to a
+# constant -- C++ raw-pointer parameters carry no length. Populated per program.
+_ARRAY_LEN: dict[str, int] = {}
+
 
 def _cname(name: str) -> str:
   return _PROC_RENAMES.get(name, name)
+
+
+def _walk_calls(stmts):
+  """Yield every CallStmt/UncallStmt reachable from `stmts`."""
+  for s in stmts:
+    if isinstance(s, (CallStmt, UncallStmt)):
+      yield s
+    for f in ("if_part", "else_part", "do_part", "loop_part", "body"):
+      sub = getattr(s, f, None)
+      if isinstance(sub, list):
+        yield from _walk_calls(sub)
+
+
+def _resolve_array_lengths(program: Program) -> None:
+  """Map array names to their declared length, propagating from main's array
+  declarations to procedure array formals through call sites (to a fixpoint)."""
+  _ARRAY_LEN.clear()
+  if program.main is not None:
+    for vd in program.main.vdecls:
+      if vd.dimensions:
+        try:
+          _ARRAY_LEN[vd.ident.name] = int(format_expr(vd.dimensions[0]))
+        except (ValueError, TypeError):
+          pass            # non-constant dimension: size() stays unresolved
+  pnames = {p.procname.name: [par.ident.name for par in p.params] for p in program.procs}
+  calls = list(_walk_calls(program.main.stmts if program.main else []))
+  for p in program.procs:
+    calls += list(_walk_calls(p.body))
+  changed = True
+  while changed:
+    changed = False
+    for call in calls:
+      formals = pnames.get(call.ident.name)
+      if not formals:
+        continue
+      for i, arg in enumerate(call.args):
+        if i < len(formals) and isinstance(arg, LvalExpr) and not arg.lval.selectors:
+          src = arg.lval.ident.name
+          dst = formals[i]
+          if src in _ARRAY_LEN and dst not in _ARRAY_LEN:
+            _ARRAY_LEN[dst] = _ARRAY_LEN[src]
+            changed = True
 
 
 def format_program(header: str | None, program: Program) -> str:
@@ -87,6 +133,7 @@ def format_program(header: str | None, program: Program) -> str:
   # Callee signatures are needed to emit value arguments (temp type, whether
   # the parameter is `constant`), so thread the proc table down to format_stmt.
   procs = {proc.procname.name: proc for proc in program.procs}
+  _resolve_array_lengths(program)
 
   varnames = {vd.ident.name for vd in (program.main.vdecls if program.main else [])}
   for proc in program.procs:
@@ -336,6 +383,10 @@ def format_expr(expr: Expr) -> str:
   if isinstance(expr, TernaryExpr):
     return f"({format_expr(expr.cond)} ? {format_expr(expr.then_expr)} : {format_expr(expr.else_expr)})"
   if isinstance(expr, SizeExpr):
+    # C++ array parameters are raw pointers with no length; resolve the declared
+    # length to a constant where known.
+    if expr.ident.name in _ARRAY_LEN:
+      return str(_ARRAY_LEN[expr.ident.name])
     return f"{expr.ident.name}.size()"
   if isinstance(expr, ArrayExpr):
     return "{ " + ", ".join(format_expr(item) for item in expr.items) + " }"
