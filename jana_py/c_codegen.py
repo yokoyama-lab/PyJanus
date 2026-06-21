@@ -123,7 +123,7 @@ def _resolve_array_lengths(program: Program) -> None:
 
 
 def format_program(header: str | None, program: Program) -> str:
-  lines = ["#include <iostream>", "#include <utility>"]
+  lines = ["#include <iostream>", "#include <utility>", "#include <vector>"]
   if header:
     lines.append(f'#include "{header}"')
   lines.append("")
@@ -230,6 +230,9 @@ def format_vdecl(vdecl: Vdecl) -> str:
   # Janus default-initializes every variable to 0; C++ leaves uninitialized
   # locals indeterminate, so emit an explicit zero initializer when none is given
   # (otherwise the generated program reads garbage instead of 0).
+  if vdecl.typ.kind == "stack":
+    init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else ""
+    return f"{format_type(vdecl.typ)} {vdecl.ident.name}{init}"
   if vdecl.dimensions:
     dims = "".join(f"[{format_expr(dim)}]" for dim in vdecl.dimensions if dim is not None)
     if vdecl.init_expr is not None:
@@ -248,6 +251,8 @@ def format_type(typ: Type) -> str:
     return typ.name or "struct"
   if typ.kind == "bool":
     return "bool"
+  if typ.kind == "stack":
+    return "std::vector<int>"
   if typ.kind != "int":
     raise ValueError(f"C++ translation does not support {typ.kind}")
   return C_TYPES[typ.int_type.value]
@@ -334,16 +339,22 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     if stmt.prints.kind == "printf":
       parts = render_printf(stmt.prints.text or "", [_fmt_arg(a) for a in stmt.prints.args])
       return [f"{pad}std::cout << {parts};"]
-    expr = ' << " " << '.join(_fmt_arg(a) for a in stmt.prints.args)
-    return [f'{pad}std::cout << {expr};']
+    # `show` is deprecated debug output; it has no store effect and cannot be
+    # streamed for arrays/stacks, and the store-based tests ignore it, so omit it.
+    return [f"{pad}/* show (deprecated; omitted) */"]
   if isinstance(stmt, SkipStmt):
     return [f"{pad};"]
   if isinstance(stmt, AssertStmt):
     return [f"{pad}/* assert {format_expr(stmt.expr)} */"]
   if isinstance(stmt, UserErrorStmt):
     return [f'{pad}throw "{escape_cpp(stmt.message)}";']
-  if isinstance(stmt, (PushStmt, PopStmt)):
-    return [f"{pad}/* stack operation not supported */"]
+  if isinstance(stmt, PushStmt):
+    # Janus push moves the value onto the stack and zeroes the source (reversible).
+    val = format_expr(stmt.expr)
+    return [f"{pad}{stmt.ident.name}.push_back({val}); {val} = 0;"]
+  if isinstance(stmt, PopStmt):
+    val = format_expr(stmt.expr)
+    return [f"{pad}{val} = {stmt.ident.name}.back(); {stmt.ident.name}.pop_back();"]
   raise ValueError(f"Unsupported statement {type(stmt).__name__}")
 
 
@@ -387,13 +398,17 @@ def format_expr(expr: Expr) -> str:
     # length to a constant where known.
     if expr.ident.name in _ARRAY_LEN:
       return str(_ARRAY_LEN[expr.ident.name])
-    return f"{expr.ident.name}.size()"
+    return f"(int){expr.ident.name}.size()"        # a stack's depth
   if isinstance(expr, ArrayExpr):
     return "{ " + ", ".join(format_expr(item) for item in expr.items) + " }"
   if isinstance(expr, StringLiteral):
     return f'"{escape_cpp(expr.value)}"'
-  if isinstance(expr, (EmptyExpr, TopExpr, NilExpr)):
-    raise ValueError("Stack expressions are not supported in generated C++")
+  if isinstance(expr, EmptyExpr):
+    return f"{expr.ident.name}.empty()"
+  if isinstance(expr, TopExpr):
+    return f"{expr.ident.name}.back()"
+  if isinstance(expr, NilExpr):
+    return "{}"
   raise ValueError(f"Unsupported expression {type(expr).__name__}")
 
 

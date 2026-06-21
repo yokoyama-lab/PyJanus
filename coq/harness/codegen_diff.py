@@ -37,7 +37,9 @@ def check(ja: str):
     except Exception as e:                       # interpreter rejects/raises
         return ("SKIP", f"interp: {type(e).__name__}")
 
-    scal = [vd.ident.name for vd in program.main.vdecls if not vd.dimensions]
+    stacks = [vd.ident.name for vd in program.main.vdecls if vd.typ.kind == "stack"]
+    scal = [vd.ident.name for vd in program.main.vdecls
+            if not vd.dimensions and vd.typ.kind != "stack"]
     arrs = {vd.ident.name: [int(d.value) for d in vd.dimensions]
             for vd in program.main.vdecls if vd.dimensions}
     # only 1-D arrays are straightforward to print
@@ -56,6 +58,8 @@ def check(ja: str):
     prints += "".join(f'std::cout << "@{n}=" << {n} << "\\n";' for n in scal)
     prints += "".join(f'std::cout << "@{n}[{i}]=" << {n}[{i}] << "\\n";'
                       for n, d in arrs1.items() for i in range(d))
+    prints += "".join(f'std::cout << "@@{n}=";for(auto _v:{n})std::cout<<_v<<",";std::cout<<"\\n";'
+                      for n in stacks)
     cpp2 = cpp.replace("return 1;", prints + "return 0;")
     if "return 1;" not in cpp:
         return ("SKIP", "no main return marker")
@@ -66,8 +70,12 @@ def check(ja: str):
         return ("CFAIL", comp.stderr.strip().splitlines()[-1] if comp.stderr else "compile error")
     run = subprocess.run(["/tmp/_cgd"], capture_output=True, text=True, timeout=10)
     got = {}
+    got_stacks = {}
     for line in run.stdout.splitlines():
-        if line.startswith("@") and "=" in line:
+        if line.startswith("@@"):                 # a stack dump: @@name=v0,v1,...
+            k, v = line[2:].split("=", 1)
+            got_stacks[k] = [int(x) for x in v.split(",") if x.strip()]
+        elif line.startswith("@") and "=" in line:
             k, v = line[1:].split("=", 1)
             got[k] = int(v)
 
@@ -81,6 +89,11 @@ def check(ja: str):
             ev = int(cells[i]) if i < len(cells) else 0
             if got.get(f"{n}[{i}]") != ev:
                 diffs.append(f"{n}[{i}]: cpp={got.get(f'{n}[{i}]')} interp={ev}")
+    for n in stacks:
+        # the C++ vector is bottom..top (push_back); the interpreter lists top..bottom.
+        cpp_stack = list(reversed(got_stacks.get(n, [])))
+        if cpp_stack != list(store.get(n, [])):
+            diffs.append(f"{n}: cpp={cpp_stack} interp={store.get(n, [])}")
     if diffs:
         return ("WRONG", "; ".join(diffs[:4]))
     return ("PASS", "")

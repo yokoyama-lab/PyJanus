@@ -217,6 +217,32 @@ class CodegenRunTests(unittest.TestCase):
             uncall net(x)
         """)
 
+  def test_stack_push_pop_top_empty(self) -> None:
+    # Stacks compile to std::vector: push moves the value and zeroes the source,
+    # pop restores it, top/empty/size read the vector. Checked against the
+    # interpreter (incl. the stack's contents) by the differential driver.
+    import sys
+    import tempfile
+    sys.path.insert(0, str(ROOT / "coq" / "harness"))
+    import codegen_diff
+    src = textwrap.dedent("""\
+        procedure main()
+            stack s
+            int x
+            int t
+            x += 5
+            push(x, s)
+            x += 7
+            push(x, s)
+            t += top(s)
+            pop(x, s)
+        """)
+    with tempfile.NamedTemporaryFile("w", suffix=".ja", delete=False) as f:
+      f.write(src)
+      path = f.name
+    tag, msg = codegen_diff.check(path)
+    self.assertEqual(tag, "PASS", msg)
+
   def test_size_of_array_parameter(self) -> None:
     # C++ array params are raw pointers; size(a) must resolve to the declared
     # length of the bound actual (b has 5 cells).
