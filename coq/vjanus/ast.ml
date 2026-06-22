@@ -16,8 +16,9 @@ and lval = { lname : string; sels : expr list; fields : string list }
 
 type arg = ALv of lval | AVal of expr
 
-(* local/delocal declaration head: name, whether a stack, initializer (None => 0) *)
-type decl = { dname : string; dis_stack : bool; dinit : expr option }
+(* local/delocal declaration head: name, whether a stack, struct type (if any),
+   initializer (None => 0; for a struct local the init is an l-value to copy) *)
+type decl = { dname : string; dis_stack : bool; dstruct : string option; dinit : expr option }
 
 type stmt =
   | Skip
