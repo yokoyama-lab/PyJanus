@@ -28,6 +28,7 @@ let z = Glue_frame.z_of_int
 (* one name-binding environment: a procedure's formals (positional) and the
    locals introduced within it; [is_main] scopes see globals instead of formals *)
 type scope = {
+  name    : string;                         (* "main" or the procedure's name *)
   is_main : bool;
   formals : (string, int) Hashtbl.t;        (* formal name -> positional index (RF i) *)
   fstacks : (string, int * int) Hashtbl.t;  (* stack formal -> (arr index, top index) *)
@@ -41,15 +42,18 @@ type t = {
   gstacks : (string, int * int) Hashtbl.t;  (* main stack    -> (arr slot, top slot) *)
   mutable nglob : int;
   procmap : (string, int) Hashtbl.t;        (* proc name -> pname index *)
+  pforms  : (string, string list) Hashtbl.t;(* proc name -> formal names, in order *)
+  arrlen  : (string * string, int) Hashtbl.t;(* (scope, array name) -> flat length, for size() *)
   mutable ntmp : int;                       (* fresh names for by-value temps *)
 }
 
 let create () =
   { globals = Hashtbl.create 64; gstacks = Hashtbl.create 16; nglob = 0;
-    procmap = Hashtbl.create 16; ntmp = 0 }
+    procmap = Hashtbl.create 16; pforms = Hashtbl.create 16;
+    arrlen = Hashtbl.create 16; ntmp = 0 }
 
-let new_scope is_main =
-  { is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
+let new_scope name is_main =
+  { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
     locals = Hashtbl.create 8; lstacks = Hashtbl.create 8; nloc = 0 }
 
 let gslot st nm = match Hashtbl.find_opt st.globals nm with
@@ -91,7 +95,11 @@ let ref_of st scp nm : J.ref =
     | Some x -> J.RL (nat x)
     | None ->
       if scp.is_main then J.RG (nat (gslot st nm))
-      else raise (Unsupported ("free variable " ^ nm ^ " in procedure"))
+      (* an unbound name in a procedure (e.g. a typo'd reference in a dead,
+         never-called procedure) becomes a fresh local, as lower.ml's flat slots
+         tolerate it; if the procedure is actually run, a value mismatch is
+         caught by the conformance test rather than silently passing *)
+      else J.RL (nat (local_slot scp nm))
 
 let is_stack st scp nm =
   Hashtbl.mem scp.fstacks nm || Hashtbl.mem scp.lstacks nm
@@ -127,7 +135,9 @@ let rec expr st scp (e : Ast.expr) : J.expr =
               J.ARd (a, J.Bin (J.BSub, J.Rd t, J.Cst (z 1)))   (* arr[top-1] *)
   | Empty nm -> let (_, t) = stack_refs st scp nm in J.Bin (J.BEq, J.Rd t, J.Cst (z 0))
   | Size nm -> if is_stack st scp nm then let (_, t) = stack_refs st scp nm in J.Rd t
-               else raise (Unsupported "size() of array (no length tracking)")
+               else (match Hashtbl.find_opt st.arrlen (scp.name, nm) with
+                     | Some l -> J.Cst (z l)
+                     | None -> raise (Unsupported ("size() of unknown-length array " ^ nm)))
   | Bin (op, a, b) ->
     let l = expr st scp a and r = expr st scp b in
     (match op with
@@ -267,6 +277,40 @@ and seq st scp (ss : Ast.stmt list) : J.stmt =
   | [] -> J.Skip
   | last :: rest -> List.fold_left (fun acc x -> J.Seq (x, acc)) last rest
 
+(* ----- size() propagation: main array decls -> proc formals via call sites ----- *)
+
+let rec collect_calls sc (ss : Ast.stmt list) acc =
+  List.fold_left (fun acc s -> match s with
+    | Call (n, a) | Uncall (n, a) -> (sc, n, a) :: acc
+    | If (_, t1, t2, _) -> collect_calls sc t1 (collect_calls sc t2 acc)
+    | From (_, d, l, _) -> collect_calls sc d (collect_calls sc l acc)
+    | Iterate (_, _, _, _, _, b) -> collect_calls sc b acc
+    | Local (_, b, _) -> collect_calls sc b acc
+    | _ -> acc) acc ss
+
+(* fixpoint: an array passed to a formal gives that formal the same length *)
+let resolve_arrlen st (p : Ast.program) =
+  List.iter (fun (vd : Ast.vdecl) ->
+    if not vd.vis_stack && vd.vdims <> [] then
+      Hashtbl.replace st.arrlen ("main", vd.vname) (List.fold_left ( * ) 1 vd.vdims)) p.mvdecls;
+  let calls = collect_calls "main" p.mstmts
+                (List.fold_left (fun acc pr -> collect_calls pr.procname pr.body acc) [] p.procs) in
+  let changed = ref true in
+  while !changed do
+    changed := false;
+    List.iter (fun (sc, callee, args) ->
+      match Hashtbl.find_opt st.pforms callee with
+      | None -> ()
+      | Some formals ->
+        List.iteri (fun i a -> match a with
+          | ALv { lname; sels = [] } when i < List.length formals ->
+            (match Hashtbl.find_opt st.arrlen (sc, lname) with
+             | Some l when not (Hashtbl.mem st.arrlen (callee, List.nth formals i)) ->
+               Hashtbl.replace st.arrlen (callee, List.nth formals i) l; changed := true
+             | _ -> ())
+          | _ -> ()) args) calls
+  done
+
 (* ----- program ----- *)
 
 type layout = {
@@ -278,13 +322,16 @@ type layout = {
 let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let st = create () in
   List.iteri (fun i pr -> Hashtbl.replace st.procmap pr.procname i) p.procs;
+  List.iter (fun pr -> Hashtbl.replace st.pforms pr.procname
+                (List.map (fun (par : Ast.param) -> par.pname) pr.params)) p.procs;
+  resolve_arrlen st p;
   (* lower every procedure body in its own scope (formals positional, fresh locals) *)
   let procs = List.map (fun pr ->
-    let scp = new_scope false in
+    let scp = new_scope pr.procname false in
     add_formals scp pr.params;
     seq st scp pr.body) p.procs in
   (* main: declared variables are globals; reject arrays/stacks for now *)
-  let mscp = new_scope true in
+  let mscp = new_scope "main" true in
   let scalars = ref [] and arrays = ref [] and stks = ref [] and inits = ref [] in
   (* array initializer: walk the nested aggregate, writing each leaf into the
      Cantor-folded flat cell *)
