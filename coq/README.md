@@ -170,6 +170,20 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   check would reject.
 - `RevExtractAr.v` — the verified computable interpreter for `RevArr`
   (`run_sound` vs. `RevArr.exec`), extracted to `janus_arr.ml`.
+- `RevFrame.v` — Janus with **frame-stacked locals**: locals live in
+  depth-indexed frames (`L d x`), so a procedure that **recurses while
+  declaring a `local`** gets fresh storage per activation (the flat `RevArr`
+  model aliases them). By-reference calls resolve each actual to an absolute
+  name at the caller's depth and run the body one frame deeper; formals are
+  positional (`RF i`). Same headline results as the rest
+  (`exec_rev`/`exec_iff`/`exec_det`/`exec_injective`, `run_sound`), and the same
+  index-precise `reads_cell` array discipline as `RevArr`.
+- `RevExtractFrame.v` — the verified computable interpreter for `RevFrame`,
+  extracted to `janus_frame.ml`; it backs the standalone **`vjanus`**
+  interpreter (`coq/vjanus/`, own jana2014 lexer/parser + frame-aware lowering),
+  which matches PyJanus on the whole corpus (37 pass / 1 skip — only a
+  self-referential `delocal` remains) with no Python at runtime. See
+  `coq/vjanus/README.md`.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
