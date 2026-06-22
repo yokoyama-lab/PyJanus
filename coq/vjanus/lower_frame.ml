@@ -226,13 +226,20 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
 and call st scp forward n args =
   let idx = match Hashtbl.find_opt st.procmap n with
     | Some i -> i | None -> raise (Unsupported ("unknown procedure " ^ n)) in
-  let refs = ref [] and valwraps = ref [] in
+  let refs = ref [] and valwraps = ref [] and cellswaps = ref [] in
   List.iter (fun a -> match a with
     | ALv { lname; sels = [] } when is_stack st scp lname ->
       (* a stack actual expands to its two refs, arr then top *)
       let (ar, tr) = stack_refs st scp lname in refs := tr :: ar :: !refs
     | ALv { lname; sels = [] } -> refs := ref_of st scp lname :: !refs
-    | ALv _ -> raise (Unsupported "array-cell argument")
+    | ALv lv ->
+      (* an array-cell actual A[i]: swap it into a fresh local temp, pass the
+         temp by reference, swap back after the call (the core has no by-cell
+         reference, and no Swap — the exchange is an XOR triple) *)
+      st.ntmp <- st.ntmp + 1;
+      let x = local_slot scp (Printf.sprintf "__c%d" st.ntmp) in
+      cellswaps := (lv, x) :: !cellswaps;
+      refs := J.RL (nat x) :: !refs
     | AVal e ->
       st.ntmp <- st.ntmp + 1;
       let x = local_slot scp (Printf.sprintf "__v%d" st.ntmp) in
@@ -243,8 +250,17 @@ and call st scp forward n args =
     if forward then J.Call (nat idx, Glue_frame.ref_list refs)
     else J.Uncall (nat idx, Glue_frame.ref_list refs) in
   (* by-value args: wrap the call in [Enter t = e … Exit t = e] on a fresh local *)
-  List.fold_left (fun acc (x, e) -> J.Seq (J.Enter (nat x, e), J.Seq (acc, J.Exit (nat x, e))))
-    base !valwraps
+  let base = List.fold_left
+    (fun acc (x, e) -> J.Seq (J.Enter (nat x, e), J.Seq (acc, J.Exit (nat x, e))))
+    base !valwraps in
+  (* array-cell args: wrap the call in [A[i] <-> t … A[i] <-> t] (XOR swap) *)
+  let xor_swap lv x =
+    let tref = J.RL (nat x) in
+    J.Seq (assign_lv st scp lv J.OXor (J.Rd tref),
+           J.Seq (J.Asn (tref, J.OXor, lv_read st scp lv),
+                  assign_lv st scp lv J.OXor (J.Rd tref))) in
+  List.fold_left (fun acc (lv, x) -> J.Seq (xor_swap lv x, J.Seq (acc, xor_swap lv x)))
+    base !cellswaps
 
 and seq st scp (ss : Ast.stmt list) : J.stmt =
   match List.rev_map (stmt st scp) ss with
