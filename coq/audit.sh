@@ -23,6 +23,7 @@ trap cleanup EXIT
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevInverse RevCat RevBennett.
+Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
@@ -34,9 +35,16 @@ Print Assumptions stack_reversible.
 Print Assumptions stack_invert_correct.
 Print Assumptions ca_reversible.
 (* executable interpreter: soundness + completeness + inverse correctness *)
-Print Assumptions run_sound.
+Print Assumptions RevExtract.run_sound.
 Print Assumptions run_complete.
 Print Assumptions run_invert_iff.
+(* arrays core + its extracted interpreter *)
+Print Assumptions RevArr.exec_injective.
+Print Assumptions RevExtractAr.run_sound.
+(* frame-stacked core (recursion with locals) + its extracted interpreter *)
+Print Assumptions RevFrame.exec_injective.
+Print Assumptions RevFrame.exec_iff.
+Print Assumptions RevFrame.run_sound.
 (* denotational: adequacy + full abstraction + inverter = converse *)
 Print Assumptions DnS.adequacy.
 Print Assumptions DnS.full_abstraction.
