@@ -181,8 +181,9 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
 - `RevExtractFrame.v` — the verified computable interpreter for `RevFrame`,
   extracted to `janus_frame.ml`; it backs the standalone **`vjanus`**
   interpreter (`coq/vjanus/`, own jana2014 lexer/parser + frame-aware lowering),
-  which matches PyJanus on the whole corpus (37 pass / 1 skip — only a
-  self-referential `delocal` remains) with no Python at runtime. See
+  which matches PyJanus on the whole corpus (42 pass / 1 skip — only a
+  self-referential `delocal` remains) with no Python at runtime, including
+  arrays, stacks and structs (all lowered to frame slots). See
   `coq/vjanus/README.md`.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
