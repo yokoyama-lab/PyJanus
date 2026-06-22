@@ -17,8 +17,8 @@
 
 open Janus_frame
 
-let n i = Glue_frame.nat_of_int i
-let c i = Cst (Glue_frame.z_of_int i)
+let n i = Glue.nat_of_int i
+let c i = Cst (Glue.z_of_int i)
 
 (* proc 0: enter then exit its own local 0 with value 5 (net no-op on the store) *)
 let demo_gamma : stmt array = [| Seq (Enter (n 0, c 5), Exit (n 0, c 5)) |]
@@ -31,13 +31,13 @@ let demo : stmt =
 let fail msg = prerr_endline ("frame_smoke FAIL: " ^ msg); exit 1
 
 let () =
-  (match Glue_frame.run_program demo_gamma demo with
+  (match Glue.run_program demo_gamma demo with
    | None -> fail "forward demo returned None (recursion-with-locals not handled)"
    | Some f ->
-     let g0 = Glue_frame.read_global f 0 in
+     let g0 = Glue.read_global f 0 in
      if g0 <> 0 then fail (Printf.sprintf "store not restored: G0 = %d (expected 0)" g0));
   (* the inverse program (Uncall internally inverts gamma 0) must also run *)
-  (match Glue_frame.run_program demo_gamma (invert demo) with
+  (match Glue.run_program demo_gamma (invert demo) with
    | None -> fail "inverse demo returned None"
    | Some _ -> ());
   print_endline "frame_smoke: OK (local live across a call runs through the verified frame core)"

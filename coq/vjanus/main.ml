@@ -1,7 +1,9 @@
-(* main.ml — the `vjanus` CLI: run a jana2014 program through the verified core.
+(* main.ml — the `vjanus` CLI: run a jana2014 program through the verified
+   frame core (depth-indexed locals, so recursion-with-locals works).
 
-   Usage:  vjanus [-s] FILE.ja      run and print the final store (default)
-   The store is printed in PyJanus's `-s` format so results can be compared. *)
+   Usage:  vjanus [-s] FILE.ja     run and print the final store (PyJanus `-s`
+   format), so results compare directly.  Programs outside the frame core's
+   current coverage exit 3 ("unsupported" — the conformance test skips them). *)
 
 let read_file path =
   let ic = open_in_bin path in
@@ -15,16 +17,11 @@ let cantor (combo : int list) : int =
   | [] -> 0
   | x :: rest -> List.fold_left (fun acc j -> (acc + j) * (acc + j + 1) / 2 + j) x rest
 
-let rec ranges dims = match dims with
-  | [] -> [[]]
-  | d :: rest -> let tails = ranges rest in
-                 List.concat_map (fun i -> List.map (fun t -> i :: t) tails) (List.init d (fun k -> k))
-
-(* print one array in PyJanus's nested-brace format *)
+(* print one global array in PyJanus's nested-brace format *)
 let print_array f slot name dims =
   let buf = Buffer.create 64 in
   let rec go prefix dims = match dims with
-    | [] -> Buffer.add_string buf (string_of_int (Glue.read_cell f slot (cantor (List.rev prefix))))
+    | [] -> Buffer.add_string buf (string_of_int (Glue.read_global_cell f slot (cantor (List.rev prefix))))
     | d :: rest ->
       Buffer.add_char buf '{';
       for i = 0 to d - 1 do
@@ -42,12 +39,12 @@ let () =
   let file = ref None in
   List.iter (fun a -> match a with
     | "-s" -> ()
-    | "-i" -> prerr_string "vjanus: -i (invert) not yet implemented\n"; exit 2
     | "-h" | "--help" -> print_string "usage: vjanus [-s] FILE.ja\n"; exit 0
     | _ when String.length a > 0 && a.[0] = '-' ->
       Printf.eprintf "vjanus: unknown option %s\n" a; exit 2
     | _ -> file := Some a) args;
-  let path = match !file with Some p -> p | None -> prerr_string "usage: vjanus [-s] FILE.ja\n"; exit 2 in
+  let path = match !file with
+    | Some p -> p | None -> prerr_string "usage: vjanus [-s] FILE.ja\n"; exit 2 in
   try
     let src = read_file path in
     let toks = Lexer.tokenize src in
@@ -56,14 +53,15 @@ let () =
     (match Glue.run_program procs main with
      | None -> prerr_string "vjanus: interpreter returned NONE (out of fuel or stuck)\n"; exit 1
      | Some f ->
-       List.iter (fun (name, slot) -> Printf.printf "%s = %d\n" name (Glue.read_scalar f slot)) layout.Lower.scalars;
+       List.iter (fun (name, slot) ->
+         Printf.printf "%s = %d\n" name (Glue.read_global f slot)) layout.Lower.scalars;
        List.iter (fun (name, slot, dims) -> print_array f slot name dims) layout.Lower.arrays;
        (* stacks: print top-first as `<t, …, b]`, or `nil` when empty *)
        List.iter (fun (name, arr, top) ->
-         let depth = Glue.read_scalar f top in
+         let depth = Glue.read_global f top in
          if depth <= 0 then Printf.printf "%s = nil\n" name
          else begin
-           let cells = List.init depth (fun k -> Glue.read_cell f arr (depth - 1 - k)) in
+           let cells = List.init depth (fun k -> Glue.read_global_cell f arr (depth - 1 - k)) in
            Printf.printf "%s = <%s]\n" name (String.concat ", " (List.map string_of_int cells))
          end) layout.Lower.stks)
   with
