@@ -14,3 +14,14 @@ OCAMLC="${OCAMLC:-$(command -v ocamlc)}"
   vjanus/glue.ml vjanus/ast.ml vjanus/lexer.ml vjanus/parser.ml vjanus/lower.ml vjanus/main.ml
 
 echo "built coq/vjanus/vjanus"
+
+# Phase 2a: the frame-stacked core (depth-indexed locals → recursion with locals).
+# Until the lowering targets it, exercise the extracted frame interpreter end to
+# end on the recursion-with-locals case the flat core cannot represent.
+[ -f janus_frame.ml ] || "$ROCQ" compile RevExtractFrame.v >/dev/null
+
+"$OCAMLC" -w -a -I . -I vjanus -o vjanus/frame_smoke \
+  janus_frame.mli janus_frame.ml \
+  vjanus/glue_frame.ml vjanus/frame_smoke.ml
+
+vjanus/frame_smoke
