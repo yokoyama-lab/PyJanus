@@ -121,11 +121,27 @@ Proof.
   - now rewrite (Nat.eqb_sym e e'), (Nat.eqb_sym x m), H.
 Qed.
 
-Inductive aop := OAdd | OSub.
-Definition app (o : aop) (a b : Z) : Z := match o with OAdd => a + b | OSub => a - b end.
-Definition ainv (o : aop) : aop := match o with OAdd => OSub | OSub => OAdd end.
+(* invertible assignment operators (each [Asn]/[AAsn] must be undoable) *)
+Inductive aop := OAdd | OSub | OXor.
+Definition app (o : aop) (a b : Z) : Z :=
+  match o with OAdd => a + b | OSub => a - b | OXor => Z.lxor a b end.
+Definition ainv (o : aop) : aop :=
+  match o with OAdd => OSub | OSub => OAdd | OXor => OXor end.
+(* the key local law: applying the inverse op over the result, with the same
+   right operand, restores the left operand (XOR is its own inverse). *)
+Lemma app_ainv : forall o a b, app (ainv o) (app o a b) b = a.
+Proof. destruct o; intros a b; simpl; try lia.
+  rewrite Z.lxor_assoc, Z.lxor_nilpotent, Z.lxor_0_r; reflexivity. Qed.
 
-Inductive expr := Cst (z : Z) | Rd (r : ref) | ARd (r : ref) (idx : expr) | Bin (o : aop) (a b : expr).
+(* total binary operators for expressions (read-only; no inverse needed), at
+   parity with RevArr's [binop]/[denote] so a frame program computes identically *)
+Inductive binop := BAdd | BSub | BMul | BEq | BLt | BDiv | BMod.
+Definition bden (o : binop) (a b : Z) : Z :=
+  match o with BAdd => a + b | BSub => a - b | BMul => a * b
+    | BEq => if Z.eqb a b then 1 else 0 | BLt => if Z.ltb a b then 1 else 0
+    | BDiv => Z.div a b | BMod => Z.modulo a b end.
+
+Inductive expr := Cst (z : Z) | Rd (r : ref) | ARd (r : ref) (idx : expr) | Bin (o : binop) (a b : expr).
 
 Inductive stmt :=
 | Skip
@@ -149,7 +165,7 @@ Fixpoint eval (d : nat) (s : store) (e : expr) : Z :=
   | Cst z => z
   | Rd r => s (loc_of_ref d r)
   | ARd r idx => s (acell d r (eval d s idx))
-  | Bin o a b => app o (eval d s a) (eval d s b)
+  | Bin o a b => bden o (eval d s a) (eval d s b)
   end.
 
 (* does [e] read location [l] at depth [d]?  Exact for scalars; conservative
@@ -187,7 +203,7 @@ Proof.
   intros d r o e s H. set (l := loc_of_ref d r) in *.
   rewrite update_eq, (eval_stable d l (app o (s l) (eval d s e)) s e H).
   replace (app (ainv o) (app o (s l) (eval d s e)) (eval d s e)) with (s l)
-    by (destruct o; simpl; lia).
+    by (symmetry; apply app_ainv).
   rewrite update_shadow, update_same; reflexivity.
 Qed.
 
@@ -214,7 +230,7 @@ Proof.
   set (v0 := app o (s c) (eval d s e)).
   assert (Hc : acell d r (eval d (update s c v0) idx) = c) by (unfold c; f_equal; apply eval_stable; exact Hi).
   rewrite Hc, update_eq, (eval_stable d c v0 s e He).
-  replace (app (ainv o) v0 (eval d s e)) with (s c) by (unfold v0; destruct o; simpl; lia).
+  replace (app (ainv o) v0 (eval d s e)) with (s c) by (unfold v0; symmetry; apply app_ainv).
   rewrite update_shadow, update_same; reflexivity.
 Qed.
 
