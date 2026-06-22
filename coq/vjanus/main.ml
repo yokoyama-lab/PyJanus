@@ -63,7 +63,12 @@ let () =
          else begin
            let cells = List.init depth (fun k -> Glue.read_global_cell f arr (depth - 1 - k)) in
            Printf.printf "%s = <%s]\n" name (String.concat ", " (List.map string_of_int cells))
-         end) layout.Lower.stks)
+         end) layout.Lower.stks;
+       (* scalar structs: `name = {f1 = v1, f2 = v2, …}` *)
+       List.iter (fun (name, base, offsets) ->
+         let body = String.concat ", "
+           (List.map (fun (fld, off) -> Printf.sprintf "%s = %d" fld (Glue.read_global f (base + off))) offsets) in
+         Printf.printf "%s = {%s}\n" name body) layout.Lower.structs)
   with
   | Lower.Unsupported m -> Printf.eprintf "vjanus: unsupported: %s\n" m; exit 3
   | Ast.Error (m, l, c) -> Printf.eprintf "vjanus: %s (line %d, col %d)\n" m l c; exit 3
