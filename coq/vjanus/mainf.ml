@@ -55,7 +55,15 @@ let () =
      | Some f ->
        List.iter (fun (name, slot) ->
          Printf.printf "%s = %d\n" name (Glue_frame.read_global f slot)) layout.Lower_frame.scalars;
-       List.iter (fun (name, slot, dims) -> print_array f slot name dims) layout.Lower_frame.arrays)
+       List.iter (fun (name, slot, dims) -> print_array f slot name dims) layout.Lower_frame.arrays;
+       (* stacks: print top-first as `<t, …, b]`, or `nil` when empty *)
+       List.iter (fun (name, arr, top) ->
+         let depth = Glue_frame.read_global f top in
+         if depth <= 0 then Printf.printf "%s = nil\n" name
+         else begin
+           let cells = List.init depth (fun k -> Glue_frame.read_global_cell f arr (depth - 1 - k)) in
+           Printf.printf "%s = <%s]\n" name (String.concat ", " (List.map string_of_int cells))
+         end) layout.Lower_frame.stks)
   with
   | Lower_frame.Unsupported m -> Printf.eprintf "vjanusf: unsupported: %s\n" m; exit 3
   | Ast.Error (m, l, c) -> Printf.eprintf "vjanusf: %s (line %d, col %d)\n" m l c; exit 3

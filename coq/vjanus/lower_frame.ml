@@ -29,37 +29,58 @@ let z = Glue_frame.z_of_int
    locals introduced within it; [is_main] scopes see globals instead of formals *)
 type scope = {
   is_main : bool;
-  formals : (string, int) Hashtbl.t;   (* formal name -> positional index (RF i) *)
-  locals  : (string, int) Hashtbl.t;   (* local  name -> local slot     (RL x)  *)
+  formals : (string, int) Hashtbl.t;        (* formal name -> positional index (RF i) *)
+  fstacks : (string, int * int) Hashtbl.t;  (* stack formal -> (arr index, top index) *)
+  locals  : (string, int) Hashtbl.t;        (* local  name -> local slot     (RL x)  *)
+  lstacks : (string, int * int) Hashtbl.t;  (* stack local  -> (arr slot, top slot)   *)
   mutable nloc : int;
 }
 
 type t = {
-  globals : (string, int) Hashtbl.t;   (* main var name -> global slot (RG n) *)
+  globals : (string, int) Hashtbl.t;        (* main var name -> global slot (RG n) *)
+  gstacks : (string, int * int) Hashtbl.t;  (* main stack    -> (arr slot, top slot) *)
   mutable nglob : int;
-  procmap : (string, int) Hashtbl.t;   (* proc name -> pname index *)
-  mutable ntmp : int;                  (* fresh names for by-value temps *)
+  procmap : (string, int) Hashtbl.t;        (* proc name -> pname index *)
+  mutable ntmp : int;                       (* fresh names for by-value temps *)
 }
 
 let create () =
-  { globals = Hashtbl.create 64; nglob = 0; procmap = Hashtbl.create 16; ntmp = 0 }
+  { globals = Hashtbl.create 64; gstacks = Hashtbl.create 16; nglob = 0;
+    procmap = Hashtbl.create 16; ntmp = 0 }
 
 let new_scope is_main =
-  { is_main; formals = Hashtbl.create 8; locals = Hashtbl.create 8; nloc = 0 }
+  { is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
+    locals = Hashtbl.create 8; lstacks = Hashtbl.create 8; nloc = 0 }
 
 let gslot st nm = match Hashtbl.find_opt st.globals nm with
   | Some i -> i
   | None -> let i = st.nglob in Hashtbl.add st.globals nm i; st.nglob <- i + 1; i
 
+(* a stack needs two slots: the backing array and the top counter *)
+let global_stack st nm = match Hashtbl.find_opt st.gstacks nm with
+  | Some p -> p
+  | None -> let a = st.nglob and t = st.nglob + 1 in st.nglob <- st.nglob + 2;
+            Hashtbl.add st.gstacks nm (a, t); (a, t)
+
 let local_slot scp nm = match Hashtbl.find_opt scp.locals nm with
   | Some x -> x
   | None -> let x = scp.nloc in Hashtbl.add scp.locals nm x; scp.nloc <- x + 1; x
 
+let local_stack scp nm = match Hashtbl.find_opt scp.lstacks nm with
+  | Some p -> p
+  | None -> let a = scp.nloc and t = scp.nloc + 1 in scp.nloc <- scp.nloc + 2;
+            Hashtbl.add scp.lstacks nm (a, t); (a, t)
+
 let add_formals scp (params : param list) =
-  List.iteri (fun i (p : param) ->
-    if p.pis_stack then raise (Unsupported "stack parameter");
-    (* an array formal is one positional ref too (RF i); ARd/AAsn index into it *)
-    Hashtbl.replace scp.formals p.pname i) params
+  let i = ref 0 in
+  List.iter (fun (p : param) ->
+    if p.pis_stack then begin
+      (* a stack formal occupies two consecutive positions: arr, then top *)
+      Hashtbl.replace scp.fstacks p.pname (!i, !i + 1); i := !i + 2
+    end else begin
+      (* a scalar/array formal is one positional ref (RF i); ARd/AAsn index it *)
+      Hashtbl.replace scp.formals p.pname !i; incr i
+    end) params
 
 (* classify a scalar/array variable name into a frame [ref] at this scope *)
 let ref_of st scp nm : J.ref =
@@ -71,6 +92,21 @@ let ref_of st scp nm : J.ref =
     | None ->
       if scp.is_main then J.RG (nat (gslot st nm))
       else raise (Unsupported ("free variable " ^ nm ^ " in procedure"))
+
+let is_stack st scp nm =
+  Hashtbl.mem scp.fstacks nm || Hashtbl.mem scp.lstacks nm
+  || (scp.is_main && Hashtbl.mem st.gstacks nm)
+
+(* the (arr, top) ref pair denoting a stack at this scope *)
+let stack_refs st scp nm : J.ref * J.ref =
+  match Hashtbl.find_opt scp.fstacks nm with
+  | Some (a, t) -> (J.RF (nat a), J.RF (nat t))
+  | None ->
+    match Hashtbl.find_opt scp.lstacks nm with
+    | Some (a, t) -> (J.RL (nat a), J.RL (nat t))
+    | None ->
+      if scp.is_main then let (a, t) = global_stack st nm in (J.RG (nat a), J.RG (nat t))
+      else raise (Unsupported ("free stack " ^ nm ^ " in procedure"))
 
 (* ----- expressions ----- *)
 
@@ -87,7 +123,11 @@ let rec expr st scp (e : Ast.expr) : J.expr =
   | Not e -> J.Bin (J.BEq, expr st scp e, J.Cst (z 0))
   | Lv { lname; sels = [] } -> J.Rd (ref_of st scp lname)
   | Lv { lname; sels } -> J.ARd (ref_of st scp lname, index st scp sels)
-  | Top _ | Empty _ | Size _ -> raise (Unsupported "stack expression")
+  | Top nm -> let (a, t) = stack_refs st scp nm in
+              J.ARd (a, J.Bin (J.BSub, J.Rd t, J.Cst (z 1)))   (* arr[top-1] *)
+  | Empty nm -> let (_, t) = stack_refs st scp nm in J.Bin (J.BEq, J.Rd t, J.Cst (z 0))
+  | Size nm -> if is_stack st scp nm then let (_, t) = stack_refs st scp nm in J.Rd t
+               else raise (Unsupported "size() of array (no length tracking)")
   | Bin (op, a, b) ->
     let l = expr st scp a and r = expr st scp b in
     (match op with
@@ -152,8 +192,13 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let incr = J.Asn (xref, J.OAdd, ep) in
     J.Seq (J.Enter (nat x, es),
            J.Seq (J.Loop (istart, J.Skip, J.Seq (seq st scp body, incr), istop), J.Exit (nat x, stop)))
+  | Local (d1, body, d2) when d1.dis_stack ->
+    (* local stack: only the top counter is a scalar local to Enter/Exit; the
+       backing array cells live in the same depth-d frame and are clean (0) on
+       entry and exit (the stack is emptied before delocal) *)
+    let (_, t) = local_stack scp d1.dname in
+    J.Seq (J.Enter (nat t, J.Cst (z 0)), J.Seq (seq st scp body, J.Exit (nat t, J.Cst (z 0))))
   | Local (d1, body, d2) ->
-    if d1.dis_stack then raise (Unsupported "local stack");
     let e0 = match d1.dinit with Some e -> e | None -> Num 0 in
     let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
     if reads_name e0 d1.dname || reads_name e1 d1.dname then
@@ -161,7 +206,20 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let x = local_slot scp d1.dname in
     J.Seq (J.Enter (nat x, expr st scp e0),
            J.Seq (seq st scp body, J.Exit (nat x, expr st scp e1)))
-  | Push _ | Pop _ -> raise (Unsupported "stack operation")
+  | Push (x, s) ->
+    (* arr[top] <-> x (XOR swap), then top += 1 *)
+    let (a, t) = stack_refs st scp s in
+    let cell = J.ARd (a, J.Rd t) and xr = lv_read st scp x in
+    let swp = J.Seq (J.AAsn (a, J.Rd t, J.OXor, xr),
+                     J.Seq (assign_lv st scp x J.OXor cell, J.AAsn (a, J.Rd t, J.OXor, xr))) in
+    J.Seq (swp, J.Asn (t, J.OAdd, J.Cst (z 1)))
+  | Pop (x, s) ->
+    (* top -= 1, then arr[top] <-> x (XOR swap) — the inverse of push *)
+    let (a, t) = stack_refs st scp s in
+    let cell = J.ARd (a, J.Rd t) and xr = lv_read st scp x in
+    let swp = J.Seq (J.AAsn (a, J.Rd t, J.OXor, xr),
+                     J.Seq (assign_lv st scp x J.OXor cell, J.AAsn (a, J.Rd t, J.OXor, xr))) in
+    J.Seq (J.Asn (t, J.OSub, J.Cst (z 1)), swp)
   | Call (n, args) -> call st scp true n args
   | Uncall (n, args) -> call st scp false n args
 
@@ -170,6 +228,9 @@ and call st scp forward n args =
     | Some i -> i | None -> raise (Unsupported ("unknown procedure " ^ n)) in
   let refs = ref [] and valwraps = ref [] in
   List.iter (fun a -> match a with
+    | ALv { lname; sels = [] } when is_stack st scp lname ->
+      (* a stack actual expands to its two refs, arr then top *)
+      let (ar, tr) = stack_refs st scp lname in refs := tr :: ar :: !refs
     | ALv { lname; sels = [] } -> refs := ref_of st scp lname :: !refs
     | ALv _ -> raise (Unsupported "array-cell argument")
     | AVal e ->
@@ -208,29 +269,41 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
     seq st scp pr.body) p.procs in
   (* main: declared variables are globals; reject arrays/stacks for now *)
   let mscp = new_scope true in
-  let scalars = ref [] and arrays = ref [] and inits = ref [] in
+  let scalars = ref [] and arrays = ref [] and stks = ref [] and inits = ref [] in
   (* array initializer: walk the nested aggregate, writing each leaf into the
      Cantor-folded flat cell *)
   let rec emit_init g item prefix = match item with
     | VA items -> List.iteri (fun k sub -> emit_init g sub (prefix @ [k])) items
     | VE e -> inits := J.AAsn (J.RG (nat g), J.Cst (z (cantor_val prefix)), J.OAdd, expr st mscp e) :: !inits in
   List.iter (fun (vd : Ast.vdecl) ->
-    if vd.vis_stack then raise (Unsupported "stack variable");
-    let g = gslot st vd.vname in
-    if vd.vdims <> [] then begin
-      arrays := (vd.vname, g, vd.vdims) :: !arrays;
+    if vd.vis_stack then begin
+      let (a, t) = global_stack st vd.vname in
+      stks := (vd.vname, a, t) :: !stks;
       match vd.vinit with
-      | Some (VA _ as it) -> emit_init g it []
-      | Some (VE _) -> raise (Unsupported "array = scalar initializer")
-      | None -> ()
+      | None -> ()                              (* `stack s` / `= nil` -> empty *)
+      | Some (VA items) ->                       (* `= {bottom, …, top}` *)
+        List.iteri (fun k it -> match it with
+          | VE e -> inits := J.AAsn (J.RG (nat a), J.Cst (z k), J.OAdd, expr st mscp e) :: !inits
+          | VA _ -> raise (Unsupported "nested stack initializer")) items;
+        inits := J.Asn (J.RG (nat t), J.OAdd, J.Cst (z (List.length items))) :: !inits
+      | Some (VE _) -> raise (Unsupported "scalar stack initializer")
     end else begin
-      scalars := (vd.vname, g) :: !scalars;
-      match vd.vinit with
-      | None -> ()
-      | Some (VE e) -> inits := J.Asn (J.RG (nat g), J.OAdd, expr st mscp e) :: !inits
-      | Some (VA _) -> raise (Unsupported "aggregate initializer on scalar")
+      let g = gslot st vd.vname in
+      if vd.vdims <> [] then begin
+        arrays := (vd.vname, g, vd.vdims) :: !arrays;
+        match vd.vinit with
+        | Some (VA _ as it) -> emit_init g it []
+        | Some (VE _) -> raise (Unsupported "array = scalar initializer")
+        | None -> ()
+      end else begin
+        scalars := (vd.vname, g) :: !scalars;
+        match vd.vinit with
+        | None -> ()
+        | Some (VE e) -> inits := J.Asn (J.RG (nat g), J.OAdd, expr st mscp e) :: !inits
+        | Some (VA _) -> raise (Unsupported "aggregate initializer on scalar")
+      end
     end) p.mvdecls;
   let body = seq st mscp p.mstmts in
   let main = List.fold_left (fun acc s0 -> J.Seq (s0, acc)) body !inits in
   (Array.of_list procs, main,
-   { scalars = List.rev !scalars; arrays = List.rev !arrays; stks = [] })
+   { scalars = List.rev !scalars; arrays = List.rev !arrays; stks = List.rev !stks })
