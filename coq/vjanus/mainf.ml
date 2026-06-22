@@ -11,6 +11,29 @@ let read_file path =
   let s = really_input_string ic n in
   close_in ic; s
 
+(* flat index of a multi-dim cell, by the same Cantor pairing lower_frame.ml uses *)
+let cantor (combo : int list) : int =
+  match combo with
+  | [] -> 0
+  | x :: rest -> List.fold_left (fun acc j -> (acc + j) * (acc + j + 1) / 2 + j) x rest
+
+(* print one global array in PyJanus's nested-brace format *)
+let print_array f slot name dims =
+  let buf = Buffer.create 64 in
+  let rec go prefix dims = match dims with
+    | [] -> Buffer.add_string buf (string_of_int (Glue_frame.read_global_cell f slot (cantor (List.rev prefix))))
+    | d :: rest ->
+      Buffer.add_char buf '{';
+      for i = 0 to d - 1 do
+        if i > 0 then Buffer.add_string buf ", ";
+        go (i :: prefix) rest
+      done;
+      Buffer.add_char buf '}'
+  in
+  go [] dims;
+  let dimtag = String.concat "" (List.map (fun d -> Printf.sprintf "[%d]" d) dims) in
+  Printf.printf "%s%s = %s\n" name dimtag (Buffer.contents buf)
+
 let () =
   let args = Array.to_list Sys.argv |> List.tl in
   let file = ref None in
@@ -31,7 +54,8 @@ let () =
      | None -> prerr_string "vjanusf: interpreter returned NONE (out of fuel or stuck)\n"; exit 1
      | Some f ->
        List.iter (fun (name, slot) ->
-         Printf.printf "%s = %d\n" name (Glue_frame.read_global f slot)) layout.Lower_frame.scalars)
+         Printf.printf "%s = %d\n" name (Glue_frame.read_global f slot)) layout.Lower_frame.scalars;
+       List.iter (fun (name, slot, dims) -> print_array f slot name dims) layout.Lower_frame.arrays)
   with
   | Lower_frame.Unsupported m -> Printf.eprintf "vjanusf: unsupported: %s\n" m; exit 3
   | Ast.Error (m, l, c) -> Printf.eprintf "vjanusf: %s (line %d, col %d)\n" m l c; exit 3

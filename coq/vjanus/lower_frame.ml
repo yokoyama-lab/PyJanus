@@ -58,7 +58,7 @@ let local_slot scp nm = match Hashtbl.find_opt scp.locals nm with
 let add_formals scp (params : param list) =
   List.iteri (fun i (p : param) ->
     if p.pis_stack then raise (Unsupported "stack parameter");
-    if p.pis_array then raise (Unsupported "array parameter");
+    (* an array formal is one positional ref too (RF i); ARd/AAsn index into it *)
     Hashtbl.replace scp.formals p.pname i) params
 
 (* classify a scalar/array variable name into a frame [ref] at this scope *)
@@ -86,7 +86,7 @@ let rec expr st scp (e : Ast.expr) : J.expr =
   | Num n -> J.Cst (z n)
   | Not e -> J.Bin (J.BEq, expr st scp e, J.Cst (z 0))
   | Lv { lname; sels = [] } -> J.Rd (ref_of st scp lname)
-  | Lv { sels = _ :: _; _ } -> raise (Unsupported "array read")
+  | Lv { lname; sels } -> J.ARd (ref_of st scp lname, index st scp sels)
   | Top _ | Empty _ | Size _ -> raise (Unsupported "stack expression")
   | Bin (op, a, b) ->
     let l = expr st scp a and r = expr st scp b in
@@ -101,23 +101,45 @@ let rec expr st scp (e : Ast.expr) : J.expr =
      | "||" -> J.Bin (J.BAdd, J.Bin (J.BMul, l, l), J.Bin (J.BMul, r, r))
      | o -> raise (Unsupported ("operator " ^ o)))
 
+(* multi-dim indices fold to one via an injective Cantor pairing (as lower.ml) *)
+and index st scp sels =
+  match List.map (expr st scp) sels with
+  | [] -> J.Cst (z 0)
+  | x :: rest ->
+    List.fold_left (fun acc j ->
+      let sm = J.Bin (J.BAdd, acc, j) in
+      J.Bin (J.BAdd,
+             J.Bin (J.BDiv, J.Bin (J.BMul, sm, J.Bin (J.BAdd, sm, J.Cst (z 1))), J.Cst (z 2)), j))
+      x rest
+
+(* exact integer Cantor fold, for static (initializer) indices *)
+let cantor_val = function
+  | [] -> 0
+  | x :: rest -> List.fold_left (fun acc j -> (acc + j) * (acc + j + 1) / 2 + j) x rest
+
 let aop = function "+=" -> J.OAdd | "-=" -> J.OSub | "^=" -> J.OXor
   | o -> raise (Unsupported ("assign-op " ^ o))
 
-let target_ref st scp (lv : Ast.lval) : J.ref =
-  match lv.sels with [] -> ref_of st scp lv.lname | _ -> raise (Unsupported "array assignment")
+(* emit `lv op= rhs` as a scalar Asn or an array-cell AAsn *)
+let assign_lv st scp (lv : Ast.lval) (o : J.aop) (rhs : J.expr) : J.stmt =
+  match lv.sels with
+  | [] -> J.Asn (ref_of st scp lv.lname, o, rhs)
+  | sels -> J.AAsn (ref_of st scp lv.lname, index st scp sels, o, rhs)
+
+let lv_read st scp (lv : Ast.lval) : J.expr = expr st scp (Lv lv)
 
 (* ----- statements ----- *)
 
 let rec stmt st scp (s : Ast.stmt) : J.stmt =
   match s with
   | Skip -> J.Skip
-  | Assign (lv, op, e) -> J.Asn (target_ref st scp lv, aop op, expr st scp e)
+  | Assign (lv, op, e) -> assign_lv st scp lv (aop op) (expr st scp e)
   | Swap (a, b) ->
-    (* no Swap primitive in the frame core: a^=b; b^=a; a^=b (each reversible) *)
-    let ra = target_ref st scp a and rb = target_ref st scp b in
-    J.Seq (J.Asn (ra, J.OXor, J.Rd rb),
-           J.Seq (J.Asn (rb, J.OXor, J.Rd ra), J.Asn (ra, J.OXor, J.Rd rb)))
+    (* no Swap primitive in the frame core: a^=b; b^=a; a^=b (each reversible),
+       working for scalars and array cells alike *)
+    J.Seq (assign_lv st scp a J.OXor (lv_read st scp b),
+           J.Seq (assign_lv st scp b J.OXor (lv_read st scp a),
+                  assign_lv st scp a J.OXor (lv_read st scp b)))
   | If (e1, t1, t2, e2) -> J.If (expr st scp e1, seq st scp t1, seq st scp t2, expr st scp e2)
   | From (e1, d, l, e2) -> J.Loop (expr st scp e1, seq st scp d, seq st scp l, expr st scp e2)
   | Iterate (v, start, step, endd, exclusive, body) ->
@@ -186,17 +208,29 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
     seq st scp pr.body) p.procs in
   (* main: declared variables are globals; reject arrays/stacks for now *)
   let mscp = new_scope true in
-  let scalars = ref [] and inits = ref [] in
+  let scalars = ref [] and arrays = ref [] and inits = ref [] in
+  (* array initializer: walk the nested aggregate, writing each leaf into the
+     Cantor-folded flat cell *)
+  let rec emit_init g item prefix = match item with
+    | VA items -> List.iteri (fun k sub -> emit_init g sub (prefix @ [k])) items
+    | VE e -> inits := J.AAsn (J.RG (nat g), J.Cst (z (cantor_val prefix)), J.OAdd, expr st mscp e) :: !inits in
   List.iter (fun (vd : Ast.vdecl) ->
     if vd.vis_stack then raise (Unsupported "stack variable");
-    if vd.vdims <> [] then raise (Unsupported "array variable");
     let g = gslot st vd.vname in
-    scalars := (vd.vname, g) :: !scalars;
-    match vd.vinit with
-    | None -> ()
-    | Some (VE e) -> inits := J.Asn (J.RG (nat g), J.OAdd, expr st mscp e) :: !inits
-    | Some (VA _) -> raise (Unsupported "aggregate initializer on scalar")) p.mvdecls;
+    if vd.vdims <> [] then begin
+      arrays := (vd.vname, g, vd.vdims) :: !arrays;
+      match vd.vinit with
+      | Some (VA _ as it) -> emit_init g it []
+      | Some (VE _) -> raise (Unsupported "array = scalar initializer")
+      | None -> ()
+    end else begin
+      scalars := (vd.vname, g) :: !scalars;
+      match vd.vinit with
+      | None -> ()
+      | Some (VE e) -> inits := J.Asn (J.RG (nat g), J.OAdd, expr st mscp e) :: !inits
+      | Some (VA _) -> raise (Unsupported "aggregate initializer on scalar")
+    end) p.mvdecls;
   let body = seq st mscp p.mstmts in
   let main = List.fold_left (fun acc s0 -> J.Seq (s0, acc)) body !inits in
   (Array.of_list procs, main,
-   { scalars = List.rev !scalars; arrays = []; stks = [] })
+   { scalars = List.rev !scalars; arrays = List.rev !arrays; stks = [] })
