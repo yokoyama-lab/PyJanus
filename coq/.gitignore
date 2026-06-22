@@ -33,3 +33,4 @@ harness/driverar
 # vjanus build product (sources are tracked; the binary is not)
 vjanus/vjanus
 vjanus/frame_smoke
+vjanus/vjanusf
