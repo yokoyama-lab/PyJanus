@@ -150,13 +150,19 @@ and local_stmt s =
   Local (d1, body, d2)
 
 and decl s =
-  let is_stack = if at_kw s "stack" then (adv s; true)
+  let dstruct =
+    if at_kw s "struct" then (adv s; Some (ident s))            (* `struct Name x` *)
+    else match (peek s).t with
+         | ID nm when is_struct_name s nm -> adv s; Some nm     (* bare `Name x` *)
+         | _ -> None in
+  let is_stack = if dstruct <> None then false
+                 else if at_kw s "stack" then (adv s; true)
                  else (ignore (opt_kw s "int"); ignore (opt_kw s "bool"); false) in
   let nm = ident s in
   let init = if opt_op s "=" then
       (if at_kw s "nil" then (adv s; None) else Some (expr s))
     else None in
-  { dname = nm; dis_stack = is_stack; dinit = init }
+  { dname = nm; dis_stack = is_stack; dstruct; dinit = init }
 
 and call_target s =
   let n = ident s in
