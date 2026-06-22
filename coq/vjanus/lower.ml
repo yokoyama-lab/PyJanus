@@ -33,6 +33,7 @@ type scope = {
   formals : (string, int) Hashtbl.t;        (* formal name -> positional index (RF i) *)
   fstacks : (string, int * int) Hashtbl.t;  (* stack formal -> (arr index, top index) *)
   fstructs: (string, string * int) Hashtbl.t;(* struct formal -> (struct name, base RF index) *)
+  fsarrays: (string, string * int) Hashtbl.t;(* struct-array formal -> (struct name, RF index of base) *)
   locals  : (string, int) Hashtbl.t;        (* local  name -> local slot     (RL x)  *)
   lstacks : (string, int * int) Hashtbl.t;  (* stack local  -> (arr slot, top slot)   *)
   lstructs: (string, string * int) Hashtbl.t;(* struct local -> (struct name, base local slot) *)
@@ -81,7 +82,7 @@ let struct_fields st sname =
 
 let new_scope name is_main =
   { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
-    fstructs = Hashtbl.create 8; locals = Hashtbl.create 8;
+    fstructs = Hashtbl.create 8; fsarrays = Hashtbl.create 8; locals = Hashtbl.create 8;
     lstacks = Hashtbl.create 8; lstructs = Hashtbl.create 8; nloc = 0 }
 
 let gslot st nm = match Hashtbl.find_opt st.globals nm with
@@ -116,19 +117,27 @@ let add_formals st scp (params : param list) =
       (* a stack formal occupies two consecutive positions: arr, then top *)
       Hashtbl.replace scp.fstacks p.pname (!i, !i + 1); i := !i + 2
     end else match p.pstruct with
+      | Some sname when p.pis_array ->
+        (* a struct-array formal is one positional ref (the array base), like a
+           plain array; element fields index it as elem*nfields + offset *)
+        Hashtbl.replace scp.fsarrays p.pname (sname, !i); incr i
       | Some sname ->
         (* a struct formal occupies one positional ref per field *)
-        if p.pis_array then raise (Unsupported "array-of-struct parameter (not yet)");
         Hashtbl.replace scp.fstructs p.pname (sname, !i); i := !i + struct_size st sname
       | None ->
         (* a scalar/array formal is one positional ref (RF i); ARd/AAsn index it *)
         Hashtbl.replace scp.formals p.pname !i; incr i) params
 
-(* classify a scalar/array variable name into a frame [ref] at this scope *)
+(* classify a scalar/array variable name into a frame [ref] at this scope.
+   A whole struct-array name resolves to its base ref (so it can be passed by
+   reference like a plain array). *)
 let ref_of st scp nm : J.ref =
   match Hashtbl.find_opt scp.formals nm with
   | Some i -> J.RF (nat i)
   | None ->
+    match Hashtbl.find_opt scp.fsarrays nm with
+    | Some (_, idx) -> J.RF (nat idx)
+    | None ->
     match Hashtbl.find_opt scp.locals nm with
     | Some x -> J.RL (nat x)
     | None ->
@@ -239,6 +248,13 @@ and field_access st scp (lv : Ast.lval) : faccess =
   match Hashtbl.find_opt scp.fstructs lv.lname with
   | Some (sname, base) when lv.sels = [] ->     (* struct formal: RF(base + offset) *)
     FScalar (J.RF (nat (base + field_offset st sname f)))
+  | _ ->
+  match Hashtbl.find_opt scp.fsarrays lv.lname with
+  | Some (sname, idx) ->                         (* struct-array formal element field *)
+    let nfields = struct_size st sname in
+    let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)),
+                      J.Cst (z (field_offset st sname f))) in
+    FCell (J.RF (nat idx), cell)
   | _ ->
     match Hashtbl.find_opt st.gsarrays lv.lname with
     | Some (sname, base, nfields) when scp.is_main ->
