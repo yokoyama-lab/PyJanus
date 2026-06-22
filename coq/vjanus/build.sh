@@ -25,3 +25,13 @@ echo "built coq/vjanus/vjanus"
   vjanus/glue_frame.ml vjanus/frame_smoke.ml
 
 vjanus/frame_smoke
+
+# vjanusf: the standalone front-end on the frame core (own parser, frame-aware
+# lowering).  Grows toward replacing vjanus; for now it covers the scalar +
+# control-flow + call subset and skips (exit 3) on arrays/stacks.
+"$OCAMLC" -w -a -I . -I vjanus -o vjanus/vjanusf \
+  janus_frame.mli janus_frame.ml \
+  vjanus/glue_frame.ml vjanus/ast.ml vjanus/lexer.ml vjanus/parser.ml \
+  vjanus/lower_frame.ml vjanus/mainf.ml
+
+echo "built coq/vjanus/vjanusf"
