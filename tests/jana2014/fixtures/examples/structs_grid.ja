@@ -1,0 +1,19 @@
+/* Multi-dimensional array of structs: grid[i][j].field.  Exercises vjanus's
+ * struct-array lowering through the injective Cantor fold for the 2-D index
+ * (cell = cantor(i, j) * nfields + field offset), against PyJanus. */
+
+struct P {
+    int x;
+    int y;
+};
+
+procedure main()
+    P grid[2][2]
+
+    grid[0][0].x += 1
+    grid[0][1].y += 2
+    grid[1][0].x += 3
+    grid[1][1].y += 4
+
+    // cross-element field read
+    grid[0][0].y += grid[1][1].y      // 0 + 4 = 4
