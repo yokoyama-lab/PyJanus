@@ -34,6 +34,28 @@ let print_array f slot name dims =
   let dimtag = String.concat "" (List.map (fun d -> Printf.sprintf "[%d]" d) dims) in
   Printf.printf "%s%s = %s\n" name dimtag (Buffer.contents buf)
 
+(* print an array of structs: each element is `{f = v, ...}`, nested by dims *)
+let print_struct_array f base name dims nfields offsets =
+  let buf = Buffer.create 64 in
+  let rec go prefix dims = match dims with
+    | [] ->
+      let elem = cantor (List.rev prefix) in
+      let body = String.concat ", "
+        (List.map (fun (fld, off) ->
+           Printf.sprintf "%s = %d" fld (Glue.read_global_cell f base (elem * nfields + off))) offsets) in
+      Buffer.add_string buf (Printf.sprintf "{%s}" body)
+    | d :: rest ->
+      Buffer.add_char buf '{';
+      for i = 0 to d - 1 do
+        if i > 0 then Buffer.add_string buf ", ";
+        go (i :: prefix) rest
+      done;
+      Buffer.add_char buf '}'
+  in
+  go [] dims;
+  let dimtag = String.concat "" (List.map (fun d -> Printf.sprintf "[%d]" d) dims) in
+  Printf.printf "%s%s = %s\n" name dimtag (Buffer.contents buf)
+
 let () =
   let args = Array.to_list Sys.argv |> List.tl in
   let file = ref None in
@@ -68,7 +90,10 @@ let () =
        List.iter (fun (name, base, offsets) ->
          let body = String.concat ", "
            (List.map (fun (fld, off) -> Printf.sprintf "%s = %d" fld (Glue.read_global f (base + off))) offsets) in
-         Printf.printf "%s = {%s}\n" name body) layout.Lower.structs)
+         Printf.printf "%s = {%s}\n" name body) layout.Lower.structs;
+       (* arrays of structs: `name[N] = {{f = v, …}, …}` *)
+       List.iter (fun (name, base, dims, nfields, offsets) ->
+         print_struct_array f base name dims nfields offsets) layout.Lower.sarrays)
   with
   | Lower.Unsupported m -> Printf.eprintf "vjanus: unsupported: %s\n" m; exit 3
   | Ast.Error (m, l, c) -> Printf.eprintf "vjanus: %s (line %d, col %d)\n" m l c; exit 3
