@@ -1,11 +1,15 @@
-(* glue.ml — conversions between OCaml ints and the extracted Coq numerals,
-   plus a thin runner around the verified [Janus_arr.run].  The numeral glue
-   mirrors coq/harness/driverar.ml (the proven core uses unary [nat] and binary
-   [positive]/[z]). *)
+(* glue.ml — int <-> Coq-numeral glue plus a thin runner over the verified
+   *frame-stacked* interpreter [Janus_frame.run] (extracted in RevExtractFrame.v).
 
-type 'a olist = 'a list  (* capture the predefined OCaml list before [open] shadows it *)
+   It mirrors glue.ml but targets the Phase 2a core: locations are G/L/GA/LA
+   (global vs. depth-d local, scalar vs. array cell), the procedure table is a
+   bare [nat -> stmt] (formals are positional [RF i], resolved at the call site),
+   and [run] threads a starting frame depth.  This is the runtime substrate the
+   frame-aware lowering will sit on; for now it is exercised by frame_smoke.ml. *)
 
-open Janus_arr
+type 'a olist = 'a list  (* the predefined OCaml list, before [open] shadows it *)
+
+open Janus_frame
 
 let rec nat_of_int n = if n <= 0 then O else S (nat_of_int (n - 1))
 let rec int_of_nat = function O -> 0 | S n -> 1 + int_of_nat n
@@ -17,31 +21,31 @@ let z_of_int n = if n = 0 then Z0 else if n > 0 then Zpos (pos_of_int n) else Zn
 let rec int_of_pos = function XH -> 1 | XO p -> 2 * int_of_pos p | XI p -> 2 * int_of_pos p + 1
 let int_of_z = function Z0 -> 0 | Zpos p -> int_of_pos p | Zneg p -> - (int_of_pos p)
 
-let rec list_of : 'a olist -> 'a Janus_arr.list = function
+let rec list_of : 'a olist -> 'a Janus_frame.list = function
   | [] -> Nil
   | x :: r -> Cons (x, list_of r)
 
-let var_list (xs : int olist) : var Janus_arr.list = list_of (List.map nat_of_int xs)
+let ref_list (rs : ref olist) : ref Janus_frame.list = list_of rs
 
-(* Procedure table: [procs.(i) = (formal-vars, body)].  gamma maps a [pname]
-   (a [nat]) to its entry, falling back to an empty no-op for out-of-range. *)
-let gamma_of (procs : (int olist * stmt) array) : pname -> (var Janus_arr.list, stmt) prod =
+(* Procedure table: [bodies.(i)] is procedure [i]'s body.  [gamma] maps a [pname]
+   (a [nat]) to its body, falling back to a no-op for out-of-range. *)
+let gamma_of (bodies : stmt array) : nat -> stmt =
   fun p ->
     let i = int_of_nat p in
-    if i >= 0 && i < Array.length procs then
-      let (fs, body) = procs.(i) in Pair (var_list fs, body)
-    else Pair (Nil, Skip)
+    if i >= 0 && i < Array.length bodies then bodies.(i) else Skip
 
 let default_fuel = 3_000_000
 
-(* Run [main] under [procs]; return the final store as an int-valued function on
-   (slot, optional index), or None if the interpreter ran out of fuel / got stuck. *)
-let run_program ?(fuel = default_fuel) (procs : (int olist * stmt) array) (main : stmt)
+(* Run [main] under [bodies] from frame depth 0; return the final store as an
+   int-valued function on [loc], or None if the interpreter ran out of fuel /
+   got stuck (e.g. a non-reversible step). *)
+let run_program ?(fuel = default_fuel) (bodies : stmt array) (main : stmt)
     : (loc -> int) option =
   let init : store = fun _ -> Z0 in
-  match run (nat_of_int fuel) (gamma_of procs) main init with
+  match run (gamma_of bodies) (nat_of_int fuel) O main init with
   | Some f -> Some (fun l -> int_of_z (f l))
   | None -> None
 
-let read_scalar (f : loc -> int) (slot : int) : int = f (LS (nat_of_int slot))
-let read_cell   (f : loc -> int) (slot : int) (idx : int) : int = f (LA (nat_of_int slot, z_of_int idx))
+let read_global (f : loc -> int) (slot : int) : int = f (G (nat_of_int slot))
+let read_global_cell (f : loc -> int) (slot : int) (idx : int) : int =
+  f (GA (nat_of_int slot, z_of_int idx))
