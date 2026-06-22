@@ -9,9 +9,10 @@
 open Ast
 open Lexer
 
-type st = { a : token array; mutable p : int }
+type st = { a : token array; mutable p : int; mutable snames : string list }
 
-let mk toks = { a = Array.of_list toks; p = 0 }
+let mk toks = { a = Array.of_list toks; p = 0; snames = [] }
+let is_struct_name s nm = List.mem nm s.snames
 let peek s = s.a.(s.p)
 let peek2 s = if s.p + 1 < Array.length s.a then s.a.(s.p + 1) else s.a.(Array.length s.a - 1)
 let adv s = s.p <- s.p + 1
@@ -76,7 +77,9 @@ and lval s =
   let nm = ident s in
   let sels = ref [] in
   while at_op s "[" do adv s; let e = expr s in eat_op s "]"; sels := e :: !sels done;
-  { lname = nm; sels = List.rev !sels }
+  let fields = ref [] in
+  while at_op s "." do adv s; fields := ident s :: !fields done;
+  { lname = nm; sels = List.rev !sels; fields = List.rev !fields }
 
 (* ----- statements ----- *)
 
@@ -209,9 +212,7 @@ let typ_kw s =
   | KW "stack" -> adv s; `Stack
   | _ -> err s "expected a type"
 
-let rec vdecl s =
-  let k = typ_kw s in
-  let nm = ident s in
+let rec dims_of s =
   let dims = ref [] in
   while at_op s "[" do
     adv s;
@@ -219,11 +220,24 @@ let rec vdecl s =
      | _ -> err s "array dimension must be a constant");
     eat_op s "]"
   done;
-  let init =
-    if opt_op s "=" then
-      (if at_kw s "nil" then (adv s; None) else Some (vinit s))
-    else None in
-  { vname = nm; vis_stack = (k = `Stack); vdims = List.rev !dims; vinit = init }
+  List.rev !dims
+
+and vdecl s =
+  match (peek s).t with
+  | ID nm when is_struct_name s nm ->          (* `StructName v` / `StructName v[k]` *)
+    adv s;
+    let vn = ident s in
+    let dims = dims_of s in
+    { vname = vn; vis_stack = false; vstruct = Some nm; vdims = dims; vinit = None }
+  | _ ->
+    let k = typ_kw s in
+    let nm = ident s in
+    let dims = dims_of s in
+    let init =
+      if opt_op s "=" then
+        (if at_kw s "nil" then (adv s; None) else Some (vinit s))
+      else None in
+    { vname = nm; vis_stack = (k = `Stack); vstruct = None; vdims = dims; vinit = init }
 
 and vinit s =
   if at_op s "{" then begin
@@ -238,7 +252,9 @@ and vinit s =
   end else VE (expr s)
 
 let param s =
-  let k = typ_kw s in
+  let is_struct, kopt, nm0 = match (peek s).t with
+    | ID nm when is_struct_name s nm -> adv s; true, `Int, Some nm
+    | _ -> let k = typ_kw s in false, k, None in
   let nm = ident s in
   let is_array = ref false in
   while at_op s "[" do                        (* int a[] | int a[5] | int a[][] *)
@@ -246,7 +262,8 @@ let param s =
     (match (peek s).t with NUM _ -> adv s | _ -> ());   (* optional, ignored size *)
     eat_op s "]"; is_array := true
   done;
-  { pname = nm; pis_stack = (k = `Stack); pis_array = !is_array }
+  ignore is_struct;
+  { pname = nm; pis_stack = (kopt = `Stack); pis_array = !is_array; pstruct = nm0 }
 
 let params s =
   eat_op s "(";
@@ -264,7 +281,10 @@ let procedure s =
   if nm = "main" then begin
     if at_op s "(" then (eat_op s "("; eat_op s ")");
     let vds = ref [] in
-    while (match (peek s).t with KW ("int" | "stack" | "bool") -> true | _ -> false) do
+    while (match (peek s).t with
+           | KW ("int" | "stack" | "bool") -> true
+           | ID nm when is_struct_name s nm -> true
+           | _ -> false) do
       vds := vdecl s :: !vds
     done;
     let body = stmts s ["procedure"] in
@@ -275,15 +295,36 @@ let procedure s =
     `Proc { procname = nm; params = ps; body }
   end
 
+(* `struct Name { int f1; int f2; ... };` — fields are scalar int/bool *)
+let struct_def s =
+  eat_kw s "struct";
+  let nm = ident s in
+  eat_op s "{";
+  let fields = ref [] in
+  while not (at_op s "}") do
+    (match (peek s).t with KW ("int" | "bool") -> adv s
+     | _ -> err s "struct field type must be int or bool");
+    let fnm = ident s in
+    let fdims = dims_of s in
+    eat_op s ";";
+    fields := { fname = fnm; fdims } :: !fields
+  done;
+  eat_op s "}";
+  ignore (opt_op s ";");                      (* optional trailing ; *)
+  s.snames <- nm :: s.snames;
+  { sname = nm; sfields = List.rev !fields }
+
 let program (toks : token list) : program =
   let s = mk toks in
-  let procs = ref [] and main = ref None in
+  let procs = ref [] and main = ref None and structs = ref [] in
   while not (match (peek s).t with EOF -> true | _ -> false) do
-    if not (at_kw s "procedure") then err s "expected 'procedure'";
-    match procedure s with
-    | `Proc p -> procs := p :: !procs
-    | `Main (vds, body) ->
-      (match !main with Some _ -> err s "multiple main procedures" | None -> main := Some (vds, body))
+    if at_kw s "struct" then structs := struct_def s :: !structs
+    else if at_kw s "procedure" then
+      (match procedure s with
+       | `Proc p -> procs := p :: !procs
+       | `Main (vds, body) ->
+         (match !main with Some _ -> err s "multiple main procedures" | None -> main := Some (vds, body)))
+    else err s "expected 'struct' or 'procedure'"
   done;
   let mvdecls, mstmts = match !main with Some (v, b) -> v, b | None -> [], [] in
-  { procs = List.rev !procs; mvdecls; mstmts }
+  { structs = List.rev !structs; procs = List.rev !procs; mvdecls; mstmts }

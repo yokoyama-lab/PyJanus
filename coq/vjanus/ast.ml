@@ -10,7 +10,9 @@ type expr =
   | Top of string                    (* top(s) *)
   | Empty of string                  (* empty(s) *)
   | Size of string                   (* size(a) *)
-and lval = { lname : string; sels : expr list }   (* sels = array indices *)
+and lval = { lname : string; sels : expr list; fields : string list }
+        (* sels = base array indices; fields = struct field path, e.g.
+           out[j].dist => { lname="out"; sels=[j]; fields=["dist"] } *)
 
 type arg = ALv of lval | AVal of expr
 
@@ -33,12 +35,20 @@ type stmt =
 
 type vinit = VE of expr | VA of vinit list
 
-type vdecl = { vname : string; vis_stack : bool; vdims : int list; vinit : vinit option }
+(* struct type declaration: `struct Name { int f1; int f2; ... }`.
+   jana2014 struct fields are scalars (fdims is kept for forward-compat). *)
+type sfield = { fname : string; fdims : int list }
+type structdef = { sname : string; sfields : sfield list }
 
-type param = { pname : string; pis_stack : bool; pis_array : bool }
+type vdecl = { vname : string; vis_stack : bool; vstruct : string option;
+               vdims : int list; vinit : vinit option }
+
+type param = { pname : string; pis_stack : bool; pis_array : bool;
+               pstruct : string option }
 
 type proc = { procname : string; params : param list; body : stmt list }
 
-type program = { procs : proc list; mvdecls : vdecl list; mstmts : stmt list }
+type program = { structs : structdef list; procs : proc list;
+                 mvdecls : vdecl list; mstmts : stmt list }
 
 exception Error of string * int * int   (* message, line, column *)

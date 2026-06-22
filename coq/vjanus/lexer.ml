@@ -15,7 +15,7 @@ type tok =
 type token = { t : tok; line : int; col : int }
 
 let keywords =
-  [ "procedure"; "main"; "int"; "stack"; "bool";
+  [ "procedure"; "main"; "int"; "stack"; "bool"; "struct";
     "if"; "then"; "else"; "fi";
     "from"; "do"; "loop"; "until";
     "iterate"; "by"; "to"; "end";

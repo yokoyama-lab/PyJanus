@@ -34,6 +34,9 @@ def _parse_store(out: str) -> dict[str, str]:
     m = re.match(r"^(\w+)((?:\[\d+\])+)\s*=\s*(\{.*\})$", line)
     if m:
       d[m.group(1)] = re.sub(r"\s", "", m.group(3)); continue
+    m = re.match(r"^(\w+)\s*=\s*(\{.*\})$", line)        # scalar struct: name = {f = v, ...}
+    if m:
+      d[m.group(1)] = re.sub(r"\s", "", m.group(2)); continue
     m = re.match(r"^(\w+)\s*=\s*<(.*)\]$", line)
     if m:
       d[m.group(1)] = "<" + re.sub(r"\s", "", m.group(2)) + "]"; continue
