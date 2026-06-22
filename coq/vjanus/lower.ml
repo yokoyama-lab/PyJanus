@@ -32,6 +32,7 @@ type scope = {
   is_main : bool;
   formals : (string, int) Hashtbl.t;        (* formal name -> positional index (RF i) *)
   fstacks : (string, int * int) Hashtbl.t;  (* stack formal -> (arr index, top index) *)
+  fstructs: (string, string * int) Hashtbl.t;(* struct formal -> (struct name, base RF index) *)
   locals  : (string, int) Hashtbl.t;        (* local  name -> local slot     (RL x)  *)
   lstacks : (string, int * int) Hashtbl.t;  (* stack local  -> (arr slot, top slot)   *)
   mutable nloc : int;
@@ -67,9 +68,20 @@ let field_offset st sname f =
      | Some o -> o
      | None -> raise (Unsupported (Printf.sprintf "no field %s in struct %s" f sname)))
 
+(* number of (scalar) fields in a struct = how many slots/refs it occupies *)
+let struct_size st sname =
+  match Hashtbl.find_opt st.slayout sname with
+  | Some (_, sz) -> sz | None -> raise (Unsupported ("unknown struct type " ^ sname))
+
+(* the (field, offset) list of a struct, in declaration order *)
+let struct_fields st sname =
+  match Hashtbl.find_opt st.slayout sname with
+  | Some (fields, _) -> fields | None -> raise (Unsupported ("unknown struct type " ^ sname))
+
 let new_scope name is_main =
   { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
-    locals = Hashtbl.create 8; lstacks = Hashtbl.create 8; nloc = 0 }
+    fstructs = Hashtbl.create 8; locals = Hashtbl.create 8;
+    lstacks = Hashtbl.create 8; nloc = 0 }
 
 let gslot st nm = match Hashtbl.find_opt st.globals nm with
   | Some i -> i
@@ -90,16 +102,20 @@ let local_stack scp nm = match Hashtbl.find_opt scp.lstacks nm with
   | None -> let a = scp.nloc and t = scp.nloc + 1 in scp.nloc <- scp.nloc + 2;
             Hashtbl.add scp.lstacks nm (a, t); (a, t)
 
-let add_formals scp (params : param list) =
+let add_formals st scp (params : param list) =
   let i = ref 0 in
   List.iter (fun (p : param) ->
     if p.pis_stack then begin
       (* a stack formal occupies two consecutive positions: arr, then top *)
       Hashtbl.replace scp.fstacks p.pname (!i, !i + 1); i := !i + 2
-    end else begin
-      (* a scalar/array formal is one positional ref (RF i); ARd/AAsn index it *)
-      Hashtbl.replace scp.formals p.pname !i; incr i
-    end) params
+    end else match p.pstruct with
+      | Some sname ->
+        (* a struct formal occupies one positional ref per field *)
+        if p.pis_array then raise (Unsupported "array-of-struct parameter (not yet)");
+        Hashtbl.replace scp.fstructs p.pname (sname, !i); i := !i + struct_size st sname
+      | None ->
+        (* a scalar/array formal is one positional ref (RF i); ARd/AAsn index it *)
+        Hashtbl.replace scp.formals p.pname !i; incr i) params
 
 (* classify a scalar/array variable name into a frame [ref] at this scope *)
 let ref_of st scp nm : J.ref =
@@ -134,6 +150,21 @@ let stack_refs st scp nm : J.ref * J.ref =
 (* a struct field access resolves to either a scalar slot (scalar struct var) or
    an array cell (struct-array element field) *)
 type faccess = FScalar of J.ref | FCell of J.ref * Janus_frame.expr
+
+(* is [nm] a scalar struct-valued variable in this scope? *)
+let is_struct_var st scp nm =
+  Hashtbl.mem scp.fstructs nm || (scp.is_main && Hashtbl.mem st.gstructs nm)
+
+(* the per-field refs of a scalar struct variable, in field-declaration order
+   (used to expand a struct actual into one ref per field at a call site) *)
+let struct_var_field_refs st scp nm : J.ref list =
+  match Hashtbl.find_opt scp.fstructs nm with
+  | Some (sname, base) -> List.map (fun (_, off) -> J.RF (nat (base + off))) (struct_fields st sname)
+  | None ->
+    (match Hashtbl.find_opt st.gstructs nm with
+     | Some (sname, base) when scp.is_main ->
+       List.map (fun (_, off) -> J.RG (nat (base + off))) (struct_fields st sname)
+     | _ -> raise (Unsupported ("struct value " ^ nm)))
 
 (* ----- expressions ----- *)
 
@@ -190,16 +221,20 @@ and index st scp sels =
    (struct-array element field). *)
 and field_access st scp (lv : Ast.lval) : faccess =
   let f = match lv.fields with [f] -> f | _ -> raise (Unsupported "nested struct field access") in
-  match Hashtbl.find_opt st.gsarrays lv.lname with
-  | Some (sname, base, nfields) when scp.is_main ->
-    let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)),
-                      J.Cst (z (field_offset st sname f))) in
-    FCell (J.RG (nat base), cell)
+  match Hashtbl.find_opt scp.fstructs lv.lname with
+  | Some (sname, base) when lv.sels = [] ->     (* struct formal: RF(base + offset) *)
+    FScalar (J.RF (nat (base + field_offset st sname f)))
   | _ ->
-    (match lv.sels, Hashtbl.find_opt st.gstructs lv.lname with
-     | [], Some (sname, base) when scp.is_main ->
-       FScalar (J.RG (nat (base + field_offset st sname f)))
-     | _ -> raise (Unsupported ("struct field access on " ^ lv.lname)))
+    match Hashtbl.find_opt st.gsarrays lv.lname with
+    | Some (sname, base, nfields) when scp.is_main ->
+      let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)),
+                        J.Cst (z (field_offset st sname f))) in
+      FCell (J.RG (nat base), cell)
+    | _ ->
+      (match lv.sels, Hashtbl.find_opt st.gstructs lv.lname with
+       | [], Some (sname, base) when scp.is_main ->
+         FScalar (J.RG (nat (base + field_offset st sname f)))
+       | _ -> raise (Unsupported ("struct field access on " ^ lv.lname)))
 
 (* exact integer Cantor fold, for static (initializer) indices *)
 let cantor_val = function
@@ -282,10 +317,13 @@ and call st scp forward n args =
     | Some i -> i | None -> raise (Unsupported ("unknown procedure " ^ n)) in
   let refs = ref [] and valwraps = ref [] and cellswaps = ref [] in
   List.iter (fun a -> match a with
-    | ALv { lname; sels = [] } when is_stack st scp lname ->
+    | ALv { lname; sels = []; fields = [] } when is_stack st scp lname ->
       (* a stack actual expands to its two refs, arr then top *)
       let (ar, tr) = stack_refs st scp lname in refs := tr :: ar :: !refs
-    | ALv { lname; sels = [] } -> refs := ref_of st scp lname :: !refs
+    | ALv { lname; sels = []; fields = [] } when is_struct_var st scp lname ->
+      (* a struct actual expands to one ref per field, in order *)
+      refs := List.rev_append (struct_var_field_refs st scp lname) !refs
+    | ALv { lname; sels = []; fields = [] } -> refs := ref_of st scp lname :: !refs
     | ALv lv ->
       (* an array-cell actual A[i]: swap it into a fresh local temp, pass the
          temp by reference, swap back after the call (the core has no by-cell
@@ -381,7 +419,7 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   (* lower every procedure body in its own scope (formals positional, fresh locals) *)
   let procs = List.map (fun pr ->
     let scp = new_scope pr.procname false in
-    add_formals scp pr.params;
+    add_formals st scp pr.params;
     seq st scp pr.body) p.procs in
   (* main: declared variables are globals; reject arrays/stacks for now *)
   let mscp = new_scope "main" true in
