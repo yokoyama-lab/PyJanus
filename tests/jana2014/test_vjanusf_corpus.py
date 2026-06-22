@@ -28,11 +28,24 @@ PROGRAMS = sorted(
 )
 
 
-def _scalars(out: str) -> dict[str, str]:
-  """Pick out `name = integer` lines (what vjanusf emits)."""
+def _parse_store(out: str) -> dict[str, str]:
+  """Normalise a `-s` store dump into {name: canonical-value-string} for scalars,
+  arrays (`a[..] = {..}`), and stacks (`s = <..]` / `nil`).  When a name appears
+  more than once (PyJanus prints `show()` lines before the final store), the last
+  one wins — that is the final store vjanusf reports."""
   d: dict[str, str] = {}
   for line in out.splitlines():
-    m = re.match(r"^(\w+)\s*=\s*(-?\d+)$", line.strip())
+    line = line.strip()
+    m = re.match(r"^(\w+)((?:\[\d+\])+)\s*=\s*(\{.*\})$", line)
+    if m:
+      d[m.group(1)] = re.sub(r"\s", "", m.group(3)); continue
+    m = re.match(r"^(\w+)\s*=\s*<(.*)\]$", line)
+    if m:
+      d[m.group(1)] = "<" + re.sub(r"\s", "", m.group(2)) + "]"; continue
+    m = re.match(r"^(\w+)\s*=\s*nil$", line)
+    if m:
+      d[m.group(1)] = "nil"; continue
+    m = re.match(r"^(\w+)\s*=\s*(-?\d+)$", line)
     if m and not line.startswith(("Warning", "PyJanus")):
       d[m.group(1)] = m.group(2)
   return d
@@ -49,8 +62,8 @@ def test_vjanusf_matches_pyjanus(ja: str) -> None:
   pj = subprocess.run([sys.executable, "-m", "jana_py.cli", "--std", "jana2014", "-s", ja],
                       cwd=ROOT, capture_output=True, text=True)
   assert pj.returncode == 0, pj.stderr
-  got, want = _scalars(vj.stdout), _scalars(pj.stdout)
-  # vjanusf reports exactly main's scalars; each must match PyJanus.
+  got, want = _parse_store(vj.stdout), _parse_store(pj.stdout)
+  # vjanusf reports exactly main's variables (scalars, arrays, stacks); each must match.
   diffs = {k: (got[k], want.get(k)) for k in got if got[k] != want.get(k)}
   assert not diffs, f"verified-frame vs pyjanus differ: {diffs}"
 
