@@ -337,6 +337,13 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
   | Local (d1, body, d2) ->
     let e0 = match d1.dinit with Some e -> e | None -> Num 0 in
     let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
+    (* A self-referential delocal (`delocal i = i`, as used to free a loop
+       counter at its dynamic final value) is outside the statement-reversible
+       Enter/Exit model: freeing a non-zero local reversibly would need either a
+       history of the discarded value (garbage that breaks store-matching) or
+       uncomputing the loop (non-local).  We reject it rather than encode it
+       unsoundly — see coq/vjanus/README.md.  PyJanus permits it because it only
+       runs forward. *)
     if reads_name e0 d1.dname || reads_name e1 d1.dname then
       raise (Unsupported "self-referential local/delocal");
     let x = local_slot scp d1.dname in

@@ -41,13 +41,26 @@ whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
 `call`/`uncall`.  Currently **42 match, 1 skips**.
 
-One jana2014 feature is **not yet** in the verified core and makes `vjanus` exit
-with a clean "unsupported" (exit code 3), not a crash:
+One jana2014 construct makes `vjanus` exit with a clean "unsupported" (exit code
+3), not a crash — and it is a **principled boundary**, not just unfinished work:
 
-- self-referential `local x = … delocal x = e(x)` (the delocal value reads the
-  variable being removed).
+- self-referential `delocal x = e(x)` — in practice `delocal i = i`, used to free
+  a loop counter at its *dynamic* final value (e.g. `local i = 0; from i = 0 …
+  until i+1 >= n; delocal i = i`).
 
-This is the subject of Phase 2b (extending the formalization). The lowering
+  This is fundamentally outside a *statement-reversible* interpreter. `vjanus`'s
+  core proves every statement reversible (`exec_rev`), and freeing a non-zero
+  local back to a dead cell is not reversible in isolation: the inverse cannot
+  recover the discarded value. The two escapes both fail here — recording the
+  value as history makes the final store carry garbage (so it no longer matches
+  PyJanus), and uncomputing the loop to bring `i` back to its initial value is
+  non-local (it would also undo the loop's real effects). PyJanus accepts the
+  construct only because it runs forward and may discard a local outright;
+  `vjanus`, being verified-reversible, may not. Supporting it would require
+  recognising the whole `local … loop … delocal i=i` idiom as one reversible
+  unit (a loop-aware, non-local lowering) rather than per-statement Enter/Exit.
+
+The lowering
 classifies each variable into the frame core's refs — a `main` global (`RG`), a
 depth-`d` local (`RL`), or a positional formal (`RF`, resolved to the actual's
 absolute name at the call site) — and encodes:
