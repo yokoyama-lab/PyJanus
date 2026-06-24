@@ -51,13 +51,15 @@ coq/vjanus/vjanus -inverse '{"a": {"x": 4, "y": 4}}' prog.ja       # scalar stru
 ```
 
 Scope is main scalars, integer arrays (any rank), scalar structs (`{field:
-value}`), struct arrays (a row-major list of `{field: value}`) and structs with
-**array fields** (`{v: [..], ..}`); multi-dim arrays, struct arrays and array
-fields are flattened row-major to match PyJanus, and the seed accepts either flat
-or nested input. A **stack** in main makes it exit 3 ("unsupported"): PyJanus
-`--inverse` can't seed a stack, so there is no oracle to match there.
+value}`), struct arrays (a row-major list of `{field: value}`), structs with
+**array fields** (`{v: [..], ..}`) and **stacks** (a top-first contents list);
+multi-dim arrays, struct arrays and array fields are flattened row-major to match
+PyJanus, and the seed accepts either flat or nested input.
 `tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
-inverse vs PyJanus, over the whole corpus).
+inverse vs PyJanus, over the whole corpus); it skips a program only when PyJanus
+`--inverse` itself can't invert it (the self-referential `delocal`, which PyJanus
+turns into an invalid `local i=i` — vjanus inverts it fine, but there is then no
+oracle).
 
 ## Compatibility & scope
 

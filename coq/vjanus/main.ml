@@ -156,8 +156,6 @@ let rec combos = function
    arrays, scalar structs and struct arrays are representable; a stack main makes
    this exit 3 (PyJanus `--inverse` can't seed a stack). *)
 let run_inverse procs main layout (jv : jv) =
-  if layout.Lower.stks <> [] then
-    raise (Lower.Unsupported "inverse: stack final stores not supported");
   let obj = match jv with
     | JObj o -> o
     | _ -> raise (Lower.Unsupported "inverse: top-level JSON must be an object") in
@@ -233,6 +231,14 @@ let run_inverse procs main layout (jv : jv) =
       List.iter2 (fun midx o ->
         let cb = cantor midx * nfields in
         seed_struct (fun off x -> cells := (base, cb + off, x) :: !cells) o offsets) idxs objs
+    | None ->
+    match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.stks with
+    | Some (_, arr, top) ->                        (* stack: top-first contents list *)
+      let vals = flat_ints v in
+      let depth = List.length vals in
+      scalars := (top, depth) :: !scalars;
+      (* cells are bottom-first; vals are top-first, so vals[k] -> cell[depth-1-k] *)
+      List.iteri (fun k x -> cells := (arr, depth - 1 - k, x) :: !cells) vals
     | None -> ()  (* ignore keys that aren't main variables *)) obj;
   (* invert only main's BODY (not the decl-init prefix): the seed already
      stands in for PyJanus's "re-declare with the final store" step, so running
@@ -260,8 +266,12 @@ let run_inverse procs main layout (jv : jv) =
         read_struct (fun off -> Glue.read_global_cell f base (cb + off)) offsets)
         (combos dims) in
       (name, JArr elems)) layout.Lower.sarrays in
+    let stack_kvs = List.map (fun (name, arr, top) ->   (* top-first contents list *)
+      let depth = Glue.read_global f top in
+      let cells = List.init depth (fun k -> JInt (Glue.read_global_cell f arr (depth - 1 - k))) in
+      (name, JArr cells)) layout.Lower.stks in
     let buf = Buffer.create 64 in
-    print_jv buf (JObj (scalar_kvs @ array_kvs @ struct_kvs @ flatstruct_kvs @ sarray_kvs));
+    print_jv buf (JObj (scalar_kvs @ array_kvs @ struct_kvs @ flatstruct_kvs @ sarray_kvs @ stack_kvs));
     print_string (Buffer.contents buf); print_newline ()
 
 let () =
