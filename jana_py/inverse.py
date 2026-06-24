@@ -11,9 +11,14 @@ import itertools
 from dataclasses import dataclass, replace
 
 from .ast import ArrayExpr
+from .ast import AssignStmt
 from .ast import DeclType
 from .ast import Ident
 from .ast import IntType
+from .ast import Lval
+from .ast import LvalField
+from .ast import LvalIndex
+from .ast import ModOp
 from .ast import Number
 from .ast import ProcMain
 from .ast import Program
@@ -61,6 +66,62 @@ def _make_init_expr(value: object) -> "Number | ArrayExpr | None":
   return None
 
 
+def int_prod(xs: list[int]) -> int:
+  p = 1
+  for x in xs:
+    p *= x
+  return p
+
+
+def _flatten_structs(value: object) -> list[dict]:
+  """Row-major flatten of a (possibly nested) struct-array value to its leaf
+  struct dicts.  The runtime store already holds multi-dim arrays flat, but a
+  caller-supplied `--inverse` JSON may be nested, so accept both."""
+  if isinstance(value, dict):
+    return [value]
+  out: list[dict] = []
+  for sub in value:
+    out.extend(_flatten_structs(sub))
+  return out
+
+
+def _seed_struct_stmts(name: str, value: object, dims: list[int]) -> list["AssignStmt"]:
+  """Reversible `+= v` statements driving a freshly-declared (all-zero) struct or
+  struct-array variable to its final-store values.
+
+  Structs take no declaration initializer in Janus, so the inverse interpreter
+  cannot seed them through `_make_init_expr` the way it does scalars and arrays.
+  Instead it prepends these field assignments before the inverted body: each
+  struct field is driven from 0 to its final value, mirroring the "re-declare
+  with the final store" step that scalars/arrays get for free.  `dims` are the
+  array dimensions (empty for a scalar struct); the store flattens multi-dim
+  arrays row-major, so a flat element index is unflattened back to `grid[i][j]`.
+  """
+  stmts: list[AssignStmt] = []
+
+  def assign(selectors: list, fld: str, v: int) -> None:
+    if v == 0:
+      return                                     # `+= 0` is a no-op
+    lval = Lval(Ident(name, _DUMMY_POS),
+                selectors + [LvalField(Ident(fld, _DUMMY_POS))])
+    stmts.append(AssignStmt(ModOp.ADD_EQ, lval, Number(v, _DUMMY_POS), _DUMMY_POS))
+
+  if not dims:                                   # scalar struct: value is a dict
+    for fld, v in value.items():
+      assign([], fld, v)
+    return stmts
+
+  for k, elem in enumerate(_flatten_structs(value)):   # struct array, row-major
+    midx, rem = [], k
+    for stride in (  # row-major strides: product of the trailing dimensions
+        [int_prod(dims[i + 1:]) for i in range(len(dims))]):
+      midx.append(rem // stride); rem %= stride
+    selectors = [LvalIndex(Number(i, _DUMMY_POS)) for i in midx]
+    for fld, v in elem.items():
+      assign(selectors, fld, v)
+  return stmts
+
+
 def _build_inverted_main(
   original_main: ProcMain,
   final_store: dict[str, int],
@@ -69,12 +130,22 @@ def _build_inverted_main(
 
   The inverted main:
   1. Declares the same variables but with init values from final_store
-  2. Runs the inverted statements of the original main
+  2. Seeds structs (which have no declaration initializer) via prepended
+     field assignments
+  3. Runs the inverted statements of the original main
   """
   new_vdecls: list[Vdecl] = []
+  struct_seeds: list[AssignStmt] = []
   for vdecl in original_main.vdecls:
     name = vdecl.ident.name
     value = final_store.get(name)
+    # Structs (scalar or array) take no initializer; keep the (all-zero)
+    # declaration and seed the fields with prepended `+= v` statements.
+    if vdecl.typ.kind == "struct" and value is not None:
+      new_vdecls.append(vdecl)
+      dims = [d.value for d in vdecl.dimensions if isinstance(d, Number)]
+      struct_seeds.extend(_seed_struct_stmts(name, value, dims))
+      continue
     # Seed scalars and arrays from the final store; leave other shapes (e.g.
     # stacks) with their original declaration.
     seed = (vdecl.dimensions and isinstance(value, list)) or \
@@ -94,7 +165,7 @@ def _build_inverted_main(
 
   inverted_stmts = invert_stmts(original_main.stmts, global_mode=False)
 
-  return ProcMain(new_vdecls, inverted_stmts, original_main.pos)
+  return ProcMain(new_vdecls, struct_seeds + inverted_stmts, original_main.pos)
 
 
 def run_inverse(
