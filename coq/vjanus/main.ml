@@ -122,17 +122,41 @@ let print_struct_array f base name dims nfields offsets =
   let dimtag = String.concat "" (List.map (fun d -> Printf.sprintf "[%d]" d) dims) in
   Printf.printf "%s%s = %s\n" name dimtag (Buffer.contents buf)
 
+(* row-major enumeration of all index tuples for the given dimensions *)
+let rec combos = function
+  | [] -> [[]]
+  | d :: rest ->
+    let tails = combos rest in
+    List.concat (List.init d (fun i -> List.map (fun t -> i :: t) tails))
+
 (* `-inverse JSON`: given main's FINAL store as JSON, run the verified inverter
    (invert main, then run from the seeded store) and print the INITIAL store as
-   JSON — output-compatible with PyJanus `--inverse`.  Only main scalars and
-   (multi-dim) arrays are representable; a stack/struct main makes this exit 3. *)
+   JSON — output-compatible with PyJanus `--inverse`.  Main scalars, (multi-dim)
+   arrays, scalar structs and struct arrays are representable; a stack main makes
+   this exit 3 (PyJanus `--inverse` can't seed a stack). *)
 let run_inverse procs main layout (jv : jv) =
-  if layout.Lower.stks <> [] || layout.Lower.structs <> [] || layout.Lower.sarrays <> [] then
-    raise (Lower.Unsupported "inverse: stack/struct final stores not supported");
+  if layout.Lower.stks <> [] then
+    raise (Lower.Unsupported "inverse: stack final stores not supported");
   let obj = match jv with
     | JObj o -> o
     | _ -> raise (Lower.Unsupported "inverse: top-level JSON must be an object") in
-  (* seed main's scalar / array cells from the given final values *)
+  (* a struct field's value from a JSON struct object {field: int, ...} *)
+  let field_val o fld = match List.assoc_opt fld o with
+    | Some (JInt x) -> x
+    | _ -> raise (Lower.Unsupported ("inverse: struct field " ^ fld ^ " needs an integer")) in
+  (* flatten a (possibly nested) struct-array JSON value to row-major objects *)
+  let rec flat_objs v = match v with
+    | JObj o -> [o]
+    | JArr xs -> List.concat_map flat_objs xs
+    | JInt _ -> raise (Lower.Unsupported "inverse: struct array expects object leaves") in
+  (* flatten a (possibly nested OR flat) array JSON value to row-major ints *)
+  let flat_ints v =
+    let rec go acc = function
+      | JInt x -> x :: acc
+      | JArr xs -> List.fold_left go acc xs
+      | JObj _ -> raise (Lower.Unsupported "inverse: array expects integer leaves") in
+    List.rev (go [] v) in
+  (* seed main's scalar / array / struct / struct-array cells from the finals *)
   let scalars = ref [] and cells = ref [] in
   List.iter (fun (name, v) ->
     match List.assoc_opt name layout.Lower.scalars with
@@ -140,37 +164,55 @@ let run_inverse procs main layout (jv : jv) =
       (match v with JInt x -> scalars := (slot, x) :: !scalars
        | _ -> raise (Lower.Unsupported ("inverse: scalar " ^ name ^ " needs an integer")))
     | None ->
-      match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.arrays with
-      | Some (_, slot, dims) ->
-        let rec go prefix dims v = match dims, v with
-          | [], JInt x -> cells := (slot, cantor (List.rev prefix), x) :: !cells
-          | d :: rest, JArr xs when List.length xs = d ->
-            List.iteri (fun i x -> go (i :: prefix) rest x) xs
-          | _ -> raise (Lower.Unsupported ("inverse: array " ^ name ^ " shape mismatch")) in
-        go [] dims v
-      | None -> ()  (* ignore keys that aren't main variables *)) obj;
+    match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.arrays with
+    | Some (_, slot, dims) ->                      (* accept flat OR nested row-major *)
+      let vals = flat_ints v and idxs = combos dims in
+      if List.length vals <> List.length idxs then
+        raise (Lower.Unsupported ("inverse: array " ^ name ^ " shape mismatch"));
+      List.iter2 (fun midx x -> cells := (slot, cantor midx, x) :: !cells) idxs vals
+    | None ->
+    match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.structs with
+    | Some (_, base, offsets) ->                  (* scalar struct: {field: v, ...} *)
+      let o = match v with JObj o -> o
+        | _ -> raise (Lower.Unsupported ("inverse: struct " ^ name ^ " needs an object")) in
+      List.iter (fun (fld, off) -> scalars := (base + off, field_val o fld) :: !scalars) offsets
+    | None ->
+    match List.find_opt (fun (n, _, _, _, _) -> n = name) layout.Lower.sarrays with
+    | Some (_, base, dims, nfields, offsets) ->   (* struct array: row-major [{field: v}, …] *)
+      let objs = flat_objs v and idxs = combos dims in
+      if List.length objs <> List.length idxs then
+        raise (Lower.Unsupported ("inverse: struct array " ^ name ^ " shape mismatch"));
+      List.iter2 (fun midx o ->
+        let cellbase = cantor midx * nfields in
+        List.iter (fun (fld, off) -> cells := (base, cellbase + off, field_val o fld) :: !cells) offsets)
+        idxs objs
+    | None -> ()  (* ignore keys that aren't main variables *)) obj;
   (* invert only main's BODY (not the decl-init prefix): the seed already
      stands in for PyJanus's "re-declare with the final store" step, so running
      invert(body) reconstructs the pre-body (= declared-initial) state. *)
   match Glue.run_seeded procs (Glue.invert_main layout.Lower.mbody) !scalars !cells with
   | None -> prerr_string "vjanus: interpreter returned NONE (out of fuel or stuck)\n"; exit 1
   | Some f ->
-    (* read back the INITIAL store: every main scalar and array, as JSON *)
+    (* read back the INITIAL store as JSON: scalars, arrays (flat row-major),
+       scalar structs ({field: v}) and struct arrays (row-major [{field: v}, …]) *)
     let scalar_kvs = List.map (fun (name, slot) ->
       (name, JInt (Glue.read_global f slot))) layout.Lower.scalars in
     let array_kvs = List.map (fun (name, slot, dims) ->
-      (* PyJanus `--inverse` flattens a multi-dim array row-major, so emit the
-         cells in row-major index order (each folded to its cell via [cantor]) *)
-      let rec combos = function
-        | [] -> [[]]
-        | d :: rest ->
-          let tails = combos rest in
-          List.concat (List.init d (fun i -> List.map (fun t -> i :: t) tails)) in
       let cells = List.map (fun idx -> JInt (Glue.read_global_cell f slot (cantor idx)))
                     (combos dims) in
       (name, JArr cells)) layout.Lower.arrays in
+    let struct_kvs = List.map (fun (name, base, offsets) ->
+      (name, JObj (List.map (fun (fld, off) -> (fld, JInt (Glue.read_global f (base + off)))) offsets)))
+      layout.Lower.structs in
+    let sarray_kvs = List.map (fun (name, base, dims, nfields, offsets) ->
+      let elems = List.map (fun midx ->
+        let cellbase = cantor midx * nfields in
+        JObj (List.map (fun (fld, off) ->
+          (fld, JInt (Glue.read_global_cell f base (cellbase + off)))) offsets))
+        (combos dims) in
+      (name, JArr elems)) layout.Lower.sarrays in
     let buf = Buffer.create 64 in
-    print_jv buf (JObj (scalar_kvs @ array_kvs));
+    print_jv buf (JObj (scalar_kvs @ array_kvs @ struct_kvs @ sarray_kvs));
     print_string (Buffer.contents buf); print_newline ()
 
 let () =
