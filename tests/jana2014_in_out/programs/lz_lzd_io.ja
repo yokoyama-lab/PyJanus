@@ -1,0 +1,140 @@
+// LZ-family LZD (Lempel-Ziv-Double): reversible jana2014_in_out program.
+// Reads 8 symbols (in[0]=length prefix), runs rev_lzd_struct, writes out[0..9].
+// Backward run uncalls it (decodes) and reproduces the input.
+// Self-contained copy from RevLZ pcp/in_out; proof: coq/LZD.v decode_encode (axiom-free).
+// Symbols are 1..alphSize-1 (alphSize=10); dictSize=20.
+// case: abcabc
+// in: 1 2 3 1 2 3 1 2
+// out: 4 1 2 3 1 2 3 1 2 0
+// case: alt12
+// in: 1 2 1 2 1 2 2 2
+// out: 4 1 2 1 2 1 2 2 2 0
+// case: distinct
+// in: 1 2 3 4 5 6 7 8
+// out: 4 1 2 3 4 5 6 7 8 0
+// case: ones
+// in: 1 1 1 1 1 1 1 1
+// out: 4 1 1 1 1 1 1 1 1 0
+// case: runs
+// in: 3 3 1 1 2 2 3 3
+// out: 4 3 3 1 1 2 2 3 3 0
+
+/* PyJanus-compatible copy of lz78/lzd_struct_base.ja.
+   Identical logic; only the struct field separators are changed from the
+   Jana-JanusInterp comma form to the jana2014 semicolon form so PyJanus's
+   parser accepts it.  The algorithm is the one proved clean reversible in
+   coq/LZD.v (decode_encode, axiom-free). */
+
+struct DictEntry {
+    int left;
+    int right;
+    int depth;
+    int first;
+}
+
+
+procedure init_dict_lzd(DictEntry d[], int n, int alphSize)
+  from n = 0 loop
+    n += 1
+    d[n].depth += 1
+    d[n].first += n
+  until n = alphSize - 1
+  n += 1
+
+
+procedure add_entry_lzd(int left, int right, DictEntry d[], int n)
+  d[n].left ^= left
+  d[n].right ^= right
+  local int len = d[left].depth + d[right].depth
+  d[n].depth <=> len
+  delocal int len
+  d[n].first ^= d[left].first
+  n += 1
+
+
+procedure build_dict_lzd(int out[], int i, int j, DictEntry d[], int n,
+                          int dictSize, int alphSize)
+  call init_dict_lzd(d, n, alphSize)
+  i += 1
+  from j = 0 loop
+    j += 1
+    i += d[out[2*j-1]].depth
+    if out[2*j] != 0 then
+      i += d[out[2*j]].depth
+      if n < dictSize then
+        call add_entry_lzd(out[2*j-1], out[2*j], d, n)
+      else
+        n += 1
+      fi n <= dictSize
+    fi out[2*j] != 0
+  until j = out[0]
+
+
+procedure compress_lzd(int in[], int out[], int i, int j, DictEntry d[], int n,
+                        int dictSize, int alphSize)
+  call init_dict_lzd(d, n, alphSize)
+  i += 1
+  from i = 1 loop
+    // Left factor: single-character match (simplified LZD)
+    local int left_sym = in[i]
+    in[i] ^= left_sym
+    i += 1
+
+    // Right factor: next character, or 0 if at sentinel (end of input)
+    local int right_sym = in[i]
+    if right_sym != 0 then
+      in[i] ^= right_sym
+      i += 1
+    fi right_sym != 0
+
+    // Store the pair in output
+    out[2*j+1] ^= left_sym
+    out[2*j+2] ^= right_sym
+
+    // Create compound dictionary entry when right factor is present
+    if right_sym != 0 then
+      if n < dictSize then
+        call add_entry_lzd(left_sym, right_sym, d, n)
+      else
+        n += 1
+      fi n <= dictSize
+    fi right_sym != 0
+
+    j += 1
+
+    delocal int right_sym = out[2*j]
+    delocal int left_sym = out[2*j-1]
+  until in[i] = 0
+  in[0] -= i - 1
+  out[0] += j
+
+
+procedure rev_lzd_struct(int in[], int out[], int dictSize, int alphSize)
+  local int i = 0, int j = 0, int n = 0, DictEntry d[dictSize]
+  call compress_lzd(in, out, i, j, d, n, dictSize, alphSize)
+  uncall build_dict_lzd(out, i, j, d, n, dictSize, alphSize)
+  delocal int i = 0, int j = 0, int n = 0, DictEntry d[dictSize]
+
+procedure main()
+    int in[10]
+    int out[10]
+    read in[1]
+    read in[2]
+    read in[3]
+    read in[4]
+    read in[5]
+    read in[6]
+    read in[7]
+    read in[8]
+    in[0] += 8
+    call rev_lzd_struct(in, out, 20, 10)
+    write out[0]
+    write out[1]
+    write out[2]
+    write out[3]
+    write out[4]
+    write out[5]
+    write out[6]
+    write out[7]
+    write out[8]
+    write out[9]
