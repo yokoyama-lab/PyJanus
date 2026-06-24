@@ -179,12 +179,14 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   (`exec_rev`/`exec_iff`/`exec_det`/`exec_injective`, `run_sound`), and the same
   index-precise `reads_cell` array discipline as `RevArr`.
 - `RevExtractFrame.v` — the verified computable interpreter for `RevFrame`,
-  extracted to `janus_frame.ml`; it backs the standalone **`vjanus`**
-  interpreter (`coq/vjanus/`, own jana2014 lexer/parser + frame-aware lowering),
-  which matches PyJanus on the whole corpus (45 pass / 1 skip — only a
-  self-referential `delocal` remains) with no Python at runtime, including
-  arrays, stacks and structs (all lowered to frame slots). See
-  `coq/vjanus/README.md`.
+  extracts both `run` and `invert` to `janus_frame.ml`; it backs the standalone
+  **`vjanus`** interpreter (`coq/vjanus/`, own jana2014 lexer/parser +
+  frame-aware lowering), which matches PyJanus on the whole corpus (45 pass /
+  1 skip — only a self-referential `delocal` remains) with no Python at runtime,
+  including arrays, stacks and structs (all lowered to frame slots). `vjanus
+  -inverse` additionally runs the verified `invert` (final store → initial
+  store), output-compatible with PyJanus `--inverse` and differentially tested
+  against it (`tests/jana2014/test_vjanus_inverse.py`). See `coq/vjanus/README.md`.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
