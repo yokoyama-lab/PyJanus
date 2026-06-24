@@ -66,27 +66,31 @@ This is verified, not asserted: `tests/jana2014/test_vjanus_corpus.py` runs the
 whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
 `call`/`uncall` (including nested struct-by-reference, the reverse of a
-stack-building procedure, and structs with array fields).  Currently
-**47 match, 1 skips**.
+stack-building procedure, and structs with array fields).  The whole corpus
+matches: **48 match, 0 skip**.
 
-One jana2014 construct makes `vjanus` exit with a clean "unsupported" (exit code
-3), not a crash — and it is a **principled boundary**, not just unfinished work:
+### Self-referential `delocal` (the loop-counter idiom)
 
-- self-referential `delocal x = e(x)` — in practice `delocal i = i`, used to free
-  a loop counter at its *dynamic* final value (e.g. `local i = 0; from i = 0 …
-  until i+1 >= n; delocal i = i`).
+A self-referential `delocal i = i` frees a loop counter at its *dynamic* final
+value (e.g. `local i = 0; from i = 0 … until i+1 >= n; delocal i = i`).  Freeing
+a non-zero local is not statement-reversible in isolation — the delocal value
+references the variable being freed, so the inverse `Enter` would read it back as
+the dead (zero) cell.  `vjanus` handles the common **counter idiom** with a
+*loop-aware* lowering: when the body is a single `from`-loop that steps `i` by a
+constant `STEP`, after the loop it counts `i` back down to its start with a clean
+reverse loop — `from COND do { i -= STEP } until i = START` — which touches
+nothing but `i`, then frees it at `START` (a live, non-self-referential value).
+The reverse loop is an ordinary reversible `from`-loop; its inverse counts `i`
+back up to the final value, so the whole `local … loop … delocal i=i` composite
+is reversible **without any closed form for the loop bound**.  (Notably this
+makes `vjanus` *more* reversible than PyJanus here: PyJanus inverts `delocal i=i`
+to an invalid `local i=i` and so cannot `uncall` such a procedure at all.)
 
-  This is fundamentally outside a *statement-reversible* interpreter. `vjanus`'s
-  core proves every statement reversible (`exec_rev`), and freeing a non-zero
-  local back to a dead cell is not reversible in isolation: the inverse cannot
-  recover the discarded value. The two escapes both fail here — recording the
-  value as history makes the final store carry garbage (so it no longer matches
-  PyJanus), and uncomputing the loop to bring `i` back to its initial value is
-  non-local (it would also undo the loop's real effects). PyJanus accepts the
-  construct only because it runs forward and may discard a local outright;
-  `vjanus`, being verified-reversible, may not. Supporting it would require
-  recognising the whole `local … loop … delocal i=i` idiom as one reversible
-  unit (a loop-aware, non-local lowering) rather than per-statement Enter/Exit.
+A self-referential `delocal` that is *not* this counter idiom still exits 3
+("unsupported", a clean exit, not a crash): freeing an arbitrary non-zero local
+reversibly would need either a history of the discarded value (garbage that
+breaks store-matching) or non-local uncomputation, so it remains a principled
+boundary.
 
 The lowering
 classifies each variable into the frame core's refs — a `main` global (`RG`), a
