@@ -51,12 +51,13 @@ coq/vjanus/vjanus -inverse '{"a": {"x": 4, "y": 4}}' prog.ja       # scalar stru
 ```
 
 Scope is main scalars, integer arrays (any rank), scalar structs (`{field:
-value}`) and struct arrays (a row-major list of `{field: value}`); multi-dim
-arrays and struct arrays are flattened row-major to match PyJanus, and the seed
-accepts either flat or nested input. A **stack** in main makes it exit 3
-("unsupported"): PyJanus `--inverse` can't seed a stack, so there is no oracle to
-match there. `tests/jana2014/test_vjanus_inverse.py` is the differential check
-(verified inverse vs PyJanus, over the whole corpus).
+value}`), struct arrays (a row-major list of `{field: value}`) and structs with
+**array fields** (`{v: [..], ..}`); multi-dim arrays, struct arrays and array
+fields are flattened row-major to match PyJanus, and the seed accepts either flat
+or nested input. A **stack** in main makes it exit 3 ("unsupported"): PyJanus
+`--inverse` can't seed a stack, so there is no oracle to match there.
+`tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
+inverse vs PyJanus, over the whole corpus).
 
 ## Compatibility & scope
 
@@ -64,8 +65,9 @@ match there. `tests/jana2014/test_vjanus_inverse.py` is the differential check
 This is verified, not asserted: `tests/jana2014/test_vjanus_corpus.py` runs the
 whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
-`call`/`uncall` (including nested struct-by-reference and the reverse of a
-stack-building procedure).  Currently **45 match, 1 skips**.
+`call`/`uncall` (including nested struct-by-reference, the reverse of a
+stack-building procedure, and structs with array fields).  Currently
+**47 match, 1 skips**.
 
 One jana2014 construct makes `vjanus` exit with a clean "unsupported" (exit code
 3), not a crash — and it is a **principled boundary**, not just unfinished work:
@@ -96,9 +98,13 @@ absolute name at the call site) — and encodes:
   locals); `push`/`pop` as the counter bump plus an XOR swap (the core has no
   Swap primitive);
 - structs as a compile-time grouping of slots: a field access resolves to one
-  slot (scalar struct) or an array cell at `elem*nfields + offset` (struct
-  array); a struct passes by reference as one ref per field, an array of structs
-  as a single base ref; a struct-valued `local` is one `Enter`/`Exit` per field;
+  slot (scalar struct) or an array cell at `elem*size + offset` (struct array);
+  a struct passes by reference as one ref per field, an array of structs as a
+  single base ref; a struct-valued `local` is one `Enter`/`Exit` per field. A
+  struct with **array fields** is laid out flat in a single array slot — each
+  array field reserves enough cells for its Cantor-folded indices, so `a.v[i]`
+  is `base + offset(v) + Cantor(i)` (such structs are GA-addressed, hence not
+  passed by reference);
 - by-value call args via `Enter`/`Exit` on a fresh local; array-cell args via a
   swap-temp (XOR) around the call.
 

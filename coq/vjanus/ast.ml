@@ -10,9 +10,13 @@ type expr =
   | Top of string                    (* top(s) *)
   | Empty of string                  (* empty(s) *)
   | Size of string                   (* size(a) *)
-and lval = { lname : string; sels : expr list; fields : string list }
-        (* sels = base array indices; fields = struct field path, e.g.
-           out[j].dist => { lname="out"; sels=[j]; fields=["dist"] } *)
+and lval = { lname : string; sels : expr list; fields : string list; fsels : expr list }
+        (* sels  = base array indices (before the field path)
+           fields = struct field path
+           fsels = array indices INTO an array field (after the field), e.g.
+             out[j].dist   => { lname="out"; sels=[j]; fields=["dist"]; fsels=[] }
+             a.v[i]        => { lname="a";  sels=[];  fields=["v"];    fsels=[i] }
+             a.m[i][j]     => { lname="a";  sels=[];  fields=["m"];    fsels=[i;j] } *)
 
 type arg = ALv of lval | AVal of expr
 
