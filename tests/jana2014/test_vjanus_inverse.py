@@ -8,10 +8,11 @@ it takes the forward final store (computed in-process via the PyJanus runtime)
 and feeds it to BOTH inverters, comparing the reconstructed initial stores.
 
 Covers main scalars, integer arrays (any rank), scalar structs, struct arrays
-(incl. array fields) and stacks.  A program skips only when PyJanus `--inverse`
-cannot invert it (no oracle) — in practice the self-referential `delocal`, which
-PyJanus inverts to an invalid `local i=i` (vjanus's loop-aware lowering inverts
-it fine) — or when `vjanus` marks it unsupported (exit 3).
+(incl. array fields) and stacks — the whole corpus, with no skips.  (The
+self-referential `delocal` is now invertible on both sides: vjanus via its
+loop-aware lowering, PyJanus via a reverse-count desugaring in
+`jana_py/inverse.py`.)  A program would skip only if `vjanus` marked it
+unsupported (exit 3) or PyJanus `--inverse` could not invert it.
 
 Needs the `vjanus` binary (build with `bash coq/vjanus/build.sh`); skips if absent.
 """
