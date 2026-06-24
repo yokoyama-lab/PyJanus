@@ -47,11 +47,13 @@ type t = {
   procmap : (string, int) Hashtbl.t;        (* proc name -> pname index *)
   pforms  : (string, string list) Hashtbl.t;(* proc name -> formal names, in order *)
   arrlen  : (string * string, int) Hashtbl.t;(* (scope, array name) -> flat length, for size() *)
-  slayout : (string, (string * int) list * int) Hashtbl.t;
-                                            (* struct name -> (field, offset) list, field count *)
-  gstructs: (string, string * int) Hashtbl.t;(* main struct var -> (struct name, base global slot) *)
+  slayout : (string, (string * int * int list) list * int) Hashtbl.t;
+                                            (* struct name -> (field, offset, dims) list, total slot count *)
+  gstructs: (string, string * int) Hashtbl.t;(* main scalar struct (no array fields) -> (sname, base G slot) *)
+  gstructs_flat: (string, string * int) Hashtbl.t;
+                                            (* main scalar struct WITH array fields -> (sname, base array slot) *)
   gsarrays: (string, string * int * int) Hashtbl.t;
-                                            (* main struct array -> (struct name, base array slot, field count) *)
+                                            (* main struct array -> (struct name, base array slot, slot count/elem) *)
   mutable ntmp : int;                       (* fresh names for by-value temps *)
 }
 
@@ -59,26 +61,36 @@ let create () =
   { globals = Hashtbl.create 64; gstacks = Hashtbl.create 16; nglob = 0;
     procmap = Hashtbl.create 16; pforms = Hashtbl.create 16;
     arrlen = Hashtbl.create 16; slayout = Hashtbl.create 16;
-    gstructs = Hashtbl.create 16; gsarrays = Hashtbl.create 16; ntmp = 0 }
+    gstructs = Hashtbl.create 16; gstructs_flat = Hashtbl.create 16;
+    gsarrays = Hashtbl.create 16; ntmp = 0 }
 
-(* field -> its offset within a struct (scalar fields occupy one slot each) *)
-let field_offset st sname f =
+let struct_layout st sname =
   match Hashtbl.find_opt st.slayout sname with
-  | None -> raise (Unsupported ("unknown struct type " ^ sname))
-  | Some (fields, _) ->
-    (match List.assoc_opt f fields with
-     | Some o -> o
-     | None -> raise (Unsupported (Printf.sprintf "no field %s in struct %s" f sname)))
+  | Some x -> x | None -> raise (Unsupported ("unknown struct type " ^ sname))
 
-(* number of (scalar) fields in a struct = how many slots/refs it occupies *)
-let struct_size st sname =
-  match Hashtbl.find_opt st.slayout sname with
-  | Some (_, sz) -> sz | None -> raise (Unsupported ("unknown struct type " ^ sname))
+let find_field st sname f =
+  let (fields, _) = struct_layout st sname in
+  match List.find_opt (fun (g, _, _) -> g = f) fields with
+  | Some x -> x
+  | None -> raise (Unsupported (Printf.sprintf "no field %s in struct %s" f sname))
 
-(* the (field, offset) list of a struct, in declaration order *)
-let struct_fields st sname =
-  match Hashtbl.find_opt st.slayout sname with
-  | Some (fields, _) -> fields | None -> raise (Unsupported ("unknown struct type " ^ sname))
+(* a field's base slot offset within the struct's flat block *)
+let field_offset st sname f = let (_, o, _) = find_field st sname f in o
+
+(* a field's array dimensions ([] for a scalar field) *)
+let field_dims st sname f = let (_, _, d) = find_field st sname f in d
+
+(* total slot count of a struct (scalar field = 1 slot; array field reserves
+   enough for its Cantor-folded indices — see slayout construction) *)
+let struct_size st sname = let (_, sz) = struct_layout st sname in sz
+
+(* the (field, offset, dims) list of a struct, in declaration order *)
+let struct_fields st sname = let (fields, _) = struct_layout st sname in fields
+
+(* does any field have array dimensions?  Such structs use the flat array-slot
+   (GA) representation, not the consecutive-G-slot one, and are not by-ref. *)
+let struct_has_array_field st sname =
+  List.exists (fun (_, _, d) -> d <> []) (struct_fields st sname)
 
 let new_scope name is_main =
   { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
@@ -175,7 +187,10 @@ let is_struct_var st scp nm =
 (* the per-field refs of a scalar struct variable, in field-declaration order
    (used to expand a struct actual into one ref per field at a call site) *)
 let struct_var_field_refs st scp nm : J.ref list =
-  let fld base mk sname = List.map (fun (_, off) -> mk (nat (base + off))) (struct_fields st sname) in
+  let fld base mk sname =
+    if struct_has_array_field st sname then
+      raise (Unsupported "by-reference pass of a struct with array fields (not yet)");
+    List.map (fun (_, off, _) -> mk (nat (base + off))) (struct_fields st sname) in
   match Hashtbl.find_opt scp.lstructs nm with
   | Some (sname, base) -> fld base (fun n -> J.RL n) sname
   | None ->
@@ -237,34 +252,44 @@ and index st scp sels =
       x rest
 
 (* resolve a struct field access (main-scope, single field) to a scalar slot
-   (scalar struct var) or an array cell at index elem*nfields + field-offset
-   (struct-array element field). *)
+   (scalar struct var) or an array cell.  `lv.fsels` index into an array field;
+   the field offset within an element is field_offset + Cantor(fsels). *)
 and field_access st scp (lv : Ast.lval) : faccess =
   let f = match lv.fields with [f] -> f | _ -> raise (Unsupported "nested struct field access") in
+  (* offset of this field's accessed cell within one struct element *)
+  let foff sname = J.Bin (J.BAdd, J.Cst (z (field_offset st sname f)), index st scp lv.fsels) in
+  (* a scalar field accessed without an array index — needed for the G-slot /
+     by-ref representations, which can't address an array field dynamically *)
+  let scalar_off sname =
+    if lv.fsels <> [] || field_dims st sname f <> [] then
+      raise (Unsupported "array field on a by-ref/local/formal struct (not yet)");
+    field_offset st sname f in
   match Hashtbl.find_opt scp.lstructs lv.lname with
   | Some (sname, base) when lv.sels = [] ->     (* struct local: RL(base + offset) *)
-    FScalar (J.RL (nat (base + field_offset st sname f)))
+    FScalar (J.RL (nat (base + scalar_off sname)))
   | _ ->
   match Hashtbl.find_opt scp.fstructs lv.lname with
   | Some (sname, base) when lv.sels = [] ->     (* struct formal: RF(base + offset) *)
-    FScalar (J.RF (nat (base + field_offset st sname f)))
+    FScalar (J.RF (nat (base + scalar_off sname)))
   | _ ->
   match Hashtbl.find_opt scp.fsarrays lv.lname with
   | Some (sname, idx) ->                         (* struct-array formal element field *)
     let nfields = struct_size st sname in
-    let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)),
-                      J.Cst (z (field_offset st sname f))) in
+    let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)), foff sname) in
     FCell (J.RF (nat idx), cell)
+  | _ ->
+  match Hashtbl.find_opt st.gstructs_flat lv.lname with
+  | Some (sname, base) when scp.is_main && lv.sels = [] ->  (* scalar struct w/ array fields *)
+    FCell (J.RG (nat base), foff sname)
   | _ ->
     match Hashtbl.find_opt st.gsarrays lv.lname with
     | Some (sname, base, nfields) when scp.is_main ->
-      let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)),
-                        J.Cst (z (field_offset st sname f))) in
+      let cell = J.Bin (J.BAdd, J.Bin (J.BMul, index st scp lv.sels, J.Cst (z nfields)), foff sname) in
       FCell (J.RG (nat base), cell)
     | _ ->
       (match lv.sels, Hashtbl.find_opt st.gstructs lv.lname with
        | [], Some (sname, base) when scp.is_main ->
-         FScalar (J.RG (nat (base + field_offset st sname f)))
+         FScalar (J.RG (nat (base + scalar_off sname)))
        | _ -> raise (Unsupported ("struct field access on " ^ lv.lname)))
 
 (* exact integer Cantor fold, for static (initializer) indices *)
@@ -323,6 +348,8 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
        l-value into a per-field local; delocal asserts e == src2 and frees.
        Lowered to one Enter/Exit per field (independent local slots). *)
     let sname = match d1.dstruct with Some s -> s | None -> assert false in
+    if struct_has_array_field st sname then
+      raise (Unsupported "local struct with array fields (not yet)");
     let (_, base) = local_struct st scp sname d1.dname in
     let src_lv = function
       | Some (Ast.Lv lv) -> lv
@@ -330,7 +357,7 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let s1 = src_lv d1.dinit and s2 = src_lv d2.dinit in
     let field_src (lv : Ast.lval) f = expr st scp (Ast.Lv { lv with fields = lv.fields @ [f] }) in
     let body' = seq st scp body in
-    List.fold_left (fun acc (f, off) ->
+    List.fold_left (fun acc (f, off, _) ->
         J.Seq (J.Enter (nat (base + off), field_src s1 f),
                J.Seq (acc, J.Exit (nat (base + off), field_src s2 f))))
       body' (struct_fields st sname)
@@ -453,9 +480,11 @@ type layout = {
   scalars : (string * int) list;
   arrays : (string * int * int list) list;
   stks : (string * int * int) list;
-  structs : (string * int * (string * int) list) list;  (* var, base slot, (field, offset) list *)
-  sarrays : (string * int * int list * int * (string * int) list) list;
-                                          (* var, base array slot, dims, field count, (field, offset) list *)
+  structs : (string * int * (string * int) list) list;  (* scalar struct (no array fields): var, base G slot, (field, offset) *)
+  flatstructs : (string * int * (string * int * int list) list) list;
+                                          (* scalar struct WITH array fields: var, base array slot, (field, offset, dims) *)
+  sarrays : (string * int * int list * int * (string * int * int list) list) list;
+                                          (* struct array: var, base array slot, dims, slots/elem, (field, offset, dims) *)
   mbody : J.stmt;                         (* main's body WITHOUT the decl-init prefix, for `-inverse`:
                                              PyJanus `--inverse` re-seeds decls with the final store and
                                              inverts only the body, so we invert [mbody] (not the inits). *)
@@ -463,12 +492,17 @@ type layout = {
 
 let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let st = create () in
-  (* struct layouts: each scalar field occupies one slot; offset = field index *)
+  (* struct layouts: fields laid out consecutively.  A scalar field takes one
+     slot; an array field reserves enough slots for its Cantor-folded indices
+     (max Cantor index + 1), so `field += Cantor(idx)` never overruns the next
+     field. Offsets are cumulative; the total is the struct's slot count. *)
   List.iter (fun (sd : Ast.structdef) ->
-    let offsets = List.mapi (fun i (f : Ast.sfield) ->
-      if f.fdims <> [] then raise (Unsupported "array field in struct (not yet)");
-      (f.fname, i)) sd.sfields in
-    Hashtbl.replace st.slayout sd.sname (offsets, List.length sd.sfields)) p.structs;
+    let (offsets, total) = List.fold_left (fun (acc, off) (f : Ast.sfield) ->
+      let sz = match f.fdims with
+        | [] -> 1
+        | ds -> cantor_val (List.map (fun d -> d - 1) ds) + 1 in
+      ((f.fname, off, f.fdims) :: acc, off + sz)) ([], 0) sd.sfields in
+    Hashtbl.replace st.slayout sd.sname (List.rev offsets, total)) p.structs;
   List.iteri (fun i pr -> Hashtbl.replace st.procmap pr.procname i) p.procs;
   List.iter (fun pr -> Hashtbl.replace st.pforms pr.procname
                 (List.map (fun (par : Ast.param) -> par.pname) pr.params)) p.procs;
@@ -480,7 +514,8 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
     seq st scp pr.body) p.procs in
   (* main: declared variables are globals; reject arrays/stacks for now *)
   let mscp = new_scope "main" true in
-  let scalars = ref [] and arrays = ref [] and stks = ref [] and structs = ref [] and sarrays = ref [] and inits = ref [] in
+  let scalars = ref [] and arrays = ref [] and stks = ref [] and structs = ref []
+  and flatstructs = ref [] and sarrays = ref [] and inits = ref [] in
   (* array initializer: walk the nested aggregate, writing each leaf into the
      Cantor-folded flat cell *)
   let rec emit_init g item prefix = match item with
@@ -508,11 +543,17 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
         Hashtbl.replace st.gsarrays vd.vname (sname, base, size);
         sarrays := (vd.vname, base, vd.vdims, size, offsets) :: !sarrays;
         (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct array initializer (not yet)"))
+      end else if struct_has_array_field st sname then begin
+        (* scalar struct WITH array fields: one base array slot, GA-addressed *)
+        let base = gslot st vd.vname in
+        Hashtbl.replace st.gstructs_flat vd.vname (sname, base);
+        flatstructs := (vd.vname, base, offsets) :: !flatstructs;
+        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
       end else begin
-        (* scalar struct: consecutive scalar slots G(base .. base+size-1) *)
+        (* pure scalar struct: consecutive scalar slots G(base .. base+size-1) *)
         let base = st.nglob in st.nglob <- st.nglob + size;
         Hashtbl.replace st.gstructs vd.vname (sname, base);
-        structs := (vd.vname, base, offsets) :: !structs;
+        structs := (vd.vname, base, List.map (fun (f, o, _) -> (f, o)) offsets) :: !structs;
         (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
       end
     end else begin
@@ -535,4 +576,5 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let main = List.fold_left (fun acc s0 -> J.Seq (s0, acc)) body !inits in
   (Array.of_list procs, main,
    { scalars = List.rev !scalars; arrays = List.rev !arrays; stks = List.rev !stks;
-     structs = List.rev !structs; sarrays = List.rev !sarrays; mbody = body })
+     structs = List.rev !structs; flatstructs = List.rev !flatstructs;
+     sarrays = List.rev !sarrays; mbody = body })

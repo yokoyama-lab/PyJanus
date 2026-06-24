@@ -1,0 +1,22 @@
+/* Array fields inside a struct: a scalar struct whose fields are themselves
+ * arrays (1-D and 2-D), accessed as a.v[i] and a.grid[i][j].  vjanus lays such
+ * a struct out flat in one array slot (each array field reserves enough cells
+ * for its Cantor-folded indices), so a.v[i] resolves to base + offset(v) +
+ * Cantor(i).  Exercises that against PyJanus, with cross-field reads. */
+
+struct Box {
+    int v[3];
+    int grid[2][2];
+    int w;
+};
+
+procedure main()
+    Box a
+
+    a.v[0] += 5
+    a.v[1] += 7
+    a.v[2] += a.v[0]        // cross array-field-element read: v = {5, 7, 5}
+    a.grid[0][0] += 2
+    a.grid[1][1] += 4
+    a.grid[0][1] += a.grid[1][1]   // 2-D field, cross read: grid = {{2,4},{0,4}}
+    a.w += a.v[1]                   // array field -> scalar field: w = 7

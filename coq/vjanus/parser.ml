@@ -79,7 +79,10 @@ and lval s =
   while at_op s "[" do adv s; let e = expr s in eat_op s "]"; sels := e :: !sels done;
   let fields = ref [] in
   while at_op s "." do adv s; fields := ident s :: !fields done;
-  { lname = nm; sels = List.rev !sels; fields = List.rev !fields }
+  (* indices AFTER the field path index into an array field (a.v[i], a.m[i][j]) *)
+  let fsels = ref [] in
+  while at_op s "[" do adv s; let e = expr s in eat_op s "]"; fsels := e :: !fsels done;
+  { lname = nm; sels = List.rev !sels; fields = List.rev !fields; fsels = List.rev !fsels }
 
 (* ----- statements ----- *)
 

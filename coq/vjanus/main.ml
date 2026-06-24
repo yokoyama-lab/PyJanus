@@ -100,16 +100,37 @@ let print_array f slot name dims =
   let dimtag = String.concat "" (List.map (fun d -> Printf.sprintf "[%d]" d) dims) in
   Printf.printf "%s%s = %s\n" name dimtag (Buffer.contents buf)
 
+(* render one struct value `{f = v, g = {nested}, ...}`.  [read off] reads the
+   cell at field-offset [off] within this struct element; a scalar field reads
+   [off] directly, an array field (dims<>[]) nests its cells at off+cantor(idx). *)
+let struct_body read offsets =
+  String.concat ", "
+    (List.map (fun (fld, off, fdims) ->
+       match fdims with
+       | [] -> Printf.sprintf "%s = %d" fld (read off)
+       | dims ->
+         let buf = Buffer.create 32 in
+         let rec go prefix dims = match dims with
+           | [] -> Buffer.add_string buf (string_of_int (read (off + cantor (List.rev prefix))))
+           | d :: rest ->
+             Buffer.add_char buf '{';
+             for i = 0 to d - 1 do
+               if i > 0 then Buffer.add_string buf ", ";
+               go (i :: prefix) rest
+             done;
+             Buffer.add_char buf '}'
+         in go [] dims;
+         Printf.sprintf "%s = %s" fld (Buffer.contents buf))
+       offsets)
+
 (* print an array of structs: each element is `{f = v, ...}`, nested by dims *)
 let print_struct_array f base name dims nfields offsets =
   let buf = Buffer.create 64 in
   let rec go prefix dims = match dims with
     | [] ->
       let elem = cantor (List.rev prefix) in
-      let body = String.concat ", "
-        (List.map (fun (fld, off) ->
-           Printf.sprintf "%s = %d" fld (Glue.read_global_cell f base (elem * nfields + off))) offsets) in
-      Buffer.add_string buf (Printf.sprintf "{%s}" body)
+      let read off = Glue.read_global_cell f base (elem * nfields + off) in
+      Buffer.add_string buf (Printf.sprintf "{%s}" (struct_body read offsets))
     | d :: rest ->
       Buffer.add_char buf '{';
       for i = 0 to d - 1 do
@@ -156,6 +177,30 @@ let run_inverse procs main layout (jv : jv) =
       | JArr xs -> List.fold_left go acc xs
       | JObj _ -> raise (Lower.Unsupported "inverse: array expects integer leaves") in
     List.rev (go [] v) in
+  let as_obj name v = match v with JObj o -> o
+    | _ -> raise (Lower.Unsupported ("inverse: struct " ^ name ^ " needs an object")) in
+  (* seed one struct element's fields via [put cell_offset value]; a scalar field
+     seeds [off], an array field seeds off+Cantor(idx) for each (flat/nested) idx *)
+  let seed_struct put o offsets =
+    List.iter (fun (fld, off, fdims) ->
+      let fv = match List.assoc_opt fld o with Some x -> x
+        | None -> raise (Lower.Unsupported ("inverse: missing struct field " ^ fld)) in
+      match fdims with
+      | [] -> (match fv with JInt x -> put off x
+               | _ -> raise (Lower.Unsupported ("inverse: field " ^ fld ^ " needs an integer")))
+      | dims ->
+        let vals = flat_ints fv and idxs = combos dims in
+        if List.length vals <> List.length idxs then
+          raise (Lower.Unsupported ("inverse: field " ^ fld ^ " shape mismatch"));
+        List.iter2 (fun midx x -> put (off + cantor midx) x) idxs vals) offsets in
+  (* read one struct element back to JSON via [get cell_offset]; array fields
+     emit a flat row-major list (matching PyJanus) *)
+  let read_struct get offsets =
+    JObj (List.map (fun (fld, off, fdims) ->
+      match fdims with
+      | [] -> (fld, JInt (get off))
+      | dims -> (fld, JArr (List.map (fun midx -> JInt (get (off + cantor midx))) (combos dims))))
+      offsets) in
   (* seed main's scalar / array / struct / struct-array cells from the finals *)
   let scalars = ref [] and cells = ref [] in
   List.iter (fun (name, v) ->
@@ -172,20 +217,22 @@ let run_inverse procs main layout (jv : jv) =
       List.iter2 (fun midx x -> cells := (slot, cantor midx, x) :: !cells) idxs vals
     | None ->
     match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.structs with
-    | Some (_, base, offsets) ->                  (* scalar struct: {field: v, ...} *)
-      let o = match v with JObj o -> o
-        | _ -> raise (Lower.Unsupported ("inverse: struct " ^ name ^ " needs an object")) in
+    | Some (_, base, offsets) ->                  (* pure scalar struct: G slots *)
+      let o = as_obj name v in
       List.iter (fun (fld, off) -> scalars := (base + off, field_val o fld) :: !scalars) offsets
     | None ->
+    match List.find_opt (fun (n, _, _) -> n = name) layout.Lower.flatstructs with
+    | Some (_, base, offsets) ->                  (* scalar struct w/ array fields: GA cells *)
+      seed_struct (fun off x -> cells := (base, off, x) :: !cells) (as_obj name v) offsets
+    | None ->
     match List.find_opt (fun (n, _, _, _, _) -> n = name) layout.Lower.sarrays with
-    | Some (_, base, dims, nfields, offsets) ->   (* struct array: row-major [{field: v}, …] *)
+    | Some (_, base, dims, nfields, offsets) ->   (* struct array: row-major [{...}, …] *)
       let objs = flat_objs v and idxs = combos dims in
       if List.length objs <> List.length idxs then
         raise (Lower.Unsupported ("inverse: struct array " ^ name ^ " shape mismatch"));
       List.iter2 (fun midx o ->
-        let cellbase = cantor midx * nfields in
-        List.iter (fun (fld, off) -> cells := (base, cellbase + off, field_val o fld) :: !cells) offsets)
-        idxs objs
+        let cb = cantor midx * nfields in
+        seed_struct (fun off x -> cells := (base, cb + off, x) :: !cells) o offsets) idxs objs
     | None -> ()  (* ignore keys that aren't main variables *)) obj;
   (* invert only main's BODY (not the decl-init prefix): the seed already
      stands in for PyJanus's "re-declare with the final store" step, so running
@@ -204,15 +251,17 @@ let run_inverse procs main layout (jv : jv) =
     let struct_kvs = List.map (fun (name, base, offsets) ->
       (name, JObj (List.map (fun (fld, off) -> (fld, JInt (Glue.read_global f (base + off)))) offsets)))
       layout.Lower.structs in
+    let flatstruct_kvs = List.map (fun (name, base, offsets) ->
+      (name, read_struct (fun off -> Glue.read_global_cell f base off) offsets))
+      layout.Lower.flatstructs in
     let sarray_kvs = List.map (fun (name, base, dims, nfields, offsets) ->
       let elems = List.map (fun midx ->
-        let cellbase = cantor midx * nfields in
-        JObj (List.map (fun (fld, off) ->
-          (fld, JInt (Glue.read_global_cell f base (cellbase + off)))) offsets))
+        let cb = cantor midx * nfields in
+        read_struct (fun off -> Glue.read_global_cell f base (cb + off)) offsets)
         (combos dims) in
       (name, JArr elems)) layout.Lower.sarrays in
     let buf = Buffer.create 64 in
-    print_jv buf (JObj (scalar_kvs @ array_kvs @ struct_kvs @ sarray_kvs));
+    print_jv buf (JObj (scalar_kvs @ array_kvs @ struct_kvs @ flatstruct_kvs @ sarray_kvs));
     print_string (Buffer.contents buf); print_newline ()
 
 let () =
@@ -252,11 +301,15 @@ let () =
            let cells = List.init depth (fun k -> Glue.read_global_cell f arr (depth - 1 - k)) in
            Printf.printf "%s = <%s]\n" name (String.concat ", " (List.map string_of_int cells))
          end) layout.Lower.stks;
-       (* scalar structs: `name = {f1 = v1, f2 = v2, …}` *)
+       (* scalar structs (no array fields): `name = {f1 = v1, f2 = v2, …}` *)
        List.iter (fun (name, base, offsets) ->
          let body = String.concat ", "
            (List.map (fun (fld, off) -> Printf.sprintf "%s = %d" fld (Glue.read_global f (base + off))) offsets) in
          Printf.printf "%s = {%s}\n" name body) layout.Lower.structs;
+       (* scalar structs WITH array fields: GA-addressed; array fields nest *)
+       List.iter (fun (name, base, offsets) ->
+         let read off = Glue.read_global_cell f base off in
+         Printf.printf "%s = {%s}\n" name (struct_body read offsets)) layout.Lower.flatstructs;
        (* arrays of structs: `name[N] = {{f = v, …}, …}` *)
        List.iter (fun (name, base, dims, nfields, offsets) ->
          print_struct_array f base name dims nfields offsets) layout.Lower.sarrays)
