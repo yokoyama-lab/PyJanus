@@ -39,7 +39,8 @@ extracted core on the recursion-with-locals aliasing case.
 This is verified, not asserted: `tests/jana2014/test_vjanus_corpus.py` runs the
 whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
-`call`/`uncall`.  Currently **42 match, 1 skips**.
+`call`/`uncall` (including nested struct-by-reference and the reverse of a
+stack-building procedure).  Currently **45 match, 1 skips**.
 
 One jana2014 construct makes `vjanus` exit with a clean "unsupported" (exit code
 3), not a crash — and it is a **principled boundary**, not just unfinished work:
