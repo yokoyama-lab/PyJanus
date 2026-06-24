@@ -85,7 +85,27 @@ def _flatten_structs(value: object) -> list[dict]:
   return out
 
 
-def _seed_struct_stmts(name: str, value: object, dims: list[int]) -> list["AssignStmt"]:
+def _flatten_ints(v: object) -> list[int]:
+  """Row-major flatten of a (possibly nested or flat) array field value."""
+  if isinstance(v, list):
+    out: list[int] = []
+    for x in v:
+      out.extend(_flatten_ints(x))
+    return out
+  return [v]
+
+
+def _unflatten(k: int, dims: list[int]) -> list[int]:
+  """The row-major multi-index of flat position k for the given dimensions."""
+  midx, rem = [], k
+  for stride in [int_prod(dims[i + 1:]) for i in range(len(dims))]:
+    midx.append(rem // stride)
+    rem %= stride
+  return midx
+
+
+def _seed_struct_stmts(name: str, value: object, dims: list[int],
+                       field_dims: dict[str, list[int]]) -> list["AssignStmt"]:
   """Reversible `+= v` statements driving a freshly-declared (all-zero) struct or
   struct-array variable to its final-store values.
 
@@ -94,37 +114,58 @@ def _seed_struct_stmts(name: str, value: object, dims: list[int]) -> list["Assig
   Instead it prepends these field assignments before the inverted body: each
   struct field is driven from 0 to its final value, mirroring the "re-declare
   with the final store" step that scalars/arrays get for free.  `dims` are the
-  array dimensions (empty for a scalar struct); the store flattens multi-dim
-  arrays row-major, so a flat element index is unflattened back to `grid[i][j]`.
+  variable's array dimensions (empty for a scalar struct); `field_dims` maps a
+  field to its own array dimensions (a scalar field has []).  The store flattens
+  multi-dim arrays row-major, so flat indices are unflattened back to `g[i][j]`
+  (the struct array element) and `.v[a][b]` (an array field).
   """
   stmts: list[AssignStmt] = []
 
-  def assign(selectors: list, fld: str, v: int) -> None:
-    if v == 0:
-      return                                     # `+= 0` is a no-op
-    lval = Lval(Ident(name, _DUMMY_POS),
-                selectors + [LvalField(Ident(fld, _DUMMY_POS))])
-    stmts.append(AssignStmt(ModOp.ADD_EQ, lval, Number(v, _DUMMY_POS), _DUMMY_POS))
+  def assign_field(base_sel: list, fld: str, v: object) -> None:
+    fdims = field_dims.get(fld, [])
+    if not fdims:                                # scalar field
+      if v == 0:
+        return                                   # `+= 0` is a no-op
+      lval = Lval(Ident(name, _DUMMY_POS), base_sel + [LvalField(Ident(fld, _DUMMY_POS))])
+      stmts.append(AssignStmt(ModOp.ADD_EQ, lval, Number(v, _DUMMY_POS), _DUMMY_POS))
+    else:                                        # array field: flat row-major
+      for k, elem in enumerate(_flatten_ints(v)):
+        if elem == 0:
+          continue
+        idx_sel = [LvalIndex(Number(i, _DUMMY_POS)) for i in _unflatten(k, fdims)]
+        lval = Lval(Ident(name, _DUMMY_POS),
+                    base_sel + [LvalField(Ident(fld, _DUMMY_POS))] + idx_sel)
+        stmts.append(AssignStmt(ModOp.ADD_EQ, lval, Number(elem, _DUMMY_POS), _DUMMY_POS))
+
+  def seed_elem(base_sel: list, elem: dict) -> None:
+    for fld, v in elem.items():
+      assign_field(base_sel, fld, v)
 
   if not dims:                                   # scalar struct: value is a dict
-    for fld, v in value.items():
-      assign([], fld, v)
+    seed_elem([], value)
     return stmts
 
   for k, elem in enumerate(_flatten_structs(value)):   # struct array, row-major
-    midx, rem = [], k
-    for stride in (  # row-major strides: product of the trailing dimensions
-        [int_prod(dims[i + 1:]) for i in range(len(dims))]):
-      midx.append(rem // stride); rem %= stride
-    selectors = [LvalIndex(Number(i, _DUMMY_POS)) for i in midx]
-    for fld, v in elem.items():
-      assign(selectors, fld, v)
+    sel = [LvalIndex(Number(i, _DUMMY_POS)) for i in _unflatten(k, dims)]
+    seed_elem(sel, elem)
   return stmts
+
+
+def _struct_field_dims(struct_defs) -> dict[str, dict[str, list[int]]]:
+  """struct name -> {field name -> its array dimensions ([] if scalar)}."""
+  out: dict[str, dict[str, list[int]]] = {}
+  for sd in struct_defs:
+    out[sd.ident.name] = {
+      fld.ident.name: [d.value for d in fld.dimensions if isinstance(d, Number)]
+      for fld in sd.fields
+    }
+  return out
 
 
 def _build_inverted_main(
   original_main: ProcMain,
   final_store: dict[str, int],
+  sfdims: dict[str, dict[str, list[int]]],
 ) -> ProcMain:
   """Build a new main procedure for the inverted program.
 
@@ -144,7 +185,8 @@ def _build_inverted_main(
     if vdecl.typ.kind == "struct" and value is not None:
       new_vdecls.append(vdecl)
       dims = [d.value for d in vdecl.dimensions if isinstance(d, Number)]
-      struct_seeds.extend(_seed_struct_stmts(name, value, dims))
+      struct_seeds.extend(
+        _seed_struct_stmts(name, value, dims, sfdims.get(vdecl.typ.name, {})))
       continue
     # Seed scalars and arrays from the final store; leave other shapes (e.g.
     # stacks) with their original declaration.
@@ -189,7 +231,8 @@ def run_inverse(
     )
 
   try:
-    inv_main = _build_inverted_main(program.main, final_store)
+    inv_main = _build_inverted_main(
+      program.main, final_store, _struct_field_dims(program.struct_defs))
 
     # Use original (non-inverted) procedures: the inverted main swaps
     # call→uncall (global_mode=False), and the runtime's uncall handler
