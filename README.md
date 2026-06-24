@@ -26,6 +26,18 @@ python3 -m jana_py.cli --std jana2014 -c tests/jana2014/fixtures/examples/fib.ja
 
 No external dependencies are required — only Python 3.10+.
 
+## Web Playground
+
+A browser playground (edit a program, pick the dialect/direction/mode, supply
+`read` input, run it) ships in `webui/`:
+
+```bash
+python3 -m jana_py.web          # http://127.0.0.1:8000  (stdlib only, no deps)
+```
+
+The same front-end can also be deployed on an **Apache + PHP** server
+(`webui/index.php`); see [`webui/README.md`](webui/README.md).
+
 ## Language Features
 
 | Feature | Syntax |
