@@ -40,21 +40,23 @@ extracted core on the recursion-with-locals aliasing case.
 one, using the Coq-extracted `invert` (`RevExtractFrame.v`, proved to satisfy
 `RevFrame.exec_iff`): it inverts main's body and runs it from the seeded final
 store. It is **output-compatible with PyJanus `--inverse`** — same input JSON,
-same output JSON `{name: value}` (multi-dim arrays flattened row-major) — so the
-two inverters compare directly. Following PyJanus, the declaration initializers
-are *not* inverted: the reconstructed store is the state at the start of main's
-body (its declared initial values), and the seed stands in for re-declaring with
-the final store.
+same output JSON — so the two inverters compare directly. Following PyJanus, the
+declaration initializers are *not* inverted: the reconstructed store is the state
+at the start of main's body (its declared initial values), and the seed stands
+in for re-declaring with the final store.
 
 ```bash
-coq/vjanus/vjanus -inverse '{"x": 3, "y": 8}' prog.ja      # -> {"x": 0, "y": 0}
+coq/vjanus/vjanus -inverse '{"x": 3, "y": 8}' prog.ja              # -> {"x": 0, "y": 0}
+coq/vjanus/vjanus -inverse '{"a": {"x": 4, "y": 4}}' prog.ja       # scalar struct
 ```
 
-Scope is main scalars and integer arrays. A stack or struct in main makes it
-exit 3 ("unsupported"): PyJanus `--inverse` can't seed a stack, and mishandles
-nested struct stores, so there is no oracle to match there.
-`tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
-inverse vs PyJanus, over the whole corpus).
+Scope is main scalars, integer arrays (any rank), scalar structs (`{field:
+value}`) and struct arrays (a row-major list of `{field: value}`); multi-dim
+arrays and struct arrays are flattened row-major to match PyJanus, and the seed
+accepts either flat or nested input. A **stack** in main makes it exit 3
+("unsupported"): PyJanus `--inverse` can't seed a stack, so there is no oracle to
+match there. `tests/jana2014/test_vjanus_inverse.py` is the differential check
+(verified inverse vs PyJanus, over the whole corpus).
 
 ## Compatibility & scope
 
