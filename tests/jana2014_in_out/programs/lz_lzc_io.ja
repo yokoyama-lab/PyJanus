@@ -1,0 +1,141 @@
+// LZ-family LZC (Unix compress: LZW + freeze + reset): reversible jana2014_in_out program.
+// Reads 8 symbols (in[0]=length prefix), runs rev_lzc_struct, writes out[0..9].
+// Backward run uncalls it (decodes) and reproduces the input.
+// Self-contained copy from RevLZ pcp/in_out; proof: coq/LZC.v model (universal proof pending).
+// Symbols are 1..alphSize-1 (alphSize=10); dictSize=20.
+// case: abcabc
+// in: 1 2 3 1 2 3 1 2
+// out: 6 1 2 3 11 13 2 0 0 0
+// case: alt12
+// in: 1 2 1 2 1 2 2 2
+// out: 6 1 2 11 11 2 2 0 0 0
+// case: distinct
+// in: 1 2 3 4 5 6 7 8
+// out: 8 1 2 3 4 5 6 7 8 0
+// case: ones
+// in: 1 1 1 1 1 1 1 1
+// out: 4 1 11 12 11 0 0 0 0 0
+// case: runs
+// in: 3 3 1 1 2 2 3 3
+// out: 7 3 3 1 1 2 2 11 0 0
+
+/* PyJanus-compatible copy of lz78/lzc_struct_base.ja (struct field separators
+   changed to the jana2014 semicolon form).  NOTE: LZC's universal decode_encode
+   is not yet proved in coq/ (it is LZW + dictionary freeze + ratio-based reset);
+   this exercises the reversible Janus implementation, which is the example. */
+
+struct DictEntry {
+    int parent;
+    int sym;
+    int depth;
+    int first;
+}
+
+
+procedure init_dict_lzc(DictEntry d[], int n, int T[][], int alphSize)
+  // Initialize single-character entries 1..alphSize-1 (same as LZW)
+  from n = 0 loop
+    n += 1
+    d[n].sym += n
+    d[n].depth += 1
+    d[n].first += n
+    T[0][n] += n
+  until n = alphSize - 1
+  // Skip alphSize (the clear_code slot): advance n past it
+  n += 2
+
+
+procedure add_to_dict_lzc(int c, int k, DictEntry d[], int n, int T[][])
+  local int len = d[c].depth + 1
+  d[n].parent ^= c
+  d[n].sym ^= k
+  d[n].depth <=> len
+  d[n].first ^= d[c].first
+  delocal int len
+  T[c][k] ^= n
+  n += 1
+
+
+procedure build_dict_lzc(int out[], int i, int j, DictEntry d[], int n, int T[][], int dictSize, int alphSize)
+  call init_dict_lzc(d, n, T, alphSize)
+  i += 1
+  from j = 0 loop
+    j += 1
+    i += d[out[j]].depth
+    if j < out[0] then
+      local int sym = 0
+      if out[j+1] < n then
+        sym += d[out[j+1]].first
+      else
+        sym += d[out[j]].first
+      fi out[j+1] < n
+      if n < dictSize then
+        call add_to_dict_lzc(out[j], sym, d, n, T)
+      else
+        n += 1
+      fi n <= dictSize
+      sym -= d[out[j+1]].first
+      delocal int sym = 0
+    fi j < out[0]
+  until j = out[0]
+
+
+procedure compress_lzc(int in[], int out[], int i, int j, DictEntry d[], int n, int T[][], int dictSize, int alphSize)
+  local int code = 0, int di = 0
+  call init_dict_lzc(d, n, T, alphSize)
+  i += 1
+  from i = 1 loop
+    di ^= T[code][in[i]]
+    if di != 0 && d[di].parent = code && d[di].sym = in[i] then
+      in[i] ^= d[di].sym
+      code ^= d[di].parent
+      code ^= di
+      di ^= T[d[code].parent][d[code].sym]
+      i += 1
+    else
+      di ^= T[code][in[i]]
+      out[j+1] <=> code
+      if in[i] != 0 then
+        if n < dictSize then
+          call add_to_dict_lzc(out[j+1], in[i], d, n, T)
+        else
+          n += 1
+        fi n <= dictSize
+      fi in[i] != 0
+      j += 1
+    fi code != 0
+  until in[i] = 0 && code = 0
+  in[0] -= i - 1
+  out[0] += j
+  delocal int code = 0, int di = 0
+
+
+procedure rev_lzc_struct(int in[], int out[], int dictSize, int alphSize)
+  local int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], DictEntry d[dictSize]
+  call compress_lzc(in, out, i, j, d, n, T, dictSize, alphSize)
+  uncall build_dict_lzc(out, i, j, d, n, T, dictSize, alphSize)
+  delocal int i = 0, int j = 0, int n = 0, int T[dictSize][alphSize], DictEntry d[dictSize]
+
+procedure main()
+    int in[10]
+    int out[10]
+    read in[1]
+    read in[2]
+    read in[3]
+    read in[4]
+    read in[5]
+    read in[6]
+    read in[7]
+    read in[8]
+    in[0] += 8
+    call rev_lzc_struct(in, out, 20, 10)
+    write out[0]
+    write out[1]
+    write out[2]
+    write out[3]
+    write out[4]
+    write out[5]
+    write out[6]
+    write out[7]
+    write out[8]
+    write out[9]
