@@ -188,10 +188,12 @@ def _build_inverted_main(
       struct_seeds.extend(
         _seed_struct_stmts(name, value, dims, sfdims.get(vdecl.typ.name, {})))
       continue
-    # Seed scalars and arrays from the final store; leave other shapes (e.g.
-    # stacks) with their original declaration.
+    # Seed scalars, arrays and stacks from the final store.  A stack's store
+    # value is its (top-first) contents list, and `stack s = {...}` sets exactly
+    # that list, so the array initializer seeds it directly.
     seed = (vdecl.dimensions and isinstance(value, list)) or \
-           (not vdecl.dimensions and isinstance(value, (int, bool)))
+           (not vdecl.dimensions and isinstance(value, (int, bool))) or \
+           (vdecl.typ.kind == "stack" and isinstance(value, list))
     init_expr = _make_init_expr(value) if seed else None
     if init_expr is not None:
       new_vdecls.append(Vdecl(
