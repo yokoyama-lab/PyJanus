@@ -7,10 +7,11 @@ PyJanus `--inverse`.  This test asserts the two agree: for every corpus program
 it takes the forward final store (computed in-process via the PyJanus runtime)
 and feeds it to BOTH inverters, comparing the reconstructed initial stores.
 
-Covers main scalars, integer arrays (any rank), scalar structs and struct arrays.
-Stacks are out of scope (PyJanus `--inverse` can't seed a stack), so a stack in
-main skips — as does anything `vjanus` marks unsupported (exit 3, e.g. the
-self-referential `delocal`).
+Covers main scalars, integer arrays (any rank), scalar structs, struct arrays
+(incl. array fields) and stacks.  A program skips only when PyJanus `--inverse`
+cannot invert it (no oracle) — in practice the self-referential `delocal`, which
+PyJanus inverts to an invalid `local i=i` (vjanus's loop-aware lowering inverts
+it fine) — or when `vjanus` marks it unsupported (exit 3).
 
 Needs the `vjanus` binary (build with `bash coq/vjanus/build.sh`); skips if absent.
 """
@@ -56,8 +57,6 @@ def test_vjanus_inverse_matches_pyjanus(ja: str) -> None:
     pytest.skip(f"does not parse/validate: {exc}")
   if program.main is None:
     pytest.skip("no main procedure")
-  if any(v.typ.kind == "stack" for v in program.main.vdecls):
-    pytest.skip("stack in main (outside the inverse subset)")
 
   try:
     store = _forward_store(program)
