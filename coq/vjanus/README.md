@@ -21,6 +21,7 @@ could not (e.g. `stack-operations.ja`'s recursive `reverse`).
 ```bash
 bash coq/vjanus/build.sh                 # extracts (rocq) + compiles (ocamlc)
 coq/vjanus/vjanus -s prog.ja             # run, print the final store
+coq/vjanus/vjanus -inverse '<JSON>' prog.ja   # inverse: final store -> initial store
 ```
 
 Requires the Rocq prover (for the one-time extraction) and `ocamlc`. The store is
@@ -32,6 +33,28 @@ coq/vjanus/vjanus -s ../../tests/jana2014/fixtures/examples/fib.ja
 
 `build.sh` also builds and runs `frame_smoke`, a direct end-to-end check of the
 extracted core on the recursion-with-locals aliasing case.
+
+### Verified inverse (`-inverse`)
+
+`-inverse '<final-store JSON>'` reconstructs the **initial** store from a final
+one, using the Coq-extracted `invert` (`RevExtractFrame.v`, proved to satisfy
+`RevFrame.exec_iff`): it inverts main's body and runs it from the seeded final
+store. It is **output-compatible with PyJanus `--inverse`** — same input JSON,
+same output JSON `{name: value}` (multi-dim arrays flattened row-major) — so the
+two inverters compare directly. Following PyJanus, the declaration initializers
+are *not* inverted: the reconstructed store is the state at the start of main's
+body (its declared initial values), and the seed stands in for re-declaring with
+the final store.
+
+```bash
+coq/vjanus/vjanus -inverse '{"x": 3, "y": 8}' prog.ja      # -> {"x": 0, "y": 0}
+```
+
+Scope is main scalars and integer arrays. A stack or struct in main makes it
+exit 3 ("unsupported"): PyJanus `--inverse` can't seed a stack, and mishandles
+nested struct stores, so there is no oracle to match there.
+`tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
+inverse vs PyJanus, over the whole corpus).
 
 ## Compatibility & scope
 
@@ -81,11 +104,11 @@ absolute name at the call site) — and encodes:
 
 | file | role |
 |------|------|
-| `glue.ml`   | int ↔ Coq numeral conversions; thin runner over `Janus_frame.run` |
+| `glue.ml`   | int ↔ Coq numeral conversions; runners over `Janus_frame.run` (forward, and seeded for `invert`) |
 | `ast.ml`    | vjanus's own jana2014 AST |
 | `lexer.ml`  | jana2014 tokenizer |
 | `parser.ml` | recursive-descent parser → AST |
 | `lower.ml`  | AST → verified frame `stmt`/`expr` + ref classification, arrays, stacks |
-| `main.ml`   | CLI (`-s` run + store dump) |
+| `main.ml`   | CLI (`-s` run + store dump; `-inverse` verified inverse + JSON I/O) |
 | `frame_smoke.ml` | end-to-end check of the extracted core on recursion-with-locals |
 | `build.sh`  | extract + compile |

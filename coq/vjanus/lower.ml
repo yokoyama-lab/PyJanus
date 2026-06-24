@@ -456,6 +456,9 @@ type layout = {
   structs : (string * int * (string * int) list) list;  (* var, base slot, (field, offset) list *)
   sarrays : (string * int * int list * int * (string * int) list) list;
                                           (* var, base array slot, dims, field count, (field, offset) list *)
+  mbody : J.stmt;                         (* main's body WITHOUT the decl-init prefix, for `-inverse`:
+                                             PyJanus `--inverse` re-seeds decls with the final store and
+                                             inverts only the body, so we invert [mbody] (not the inits). *)
 }
 
 let program (p : Ast.program) : J.stmt array * J.stmt * layout =
@@ -532,4 +535,4 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let main = List.fold_left (fun acc s0 -> J.Seq (s0, acc)) body !inits in
   (Array.of_list procs, main,
    { scalars = List.rev !scalars; arrays = List.rev !arrays; stks = List.rev !stks;
-     structs = List.rev !structs; sarrays = List.rev !sarrays })
+     structs = List.rev !structs; sarrays = List.rev !sarrays; mbody = body })

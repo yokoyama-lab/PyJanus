@@ -49,3 +49,27 @@ let run_program ?(fuel = default_fuel) (bodies : stmt array) (main : stmt)
 let read_global (f : loc -> int) (slot : int) : int = f (G (nat_of_int slot))
 let read_global_cell (f : loc -> int) (slot : int) (idx : int) : int =
   f (GA (nat_of_int slot, z_of_int idx))
+
+(* the verified statement inverter (extracted from RevExtractFrame.v): inverting
+   [main] and running it from a final store yields the initial store, by
+   [RevFrame.exec_iff].  Inverted [Call] nodes become [Uncall], so a single
+   [invert] of the main body suffices — the procedure table is unchanged. *)
+let invert_main (s : stmt) : stmt = invert s
+
+(* like [run_program] but seeds explicit GLOBAL scalar / array-cell values into
+   the starting store (everything else 0), so the inverter can run from a given
+   final store.  [scalars]: (slot, value); [cells]: (slot, flat-index, value). *)
+let run_seeded ?(fuel = default_fuel) (bodies : stmt array) (main : stmt)
+    (scalars : (int * int) olist) (cells : (int * int * int) olist)
+    : (loc -> int) option =
+  let init : store = fun l -> match l with
+    | G n -> (match List.assoc_opt (int_of_nat n) scalars with
+              | Some v -> z_of_int v | None -> Z0)
+    | GA (n, i) ->
+      let s = int_of_nat n and idx = int_of_z i in
+      (match List.find_opt (fun (s', i', _) -> s' = s && i' = idx) cells with
+       | Some (_, _, v) -> z_of_int v | None -> Z0)
+    | _ -> Z0 in
+  match run (gamma_of bodies) (nat_of_int fuel) O main init with
+  | Some f -> Some (fun l -> int_of_z (f l))
+  | None -> None
