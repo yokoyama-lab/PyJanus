@@ -12,14 +12,24 @@ from dataclasses import dataclass, replace
 
 from .ast import ArrayExpr
 from .ast import AssignStmt
+from .ast import BareLocalStmt
+from .ast import BinExpr
+from .ast import BinOpKind
 from .ast import DeclType
+from .ast import FromStmt
 from .ast import Ident
+from .ast import IfStmt
 from .ast import IntType
+from .ast import IterateStmt
+from .ast import LocalDecl
+from .ast import LocalStmt
 from .ast import Lval
+from .ast import LvalExpr
 from .ast import LvalField
 from .ast import LvalIndex
 from .ast import ModOp
 from .ast import Number
+from .ast import Proc
 from .ast import ProcMain
 from .ast import Program
 from .ast import SourcePos
@@ -212,6 +222,76 @@ def _build_inverted_main(
   return ProcMain(new_vdecls, struct_seeds + inverted_stmts, original_main.pos)
 
 
+def _references(expr, name: str) -> bool:
+  """Whether `expr` reads the variable `name` (the cases a delocal init uses)."""
+  if isinstance(expr, LvalExpr):
+    return expr.lval.ident.name == name or any(_references(i, name) for i in expr.lval.indices)
+  if isinstance(expr, BinExpr):
+    return _references(expr.left, name) or _references(expr.right, name)
+  return False
+
+
+def _counter_step(var: str, stmts) -> "int | None":
+  """The constant signed step of a top-level `var += c` / `var -= c` in stmts."""
+  for s in stmts:
+    if (isinstance(s, AssignStmt) and not s.lval.selectors
+        and s.lval.ident.name == var and isinstance(s.expr, Number)):
+      if s.mod_op == ModOp.ADD_EQ:
+        return s.expr.value
+      if s.mod_op == ModOp.SUB_EQ:
+        return -s.expr.value
+  return None
+
+
+def _desugar_self_ref(stmts: list) -> list:
+  """Rewrite the self-referential `delocal` counter idiom into a forward-
+  equivalent form the standard inverter can handle.
+
+  `local i=START; from i=START do {…; i += STEP} … until COND; delocal i = i`
+  becomes `local i=START; <loop>; from COND do { i -= STEP } until i = START;
+  delocal i = START`.  The reverse-count loop returns i to START (touching
+  nothing else), so the delocal is no longer self-referential and inverts
+  cleanly — PyJanus would otherwise invert `delocal i=i` to an invalid
+  `local i=i` and fail to reverse such a procedure.  Identity on everything else.
+  """
+  out: list = []
+  for s in stmts:
+    if isinstance(s, LocalStmt):
+      body = _desugar_self_ref(s.body)
+      var = s.enter_decl.ident.name
+      start = s.enter_decl.init_expr
+      exit_init = s.exit_decl.init_expr
+      step = ((_counter_step(var, body[0].do_part) or _counter_step(var, body[0].loop_part))
+              if len(body) == 1 and isinstance(body[0], FromStmt) else None)
+      if (exit_init is not None and _references(exit_init, var)
+          and start is not None and not _references(start, var) and step):
+        cond = body[0].exit_cond
+        lv = Lval(Ident(var, _DUMMY_POS), [])
+        dec = (AssignStmt(ModOp.SUB_EQ, lv, Number(step, _DUMMY_POS), _DUMMY_POS) if step > 0
+               else AssignStmt(ModOp.ADD_EQ, lv, Number(-step, _DUMMY_POS), _DUMMY_POS))
+        back = FromStmt(cond, [dec], [],
+                        BinExpr(BinOpKind.EQ, LvalExpr(lv, _DUMMY_POS), start, _DUMMY_POS), _DUMMY_POS)
+        new_exit = LocalDecl(s.exit_decl.decl_type, s.exit_decl.typ, s.exit_decl.ident,
+                             s.exit_decl.dimensions, start, s.exit_decl.pos)
+        out.append(LocalStmt(s.enter_decl, body + [back], new_exit, s.pos))
+      else:
+        out.append(LocalStmt(s.enter_decl, body, s.exit_decl, s.pos))
+    elif isinstance(s, FromStmt):
+      out.append(FromStmt(s.entry_cond, _desugar_self_ref(s.do_part),
+                          _desugar_self_ref(s.loop_part), s.exit_cond, s.pos))
+    elif isinstance(s, IfStmt):
+      out.append(IfStmt(s.entry_cond, _desugar_self_ref(s.if_part),
+                        _desugar_self_ref(s.else_part), s.exit_cond, s.pos))
+    elif isinstance(s, IterateStmt):
+      out.append(IterateStmt(s.typ, s.ident, s.start_expr, s.step_expr, s.end_expr,
+                             _desugar_self_ref(s.body), s.pos))
+    elif isinstance(s, BareLocalStmt):
+      out.append(BareLocalStmt(s.decl, _desugar_self_ref(s.body), s.pos))
+    else:
+      out.append(s)
+  return out
+
+
 def run_inverse(
   program: Program,
   final_store: dict[str, int],
@@ -233,13 +313,21 @@ def run_inverse(
     )
 
   try:
+    # Desugar self-referential `delocal` counter idioms first, so the (forward-
+    # equivalent) main and procedures invert without producing an invalid
+    # `local i=i`.  Identity on programs that do not use the construct.
+    desugared_main = ProcMain(
+      program.main.vdecls, _desugar_self_ref(program.main.stmts), program.main.pos)
+    desugared_procs = [
+      Proc(p.procname, p.params, _desugar_self_ref(p.body)) for p in program.procs]
+
     inv_main = _build_inverted_main(
-      program.main, final_store, _struct_field_dims(program.struct_defs))
+      desugared_main, final_store, _struct_field_dims(program.struct_defs))
 
     # Use original (non-inverted) procedures: the inverted main swaps
     # call→uncall (global_mode=False), and the runtime's uncall handler
     # locally inverts each procedure body at execution time.
-    inv_program = Program(inv_main, list(program.procs), program.struct_defs)
+    inv_program = Program(inv_main, desugared_procs, program.struct_defs)
 
     rt = Runtime(inv_program)
     rt.run()
