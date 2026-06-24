@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyJanus playground</title>
+<style>
+  :root { --bg:#1e1e2e; --panel:#272739; --fg:#e4e4ef; --acc:#89b4fa; --mut:#9aa0b5; --err:#f38ba8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:10px 16px; background:var(--panel); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; color:var(--acc); }
+  header .sp { flex:1; }
+  select,input,button,textarea { font:inherit; color:var(--fg); background:#1b1b29; border:1px solid #3a3a52; border-radius:6px; padding:5px 8px; }
+  button { background:var(--acc); color:#1b1b29; border:0; font-weight:600; cursor:pointer; padding:6px 16px; }
+  button:hover { filter:brightness(1.08); }
+  label { color:var(--mut); font-size:12px; }
+  .field { display:flex; flex-direction:column; gap:2px; }
+  main { display:grid; grid-template-columns:1fr 1fr; gap:1px; height:calc(100vh - 56px); background:#3a3a52; }
+  .col { display:flex; flex-direction:column; background:var(--bg); min-height:0; }
+  .col h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); margin:0; padding:8px 12px; background:var(--panel); }
+  textarea#src { flex:1; resize:none; border:0; border-radius:0; padding:12px; font-family:ui-monospace,monospace; tab-size:4; }
+  .io { padding:8px 12px; background:var(--panel); display:flex; align-items:center; gap:8px; }
+  .io input { flex:1; }
+  pre#out { flex:1; margin:0; padding:12px; overflow:auto; white-space:pre-wrap; font-family:ui-monospace,monospace; }
+  pre#out .e { color:var(--err); }
+  pre#out .m { color:var(--mut); }
+  @media(max-width:780px){ main{grid-template-columns:1fr;height:auto} }
+</style></head>
+<body>
+<header>
+  <h1>PyJanus</h1>
+  <div class="field"><label>example</label><select id="ex"></select></div>
+  <div class="field"><label>--std</label><select id="std"></select></div>
+  <div class="field"><label>mode</label><select id="mode">
+    <option value="run">run</option><option value="store">run + store (-s)</option>
+    <option value="invert">invert (-i)</option><option value="ast">AST (-a)</option>
+    <option value="cpp">C++ (-c)</option><option value="debug">debug (-d)</option>
+    <option value="circuit">circuit</option><option value="profile">profile</option>
+  </select></div>
+  <div class="field"><label>direction</label><select id="dir">
+    <option value="forward">forward</option><option value="backward">backward</option></select></div>
+  <div class="field"><label>-m bits</label><input id="mbits" size="4" placeholder=""></div>
+  <div class="field"><label>-p prime</label><input id="mprime" size="6" placeholder=""></div>
+  <div class="sp"></div>
+  <button id="run">&#9654; Run</button>
+</header>
+<main>
+  <div class="col">
+    <h2>source</h2>
+    <textarea id="src" spellcheck="false"></textarea>
+    <div class="io"><label>read/scanf input</label><input id="args" placeholder="e.g. 5 8 13"></div>
+  </div>
+  <div class="col">
+    <h2>output <span id="cmd" class="m" style="text-transform:none;letter-spacing:0"></span></h2>
+    <pre id="out"></pre>
+  </div>
+</main>
+<script>
+const EX = %%EXAMPLES%%, STDS = %%STDS%%;
+const $ = id => document.getElementById(id);
+STDS.forEach(s => { const o=document.createElement('option'); o.value=o.textContent=s; $('std').appendChild(o); });
+Object.keys(EX).forEach(k => { const o=document.createElement('option'); o.value=o.textContent=k; $('ex').appendChild(o); });
+function load(k){ const e=EX[k]; if(!e) return; $('std').value=e[0]; $('src').value=e[1]; $('args').value=e[2]; }
+$('ex').onchange = e => load(e.target.value);
+load(Object.keys(EX)[0]);
+async function run(){
+  $('out').textContent='running…'; $('cmd').textContent='';
+  const body={source:$('src').value, std:$('std').value, mode:$('mode').value,
+    direction:$('dir').value, args:$('args').value, modBits:$('mbits').value, modPrime:$('mprime').value};
+  try{
+    const r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json(); const o=$('out'); o.innerHTML='';
+    if(d.cmd) $('cmd').textContent=d.cmd;
+    if(d.stdout){ const s=document.createElement('span'); s.textContent=d.stdout; o.appendChild(s); }
+    if(d.stderr){ const s=document.createElement('span'); s.className='e'; s.textContent=(d.stdout?'\n':'')+d.stderr; o.appendChild(s); }
+    if(!d.stdout && !d.stderr){ const s=document.createElement('span'); s.className='m'; s.textContent='(no output, exit '+d.code+')'; o.appendChild(s); }
+    const c=document.createElement('span'); c.className='m'; c.textContent='\n\n[exit '+d.code+']'; o.appendChild(c);
+  }catch(err){ $('out').innerHTML='<span class="e">'+err+'</span>'; }
+}
+$('run').onclick=run;
+$('src').addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run();}
+  if(e.key==='Tab'){e.preventDefault(); const t=e.target,s=t.selectionStart; t.value=t.value.slice(0,s)+'    '+t.value.slice(t.selectionEnd); t.selectionStart=t.selectionEnd=s+4;} });
+</script></body></html>

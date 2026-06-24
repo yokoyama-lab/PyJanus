@@ -1,0 +1,27 @@
+{
+  "stds": [
+    "janus2026",
+    "jana2014",
+    "jana2014basic",
+    "jana2014_in_out",
+    "janus1982",
+    "janus1982ext"
+  ],
+  "examples": {
+    "janus2026 — swap (XOR)": [
+      "janus2026",
+      "// swap two values reversibly (C-style)\nvoid swap(int a, int b) {\n    a ^= b;\n    b ^= a;\n    a ^= b;\n}\nvoid main() {\n    int x = 7;\n    int y = 11;\n    printf(\"before: x=%d y=%d\\n\", x, y);\n    call swap(x, y);\n    printf(\"after:  x=%d y=%d\\n\", x, y);\n}\n",
+      ""
+    ],
+    "janus2026 — Caesar cipher": [
+      "janus2026",
+      "// reversible Caesar cipher: char arrays + call/uncall\nvoid caesar(char buf[12], int key) {\n    for (int i = 0; i < 11; i += 1) {\n        local int ch = buf[i] {\n            if (ch >= 97 && ch <= 122) {\n                buf[i] -= ch;\n                buf[i] += (ch - 97 + key) % 26 + 97;\n            } fi (buf[i] >= 97 && buf[i] <= 122);\n        } delocal int ch = (buf[i] >= 97 && buf[i] <= 122 ? (buf[i] - 97 - key + 26) % 26 + 97 : buf[i]);\n    }\n}\nvoid main() {\n    char msg[12] = \"hello world\";\n    int key = 3;\n    printf(\"plain:  %s\\n\", msg);\n    call caesar(msg, key);\n    printf(\"cipher: %s\\n\", msg);\n    uncall caesar(msg, key);\n    printf(\"back:   %s\\n\", msg);\n}\n",
+      ""
+    ],
+    "jana2014_in_out — add (read/write)": [
+      "jana2014_in_out",
+      "// read two numbers; write their sum and the second; backward subtracts\nprocedure main()\n    int x\n    int y\n    read x\n    read y\n    x += y\n    write x\n    write y\n",
+      "5 8"
+    ]
+  }
+}
