@@ -20,10 +20,13 @@ OCAMLC="${OCAMLC:-$(command -v ocamlc)}"
   vjanus/glue.ml vjanus/frame_smoke.ml
 vjanus/frame_smoke
 
-# vjanus: own jana2014 lexer/parser + frame-aware lowering -> extracted run.
-"$OCAMLC" -w -a -I . -I vjanus -o vjanus/vjanus \
+# vjanus: compile to a temp name first so a partial build never overwrites a
+# working binary; rename to the final name only on clean success.
+trap 'rm -f vjanus/vjanus_new' EXIT
+"$OCAMLC" -w -a -I . -I vjanus -o vjanus/vjanus_new \
   janus_frame.mli janus_frame.ml \
   vjanus/glue.ml vjanus/ast.ml vjanus/lexer.ml vjanus/parser.ml \
   vjanus/lower.ml vjanus/main.ml
+mv vjanus/vjanus_new vjanus/vjanus
 
 echo "built coq/vjanus/vjanus"
