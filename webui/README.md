@@ -80,7 +80,10 @@ once — both backends pick it up.
   opens with that dialect pre-selected (`?parser=…` also works).
 - **Standard input**: the *standard input* box takes one value per line (or
   whitespace-separated); it is fed to the program's `read`/`scanf`.
-- **Save / share a program**: the **Share** button encodes the whole state
-  (source, dialect, mode, direction, input) into the URL hash
-  (`…#code=<base64>`) and copies the link — open it later to restore everything.
-  No server storage; the program lives in the URL.
+- **Save / share a program**: the **Share** button stores the whole state
+  (source, dialect, mode, direction, input) on the server and copies a *short*
+  link `…/pyjanus-playground/?p=<hash>` (a 10-char content hash); open it later to
+  restore everything.  Saves go to `PYJANUS_SAVES` (default
+  `<PYJANUS_ROOT>/playground-saves`), which must be writable by the web user
+  (e.g. `chmod 1777` if the web user is not in your group); programs are capped at
+  64 KB and de-duplicated by content hash.
