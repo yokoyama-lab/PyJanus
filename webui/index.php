@@ -17,31 +17,59 @@
 
 $PYJANUS_ROOT = getenv('PYJANUS_ROOT') ?: dirname(__DIR__);
 $PYTHON       = getenv('PYJANUS_PYTHON') ?: 'python3';
+$SAVES_DIR    = getenv('PYJANUS_SAVES') ?: dirname(__DIR__).'/playground-saves';
 $TIMEOUT      = 10;  // seconds, hard cap per run
 $STDS  = ['janus2026','jana2014','jana2014basic','jana2014_in_out','janus1982','janus1982ext'];
 $MODES = ['run'=>[], 'store'=>['-s'], 'invert'=>['-i'], 'ast'=>['-a'], 'cpp'=>['-c'],
           'debug'=>['-d'], 'circuit'=>['--circuit'], 'profile'=>['--profile']];
+$JSON  = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $req = json_decode(file_get_contents('php://input'), true);
     if (!is_array($req)) $req = [];
-    echo json_encode(run_pyjanus($req), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $out = (($req['action'] ?? '') === 'save') ? save_state($req['state'] ?? []) : run_pyjanus($req);
+    echo json_encode($out, $JSON);
     exit;
 }
 
-// GET: serve the shared page with examples/stds injected
+// GET: serve the page with examples/stds (and any saved program ?p=hash) injected
 $html = @file_get_contents(__DIR__.'/playground.html');
 $data = json_decode(@file_get_contents(__DIR__.'/examples.json'), true);
 if ($html === false || !is_array($data)) {
     http_response_code(500);
     exit("missing webui asset (playground.html / examples.json)");
 }
-$html = str_replace('%%EXAMPLES%%', json_encode($data['examples'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $html);
-$html = str_replace('%%STDS%%',     json_encode($data['stds'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),     $html);
+$saved = 'null';
+if (isset($_GET['p']) && preg_match('/^[a-f0-9]{6,16}$/', $_GET['p'])) {
+    $f = $SAVES_DIR.'/'.$_GET['p'].'.json';
+    if (is_file($f)) { $c = file_get_contents($f); if ($c !== false && $c !== '') $saved = $c; }
+}
+$html = str_replace('%%SAVED%%',    $saved, $html);
+$html = str_replace('%%EXAMPLES%%', json_encode($data['examples'], $JSON), $html);
+$html = str_replace('%%STDS%%',     json_encode($data['stds'], $JSON),     $html);
 header('Content-Type: text/html; charset=utf-8');
 echo $html;
 exit;
+
+// Store a program state under a short content hash; returns ['id'=>hash].
+function save_state($state): array {
+    global $SAVES_DIR, $STDS, $JSON;
+    if (!is_array($state)) return ['error' => 'bad request'];
+    $clean = [];
+    foreach (['source','std','mode','dir','args','mbits','mprime'] as $k) {
+        $clean[$k] = (string)($state[$k] ?? '');
+    }
+    if (strlen($clean['source']) > 65536) return ['error' => 'program too large'];
+    if (!in_array($clean['std'], $STDS, true)) $clean['std'] = 'janus2026';
+    $body = json_encode($clean, $JSON);
+    $id = substr(hash('sha256', $body), 0, 10);     // short, content-addressed
+    if (!is_dir($SAVES_DIR)) @mkdir($SAVES_DIR, 0775, true);
+    if (@file_put_contents($SAVES_DIR.'/'.$id.'.json', $body) === false) {
+        return ['error' => 'cannot write save'];
+    }
+    return ['id' => $id];
+}
 
 function run_pyjanus(array $req): array {
     global $PYJANUS_ROOT, $PYTHON, $TIMEOUT, $STDS, $MODES;

@@ -70,7 +70,8 @@ Object.keys(EX).forEach(k => { const o=document.createElement('option'); o.value
 function load(k){ const e=EX[k]; if(!e) return; $('std').value=e[0]; $('src').value=e[1]; $('args').value=e[2]; }
 $('ex').onchange = e => load(e.target.value);
 
-// ---- save / share: the whole state lives in the URL hash (#code=...) ----
+// ---- save / share: stored server-side, addressed by a short hash (?p=...) ----
+const SAVED = %%SAVED%%;
 function getState(){ return {source:$('src').value, std:$('std').value, mode:$('mode').value,
   dir:$('dir').value, args:$('args').value, mbits:$('mbits').value, mprime:$('mprime').value}; }
 function setState(s){ if(!s) return;
@@ -78,20 +79,25 @@ function setState(s){ if(!s) return;
   if(s.mode)$('mode').value=s.mode; if(s.dir)$('dir').value=s.dir;
   if(s.args!=null)$('args').value=s.args; if(s.mbits!=null)$('mbits').value=s.mbits;
   if(s.mprime!=null)$('mprime').value=s.mprime; }
-const enc = o => btoa(unescape(encodeURIComponent(JSON.stringify(o))));
-const dec = b => JSON.parse(decodeURIComponent(escape(atob(b))));
-function toast(m){ const t=$('toast'); t.textContent=m; setTimeout(()=>t.textContent='',2500); }
+function toast(m){ const t=$('toast'); t.textContent=m; setTimeout(()=>t.textContent='',4000); }
 $('share').onclick = async () => {
-  const url = location.origin + location.pathname + '#code=' + enc(getState());
-  history.replaceState(null,'',url);
-  try { await navigator.clipboard.writeText(url); toast('link copied to clipboard'); }
-  catch(_) { toast('link in the address bar'); }
+  toast('saving…');
+  try {
+    const r = await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'save', state:getState()})});
+    const d = await r.json();
+    if (d && d.id) {
+      const url = location.origin + location.pathname + '?p=' + d.id;
+      history.replaceState(null,'',url);
+      try { await navigator.clipboard.writeText(url); toast('link copied: ' + url); }
+      catch(_) { toast('saved: ' + url); }
+    } else toast('save failed' + (d && d.error ? ': '+d.error : ''));
+  } catch(e) { toast('save failed'); }
 };
 
-// ---- initial state: hash (#code=) > ?std= query > first example ----
+// initial state: a saved program (?p=hash) > ?std= query > first example
 function init(){
-  const m = location.hash.match(/code=([^&]+)/);
-  if (m) { try { setState(dec(m[1])); return; } catch(_) {} }
+  if (SAVED) { setState(SAVED); return; }
   load(Object.keys(EX)[0]);
   const p = new URLSearchParams(location.search);
   const s = p.get('std') || p.get('parser');

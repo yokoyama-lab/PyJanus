@@ -15,16 +15,21 @@ same UI.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEBUI_DIR = os.path.join(PKG_ROOT, "webui")
+SAVES_DIR = os.environ.get("PYJANUS_SAVES") or os.path.join(PKG_ROOT, "playground-saves")
 RUN_TIMEOUT = 10  # seconds, hard cap on each run
+STDS = ["janus2026", "jana2014", "jana2014basic", "jana2014_in_out", "janus1982", "janus1982ext"]
 
 # mode id -> extra CLI flags (besides --std / --direction)
 MODES = {
@@ -72,15 +77,45 @@ def run_pyjanus(source: str, std: str, direction: str, mode: str,
         os.unlink(tmp.name)
 
 
-def build_page() -> bytes:
-    """The shared front-end with the examples/stds injected."""
+def build_page(saved: str = "null") -> bytes:
+    """The shared front-end with the examples/stds (and any saved program) injected."""
     with open(os.path.join(WEBUI_DIR, "playground.html"), encoding="utf-8") as f:
         html = f.read()
     with open(os.path.join(WEBUI_DIR, "examples.json"), encoding="utf-8") as f:
         data = json.load(f)
+    html = html.replace("%%SAVED%%", saved)
     html = html.replace("%%EXAMPLES%%", json.dumps(data["examples"]))
     html = html.replace("%%STDS%%", json.dumps(data["stds"]))
     return html.encode()
+
+
+def load_saved(query: str) -> str:
+    """Return the stored state JSON for ?p=<hash>, or 'null'."""
+    pid = (parse_qs(query).get("p") or [""])[0]
+    if re.fullmatch(r"[a-f0-9]{6,16}", pid):
+        path = os.path.join(SAVES_DIR, pid + ".json")
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+    return "null"
+
+
+def save_state(state: dict) -> dict:
+    """Store a program state under a short content hash; returns {'id': hash}."""
+    if not isinstance(state, dict):
+        return {"error": "bad request"}
+    clean = {k: str(state.get(k, "")) for k in
+             ("source", "std", "mode", "dir", "args", "mbits", "mprime")}
+    if len(clean["source"]) > 65536:
+        return {"error": "program too large"}
+    if clean["std"] not in STDS:
+        clean["std"] = "janus2026"
+    body = json.dumps(clean, ensure_ascii=False)
+    pid = hashlib.sha256(body.encode()).hexdigest()[:10]
+    os.makedirs(SAVES_DIR, exist_ok=True)
+    with open(os.path.join(SAVES_DIR, pid + ".json"), "w", encoding="utf-8") as f:
+        f.write(body)
+    return {"id": pid}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -93,7 +128,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            self._send(200, "text/html; charset=utf-8", build_page())
+            saved = load_saved(urlparse(self.path).query)
+            self._send(200, "text/html; charset=utf-8", build_page(saved))
         except FileNotFoundError as exc:
             self._send(500, "text/plain", f"missing webui asset: {exc}".encode())
 
@@ -101,10 +137,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get("Content-Length", 0))
             req = json.loads(self.rfile.read(n) or b"{}")
-            result = run_pyjanus(
-                req.get("source", ""), req.get("std", "janus2026"),
-                req.get("direction", "forward"), req.get("mode", "run"),
-                req.get("args", ""), req.get("modBits", ""), req.get("modPrime", ""))
+            if req.get("action") == "save":
+                result = save_state(req.get("state", {}))
+            else:
+                result = run_pyjanus(
+                    req.get("source", ""), req.get("std", "janus2026"),
+                    req.get("direction", "forward"), req.get("mode", "run"),
+                    req.get("args", ""), req.get("modBits", ""), req.get("modPrime", ""))
         except Exception as exc:  # never crash the server on a bad request
             result = {"stdout": "", "stderr": f"server error: {exc}", "code": 1, "cmd": ""}
         self._send(200, "application/json", json.dumps(result).encode())
