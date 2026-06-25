@@ -1,0 +1,29 @@
+/* Struct with array fields passed by reference: exercises case 1 (by-ref pass)
+ * and case 2 (array field on formal).  A Box with v[3] and scalar w is passed
+ * to add_fields and scaled; vjanus must use fstructs_flat (single RF base) and
+ * FCell(RF(base), foff) for s.v[i] / s.w accesses. */
+
+struct Box {
+    int v[3];
+    int w;
+};
+
+procedure add_fields(Box s, int result)
+    result += s.v[0] + s.v[1] + s.v[2] + s.w
+
+procedure scale_w(Box s, int k)
+    local int old = s.w
+        s.w += k * s.v[0]
+    delocal int old = s.w - k * s.v[0]
+
+procedure main()
+    Box a
+    int r
+
+    a.v[0] += 2
+    a.v[1] += 3
+    a.v[2] += 5
+    a.w    += 7
+
+    call add_fields(a, r)    // r = 2+3+5+7 = 17
+    call scale_w(a, 4)       // a.w = 7 + 4*2 = 15
