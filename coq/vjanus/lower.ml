@@ -37,6 +37,7 @@ type scope = {
   locals  : (string, int) Hashtbl.t;        (* local  name -> local slot     (RL x)  *)
   lstacks : (string, int * int) Hashtbl.t;  (* stack local  -> (arr slot, top slot)   *)
   lstructs: (string, string * int) Hashtbl.t;(* struct local -> (struct name, base local slot) *)
+  lstructs_flat: (string, string * int) Hashtbl.t;(* struct local with array fields -> (sname, base RL slot) *)
   mutable nloc : int;
 }
 
@@ -95,7 +96,8 @@ let struct_has_array_field st sname =
 let new_scope name is_main =
   { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
     fstructs = Hashtbl.create 8; fsarrays = Hashtbl.create 8; locals = Hashtbl.create 8;
-    lstacks = Hashtbl.create 8; lstructs = Hashtbl.create 8; nloc = 0 }
+    lstacks = Hashtbl.create 8; lstructs = Hashtbl.create 8;
+    lstructs_flat = Hashtbl.create 8; nloc = 0 }
 
 let gslot st nm = match Hashtbl.find_opt st.globals nm with
   | Some i -> i
@@ -121,6 +123,13 @@ let local_struct st scp sname nm = match Hashtbl.find_opt scp.lstructs nm with
   | Some p -> p
   | None -> let base = scp.nloc in scp.nloc <- scp.nloc + struct_size st sname;
             Hashtbl.add scp.lstructs nm (sname, base); (sname, base)
+
+(* a struct local WITH array fields: one RL slot used as array base;
+   each cell is ARd(RL(base), field_offset + Cantor(idx)) *)
+let local_struct_flat scp sname nm = match Hashtbl.find_opt scp.lstructs_flat nm with
+  | Some p -> p
+  | None -> let base = scp.nloc in scp.nloc <- scp.nloc + 1;
+            Hashtbl.add scp.lstructs_flat nm (sname, base); (sname, base)
 
 let add_formals st scp (params : param list) =
   let i = ref 0 in
@@ -181,7 +190,8 @@ type faccess = FScalar of J.ref | FCell of J.ref * Janus_frame.expr
 
 (* is [nm] a scalar struct-valued variable in this scope? *)
 let is_struct_var st scp nm =
-  Hashtbl.mem scp.lstructs nm || Hashtbl.mem scp.fstructs nm
+  Hashtbl.mem scp.lstructs nm || Hashtbl.mem scp.lstructs_flat nm
+  || Hashtbl.mem scp.fstructs nm
   || (scp.is_main && Hashtbl.mem st.gstructs nm)
 
 (* the per-field refs of a scalar struct variable, in field-declaration order
@@ -193,6 +203,12 @@ let struct_var_field_refs st scp nm : J.ref list =
     List.map (fun (_, off, _) -> mk (nat (base + off))) (struct_fields st sname) in
   match Hashtbl.find_opt scp.lstructs nm with
   | Some (sname, base) -> fld base (fun n -> J.RL n) sname
+  | None ->
+  match Hashtbl.find_opt scp.lstructs_flat nm with
+  | Some (sname, _) ->
+    (* flat local struct (has array fields): passing by reference not yet supported *)
+    ignore sname;
+    raise (Unsupported "by-reference pass of a struct with array fields (not yet)")
   | None ->
     match Hashtbl.find_opt scp.fstructs nm with
     | Some (sname, base) -> fld base (fun n -> J.RF n) sname
@@ -267,6 +283,10 @@ and field_access st scp (lv : Ast.lval) : faccess =
   match Hashtbl.find_opt scp.lstructs lv.lname with
   | Some (sname, base) when lv.sels = [] ->     (* struct local: RL(base + offset) *)
     FScalar (J.RL (nat (base + scalar_off sname)))
+  | _ ->
+  match Hashtbl.find_opt scp.lstructs_flat lv.lname with
+  | Some (sname, base) when lv.sels = [] ->     (* flat local (array fields): ARd(RL(base), foff) *)
+    FCell (J.RL (nat base), foff sname)
   | _ ->
   match Hashtbl.find_opt scp.fstructs lv.lname with
   | Some (sname, base) when lv.sels = [] ->     (* struct formal: RF(base + offset) *)
@@ -365,23 +385,50 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let (_, t) = local_stack scp d1.dname in
     J.Seq (J.Enter (nat t, J.Cst (z 0)), J.Seq (seq st scp body, J.Exit (nat t, J.Cst (z 0))))
   | Local (d1, body, d2) when d1.dstruct <> None ->
-    (* struct local `local struct S e = src`: copy each field of the source
-       l-value into a per-field local; delocal asserts e == src2 and frees.
-       Lowered to one Enter/Exit per field (independent local slots). *)
+    (* struct local `local struct S e = src`:
+       - scalar struct (no array fields): copy each field into an RL slot;
+         lowered to Enter/Exit per field.
+       - struct WITH array fields: use a single RL slot as array base;
+         lowered to AAsn(OAdd)/AAsn(OSub) per statically-enumerated cell. *)
     let sname = match d1.dstruct with Some s -> s | None -> assert false in
-    if struct_has_array_field st sname then
-      raise (Unsupported "local struct with array fields (not yet)");
-    let (_, base) = local_struct st scp sname d1.dname in
     let src_lv = function
       | Some (Ast.Lv lv) -> lv
       | _ -> raise (Unsupported "struct local initializer must be an l-value") in
     let s1 = src_lv d1.dinit and s2 = src_lv d2.dinit in
-    let field_src (lv : Ast.lval) f = expr st scp (Ast.Lv { lv with fields = lv.fields @ [f] }) in
-    let body' = seq st scp body in
-    List.fold_left (fun acc (f, off, _) ->
-        J.Seq (J.Enter (nat (base + off), field_src s1 f),
-               J.Seq (acc, J.Exit (nat (base + off), field_src s2 f))))
-      body' (struct_fields st sname)
+    if struct_has_array_field st sname then begin
+      let (_, base) = local_struct_flat scp sname d1.dname in
+      let body' = seq st scp body in
+      let base_ref = J.RL (nat base) in
+      (* enumerate every cell: (flat_cell_offset, field_name, static_idx_list) *)
+      let all_cells = List.concat_map (fun (f, off, dims) ->
+        if dims = [] then [(off, f, [])]
+        else
+          let rec enum = function
+            | [] -> [[]]
+            | d :: rest ->
+              List.concat_map
+                (fun i -> List.map (fun t -> i :: t) (enum rest))
+                (List.init d (fun i -> i))
+          in
+          List.map (fun idxs -> (off + cantor_val idxs, f, idxs)) (enum dims))
+        (struct_fields st sname) in
+      let field_cell lv f idxs =
+        expr st scp (Ast.Lv { lv with fields = lv.fields @ [f];
+                                       fsels  = List.map (fun i -> Ast.Num i) idxs }) in
+      List.fold_left (fun acc (cell_off, f, idxs) ->
+          J.Seq (J.AAsn (base_ref, J.Cst (z cell_off), J.OAdd, field_cell s1 f idxs),
+                 J.Seq (acc,
+                        J.AAsn (base_ref, J.Cst (z cell_off), J.OSub, field_cell s2 f idxs))))
+        body' all_cells
+    end else begin
+      let (_, base) = local_struct st scp sname d1.dname in
+      let body' = seq st scp body in
+      let field_src lv f = expr st scp (Ast.Lv { lv with fields = lv.fields @ [f] }) in
+      List.fold_left (fun acc (f, off, _) ->
+          J.Seq (J.Enter (nat (base + off), field_src s1 f),
+                 J.Seq (acc, J.Exit (nat (base + off), field_src s2 f))))
+        body' (struct_fields st sname)
+    end
   | Local (d1, body, d2)
     when (let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
           reads_name e1 d1.dname                          (* self-referential delocal *)
