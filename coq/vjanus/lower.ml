@@ -32,7 +32,8 @@ type scope = {
   is_main : bool;
   formals : (string, int) Hashtbl.t;        (* formal name -> positional index (RF i) *)
   fstacks : (string, int * int) Hashtbl.t;  (* stack formal -> (arr index, top index) *)
-  fstructs: (string, string * int) Hashtbl.t;(* struct formal -> (struct name, base RF index) *)
+  fstructs: (string, string * int) Hashtbl.t;(* struct formal, no array fields -> (struct name, base RF index) *)
+  fstructs_flat: (string, string * int) Hashtbl.t;(* struct formal WITH array fields -> (sname, single RF index) *)
   fsarrays: (string, string * int) Hashtbl.t;(* struct-array formal -> (struct name, RF index of base) *)
   locals  : (string, int) Hashtbl.t;        (* local  name -> local slot     (RL x)  *)
   lstacks : (string, int * int) Hashtbl.t;  (* stack local  -> (arr slot, top slot)   *)
@@ -95,7 +96,8 @@ let struct_has_array_field st sname =
 
 let new_scope name is_main =
   { name; is_main; formals = Hashtbl.create 8; fstacks = Hashtbl.create 8;
-    fstructs = Hashtbl.create 8; fsarrays = Hashtbl.create 8; locals = Hashtbl.create 8;
+    fstructs = Hashtbl.create 8; fstructs_flat = Hashtbl.create 8;
+    fsarrays = Hashtbl.create 8; locals = Hashtbl.create 8;
     lstacks = Hashtbl.create 8; lstructs = Hashtbl.create 8;
     lstructs_flat = Hashtbl.create 8; nloc = 0 }
 
@@ -142,8 +144,12 @@ let add_formals st scp (params : param list) =
         (* a struct-array formal is one positional ref (the array base), like a
            plain array; element fields index it as elem*nfields + offset *)
         Hashtbl.replace scp.fsarrays p.pname (sname, !i); incr i
+      | Some sname when struct_has_array_field st sname ->
+        (* struct WITH array fields: one positional ref (the array base);
+           fields accessed as ARd(RF(base), field_offset + Cantor(idx)) *)
+        Hashtbl.replace scp.fstructs_flat p.pname (sname, !i); incr i
       | Some sname ->
-        (* a struct formal occupies one positional ref per field *)
+        (* scalar struct: one positional ref per field *)
         Hashtbl.replace scp.fstructs p.pname (sname, !i); i := !i + struct_size st sname
       | None ->
         (* a scalar/array formal is one positional ref (RF i); ARd/AAsn index it *)
@@ -191,31 +197,34 @@ type faccess = FScalar of J.ref | FCell of J.ref * Janus_frame.expr
 (* is [nm] a scalar struct-valued variable in this scope? *)
 let is_struct_var st scp nm =
   Hashtbl.mem scp.lstructs nm || Hashtbl.mem scp.lstructs_flat nm
-  || Hashtbl.mem scp.fstructs nm
-  || (scp.is_main && Hashtbl.mem st.gstructs nm)
+  || Hashtbl.mem scp.fstructs nm || Hashtbl.mem scp.fstructs_flat nm
+  || (scp.is_main && (Hashtbl.mem st.gstructs nm || Hashtbl.mem st.gstructs_flat nm))
 
 (* the per-field refs of a scalar struct variable, in field-declaration order
    (used to expand a struct actual into one ref per field at a call site) *)
 let struct_var_field_refs st scp nm : J.ref list =
+  (* scalar struct (no array fields): expand to one ref per field *)
   let fld base mk sname =
-    if struct_has_array_field st sname then
-      raise (Unsupported "by-reference pass of a struct with array fields (not yet)");
     List.map (fun (_, off, _) -> mk (nat (base + off))) (struct_fields st sname) in
   match Hashtbl.find_opt scp.lstructs nm with
   | Some (sname, base) -> fld base (fun n -> J.RL n) sname
   | None ->
+  (* flat structs (with array fields): pass ONE array-base ref *)
   match Hashtbl.find_opt scp.lstructs_flat nm with
-  | Some (sname, _) ->
-    (* flat local struct (has array fields): passing by reference not yet supported *)
-    ignore sname;
-    raise (Unsupported "by-reference pass of a struct with array fields (not yet)")
+  | Some (_, base) -> [J.RL (nat base)]
   | None ->
-    match Hashtbl.find_opt scp.fstructs nm with
-    | Some (sname, base) -> fld base (fun n -> J.RF n) sname
-    | None ->
-      (match Hashtbl.find_opt st.gstructs nm with
-       | Some (sname, base) when scp.is_main -> fld base (fun n -> J.RG n) sname
-       | _ -> raise (Unsupported ("struct value " ^ nm)))
+  match Hashtbl.find_opt scp.fstructs_flat nm with
+  | Some (_, base) -> [J.RF (nat base)]
+  | None ->
+  match Hashtbl.find_opt scp.fstructs nm with
+  | Some (sname, base) -> fld base (fun n -> J.RF n) sname
+  | None ->
+    match Hashtbl.find_opt st.gstructs nm with
+    | Some (sname, base) when scp.is_main -> fld base (fun n -> J.RG n) sname
+    | _ ->
+      match Hashtbl.find_opt st.gstructs_flat nm with
+      | Some (_, base) when scp.is_main -> [J.RG (nat base)]
+      | _ -> raise (Unsupported ("struct value " ^ nm))
 
 (* ----- expressions ----- *)
 
@@ -289,8 +298,12 @@ and field_access st scp (lv : Ast.lval) : faccess =
     FCell (J.RL (nat base), foff sname)
   | _ ->
   match Hashtbl.find_opt scp.fstructs lv.lname with
-  | Some (sname, base) when lv.sels = [] ->     (* struct formal: RF(base + offset) *)
+  | Some (sname, base) when lv.sels = [] ->     (* scalar struct formal: RF(base + offset) *)
     FScalar (J.RF (nat (base + scalar_off sname)))
+  | _ ->
+  match Hashtbl.find_opt scp.fstructs_flat lv.lname with
+  | Some (sname, base) when lv.sels = [] ->   (* flat formal (array fields): ARd(RF(base), foff) *)
+    FCell (J.RF (nat base), foff sname)
   | _ ->
   match Hashtbl.find_opt scp.fsarrays lv.lname with
   | Some (sname, idx) ->                         (* struct-array formal element field *)
