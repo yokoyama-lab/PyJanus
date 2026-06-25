@@ -73,3 +73,14 @@ once — both backends pick it up.
 - Inputs are validated server-side (`--std` against the known list, `-m`/`-p`
   digits only) and the program source is written to a temp file (never shell-
   interpolated); all argv elements are `escapeshellarg`'d in the PHP backend.
+
+## URL parameters & sharing
+
+- **Pick a parser from the URL**: `…/pyjanus-playground/?std=jana2014_in_out`
+  opens with that dialect pre-selected (`?parser=…` also works).
+- **Standard input**: the *standard input* box takes one value per line (or
+  whitespace-separated); it is fed to the program's `read`/`scanf`.
+- **Save / share a program**: the **Share** button encodes the whole state
+  (source, dialect, mode, direction, input) into the URL hash
+  (`…#code=<base64>`) and copies the link — open it later to restore everything.
+  No server storage; the program lives in the URL.
