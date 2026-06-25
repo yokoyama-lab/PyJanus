@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $req = json_decode(file_get_contents('php://input'), true);
     if (!is_array($req)) $req = [];
-    echo json_encode(run_pyjanus($req), JSON_UNESCAPED_UNICODE);
+    echo json_encode(run_pyjanus($req), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -37,8 +37,8 @@ if ($html === false || !is_array($data)) {
     http_response_code(500);
     exit("missing webui asset (playground.html / examples.json)");
 }
-$html = str_replace('%%EXAMPLES%%', json_encode($data['examples'], JSON_UNESCAPED_UNICODE), $html);
-$html = str_replace('%%STDS%%',     json_encode($data['stds'], JSON_UNESCAPED_UNICODE),     $html);
+$html = str_replace('%%EXAMPLES%%', json_encode($data['examples'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $html);
+$html = str_replace('%%STDS%%',     json_encode($data['stds'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),     $html);
 header('Content-Type: text/html; charset=utf-8');
 echo $html;
 exit;
