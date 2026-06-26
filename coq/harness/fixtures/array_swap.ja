@@ -1,0 +1,6 @@
+procedure main()
+    int A[3] = {7, 8, 9}
+    int d
+    A[0] <=> A[2]
+    d += A[0] / A[2]
+    d += A[1] % 5

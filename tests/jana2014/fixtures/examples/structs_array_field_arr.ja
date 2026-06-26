@@ -1,0 +1,20 @@
+/* An array of structs whose fields are themselves arrays: g[k].v[i].  Each
+ * element occupies `size` cells (size accounts for the array field), so the
+ * cell of g[k].v[i] is k*size + offset(v) + Cantor(i).  Exercises the combined
+ * struct-array + array-field lowering against PyJanus, including a cross-element
+ * read. */
+
+struct Row {
+    int v[3];
+    int sum;
+};
+
+procedure main()
+    Row g[2]
+
+    g[0].v[0] += 1
+    g[0].v[1] += 2
+    g[0].v[2] += 3
+    g[1].v[0] += 4
+    g[1].sum += g[0].v[2]      // cross-element array-field read: g[1].sum = 3
+    g[0].sum += g[1].v[0]      // g[0].sum = 4

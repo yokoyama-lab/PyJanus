@@ -1,0 +1,25 @@
+// GENERATED from std/sort.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure sort(int a[], int n, int flags[])
+    if n > 1 then
+        local int i
+            local int k
+                from i == 0
+                loop
+                    local int j
+                        from j == 0
+                        loop
+                            if a[j] > a[j + 1] then
+                                a[j] <=> a[j + 1]
+                                flags[k] ^= 1
+                            fi flags[k]
+                            j += 1
+                            k += 1
+                        until j + 1 + i >= n
+                    delocal int j = n - 1 - i
+                    i += 1
+                until i + 1 >= n
+            delocal int k = n * (n - 1) / 2
+        delocal int i = n - 1
+    fi n > 1

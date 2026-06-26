@@ -1,0 +1,33 @@
+// GENERATED from std/bits.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure flip_bit(int x, int i)
+    x ^= 1 << i
+
+procedure swap_bits(int x, int i, int j)
+    local int d = x >> i ^ x >> j & 1
+        x ^= d << i
+        x ^= d << j
+    delocal int d = x >> i ^ x >> j & 1
+
+procedure bit_reverse(int x, int width)
+    if width > 1 then
+        local int k
+            from k == 0
+            do
+                call swap_bits(x, k, width - 1 - k)
+                k += 1
+            until k + k + 1 >= width
+        delocal int k = width / 2
+    fi width > 1
+
+procedure rotate_bits_left(int x, int width)
+    if width > 1 then
+        local int k
+            from k == 0
+            do
+                call swap_bits(x, width - 2 - k, width - 1 - k)
+                k += 1
+            until k + 1 >= width
+        delocal int k = width - 1
+    fi width > 1

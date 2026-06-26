@@ -1,0 +1,73 @@
+// GENERATED from std/reduce.ja by `python -m jana_py._gen_stdlib`.
+// Do not edit; edit the janus2026 source and regenerate.  Docs live there.
+
+procedure sum_into(int a[], int n, int acc)
+    local int i
+        from i == 0
+        loop
+            acc += a[i]
+            i += 1
+        until i >= n
+    delocal int i = n
+
+procedure dot_into(int a[], int b[], int n, int acc)
+    local int i
+        from i == 0
+        loop
+            acc += a[i] * b[i]
+            i += 1
+        until i >= n
+    delocal int i = n
+
+procedure count_into(int a[], int n, int val, int cnt)
+    local int i
+        from i == 0
+        loop
+            if a[i] == val then
+                cnt += 1
+            fi a[i] == val
+            i += 1
+        until i >= n
+    delocal int i = n
+
+procedure min_into(int a[], int n, int m, int flags[], stack hist)
+    if n > 0 then
+        m += a[0]
+        local int i = 1
+            local int k
+                from i == 1
+                loop
+                    if a[i] < m then
+                        local int d = m - a[i]
+                            m -= d
+                            push(d, hist)
+                        delocal int d
+                        flags[k] ^= 1
+                    fi flags[k]
+                    i += 1
+                    k += 1
+                until i >= n
+            delocal int k = n - 1
+        delocal int i = n
+    fi n > 0
+
+procedure max_into(int a[], int n, int m, int flags[], stack hist)
+    if n > 0 then
+        m += a[0]
+        local int i = 1
+            local int k
+                from i == 1
+                loop
+                    if a[i] > m then
+                        local int d = a[i] - m
+                            m += d
+                            push(d, hist)
+                        delocal int d
+                        flags[k] ^= 1
+                    fi flags[k]
+                    i += 1
+                    k += 1
+                until i >= n
+            delocal int k = n - 1
+        delocal int i = n
+    fi n > 0

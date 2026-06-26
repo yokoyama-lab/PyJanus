@@ -38,6 +38,7 @@ from .ast import UncallStmt
 from .ast import UserErrorStmt
 from .ast import Ident
 from .ast import Vdecl
+from .invert import invert_stmts
 
 
 C_TYPES = {
@@ -64,8 +65,65 @@ def format_struct_def(sdef) -> str:
   return "\n".join(lines)
 
 
+# Janus keeps procedures and variables in separate namespaces, but C++ does not,
+# so a procedure named like a variable in scope (e.g. `procedure root` with a
+# variable `root`) makes `root(...)` parse as a call on the int. Rename only the
+# colliding procedures (leaving the common case byte-identical).
+_PROC_RENAMES: dict[str, str] = {}
+
+# Declared length of each array (by name), used to resolve `size(A)` to a
+# constant -- C++ raw-pointer parameters carry no length. Populated per program.
+_ARRAY_LEN: dict[str, int] = {}
+
+
+def _cname(name: str) -> str:
+  return _PROC_RENAMES.get(name, name)
+
+
+def _walk_calls(stmts):
+  """Yield every CallStmt/UncallStmt reachable from `stmts`."""
+  for s in stmts:
+    if isinstance(s, (CallStmt, UncallStmt)):
+      yield s
+    for f in ("if_part", "else_part", "do_part", "loop_part", "body"):
+      sub = getattr(s, f, None)
+      if isinstance(sub, list):
+        yield from _walk_calls(sub)
+
+
+def _resolve_array_lengths(program: Program) -> None:
+  """Map array names to their declared length, propagating from main's array
+  declarations to procedure array formals through call sites (to a fixpoint)."""
+  _ARRAY_LEN.clear()
+  if program.main is not None:
+    for vd in program.main.vdecls:
+      if vd.dimensions:
+        try:
+          _ARRAY_LEN[vd.ident.name] = int(format_expr(vd.dimensions[0]))
+        except (ValueError, TypeError):
+          pass            # non-constant dimension: size() stays unresolved
+  pnames = {p.procname.name: [par.ident.name for par in p.params] for p in program.procs}
+  calls = list(_walk_calls(program.main.stmts if program.main else []))
+  for p in program.procs:
+    calls += list(_walk_calls(p.body))
+  changed = True
+  while changed:
+    changed = False
+    for call in calls:
+      formals = pnames.get(call.ident.name)
+      if not formals:
+        continue
+      for i, arg in enumerate(call.args):
+        if i < len(formals) and isinstance(arg, LvalExpr) and not arg.lval.selectors:
+          src = arg.lval.ident.name
+          dst = formals[i]
+          if src in _ARRAY_LEN and dst not in _ARRAY_LEN:
+            _ARRAY_LEN[dst] = _ARRAY_LEN[src]
+            changed = True
+
+
 def format_program(header: str | None, program: Program) -> str:
-  lines = ["#include <iostream>", "#include <utility>"]
+  lines = ["#include <iostream>", "#include <utility>", "#include <vector>"]
   if header:
     lines.append(f'#include "{header}"')
   lines.append("")
@@ -75,8 +133,38 @@ def format_program(header: str | None, program: Program) -> str:
   # Callee signatures are needed to emit value arguments (temp type, whether
   # the parameter is `constant`), so thread the proc table down to format_stmt.
   procs = {proc.procname.name: proc for proc in program.procs}
+  _resolve_array_lengths(program)
+
+  varnames = {vd.ident.name for vd in (program.main.vdecls if program.main else [])}
   for proc in program.procs:
-    lines.append(format_proc(proc, procs))
+    varnames |= {p.ident.name for p in proc.params}
+  pnames = {p.procname.name for p in program.procs}
+  _PROC_RENAMES.clear()
+  for proc in program.procs:
+    n = proc.procname.name
+    if n in varnames:
+      cand = n + "_proc"
+      while cand in varnames or cand in pnames or cand in _PROC_RENAMES.values():
+        cand += "_"
+      _PROC_RENAMES[n] = cand
+
+  # Forward declarations first, so (mutually) recursive calls and `uncall`s of a
+  # later procedure (or of the procedure itself) resolve.
+  for proc in program.procs:
+    sig = ", ".join(format_param(param) for param in proc.params)
+    lines.append(f"void {_cname(proc.procname.name)}({sig});")
+    lines.append(f"void {_cname(proc.procname.name)}__inv({sig});")
+  if program.procs:
+    lines.append("")
+  for proc in program.procs:
+    lines.append(format_proc(proc, procs, name=_cname(proc.procname.name)))
+    lines.append("")
+  # Inverse functions, so `uncall p` can run p backwards (p__inv = invert p).
+  for proc in program.procs:
+    # local inversion (global_mode=False): a `call q` inside p inverts to
+    # `uncall q`, which we emit as `q__inv` -- so p__inv composes correctly.
+    lines.append(format_proc(proc, procs, name=_cname(proc.procname.name) + "__inv",
+                             body=invert_stmts(proc.body, global_mode=False)))
     lines.append("")
   lines.append("int main() {")
   if program.main is not None:
@@ -89,13 +177,47 @@ def format_program(header: str | None, program: Program) -> str:
   return "\n".join(lines) + "\n"
 
 
-def format_proc(proc: Proc, procs: dict[str, Proc] | None = None) -> str:
+def format_proc(proc: Proc, procs: dict[str, Proc] | None = None,
+                name: str | None = None, body=None) -> str:
   params = ", ".join(format_param(param) for param in proc.params)
-  lines = [f"void {proc.procname.name}({params}) {{"]
-  for stmt in proc.body:
+  lines = [f"void {name or proc.procname.name}({params}) {{"]
+  for stmt in (proc.body if body is None else body):
     lines.extend(format_stmt(stmt, 1, procs))
   lines.append("}")
   return "\n".join(lines)
+
+
+def _emit_call(call_name: str, stmt, indent: int,
+               procs: dict[str, Proc] | None) -> list[str]:
+  # A non-l-value (value) argument can't bind to a by-reference parameter, so
+  # mirror the interpreter: bind each to a temp declared with the parameter's
+  # type and verify it reads back the same value on return (except `constant`
+  # parameters, which are snapshotted without a restore check).  Param types come
+  # from the *original* procedure (its inverse shares the signature).
+  pad = "  " * indent
+  proc = procs.get(stmt.ident.name) if procs else None
+  inner = pad + "  "
+  temps: list[str] = []
+  call_args: list[str] = []
+  checks: list[str] = []
+  for i, arg in enumerate(stmt.args):
+    if isinstance(arg, LvalExpr):
+      call_args.append(format_expr(arg))
+      continue
+    param = proc.params[i] if proc is not None and i < len(proc.params) else None
+    tmp = f"_va{i}"
+    expr = format_expr(arg)
+    ctype = "auto" if param is None else format_type(param.typ)
+    temps.append(f"{inner}{ctype} {tmp} = {expr};")
+    call_args.append(tmp)
+    if param is not None and param.decl_type == DeclType.CONSTANT:
+      continue
+    cast = "" if param is None else f"({ctype})"
+    checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
+  call = f"{call_name}({', '.join(call_args)});"
+  if not temps:
+    return [f"{pad}{call}"]
+  return [f"{pad}{{", *temps, f"{inner}{call}", *checks, f"{pad}}}"]
 
 
 def format_param(vdecl: Vdecl) -> str:
@@ -105,13 +227,20 @@ def format_param(vdecl: Vdecl) -> str:
 
 
 def format_vdecl(vdecl: Vdecl) -> str:
+  # Janus default-initializes every variable to 0; C++ leaves uninitialized
+  # locals indeterminate, so emit an explicit zero initializer when none is given
+  # (otherwise the generated program reads garbage instead of 0).
+  if vdecl.typ.kind == "stack":
+    init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else ""
+    return f"{format_type(vdecl.typ)} {vdecl.ident.name}{init}"
   if vdecl.dimensions:
     dims = "".join(f"[{format_expr(dim)}]" for dim in vdecl.dimensions if dim is not None)
-    init = ""
     if vdecl.init_expr is not None:
       init = f" = {format_expr(vdecl.init_expr)}"
+    else:
+      init = " = {}"
     return f"{format_type(vdecl.typ)} {vdecl.ident.name}{dims}{init}"
-  init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else ""
+  init = f" = {format_expr(vdecl.init_expr)}" if vdecl.init_expr is not None else " = 0"
   return f"{format_type(vdecl.typ)} {vdecl.ident.name}{init}"
 
 
@@ -122,6 +251,8 @@ def format_type(typ: Type) -> str:
     return typ.name or "struct"
   if typ.kind == "bool":
     return "bool"
+  if typ.kind == "stack":
+    return "std::vector<int>"
   if typ.kind != "int":
     raise ValueError(f"C++ translation does not support {typ.kind}")
   return C_TYPES[typ.int_type.value]
@@ -162,15 +293,30 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, FromStmt):
-    lines = [f"{pad}while (!({format_expr(stmt.exit_cond)})) {{"]
+    # Janus `from e1 do s1 loop s2 until e2` runs s1, exits when e2 holds, else
+    # runs s2 and repeats: s1; while(!e2){ s2; s1 } -- the do-part executes once
+    # more than the loop-part (the loop off-by-one).  The earlier
+    # `while(!e2){ s1; s2 }` dropped that trailing s1, computing a wrong result.
+    lines = []
     for nested in stmt.do_part:
-      lines.extend(format_stmt(nested, indent + 1, procs))
+      lines.extend(format_stmt(nested, indent, procs))
+    lines.append(f"{pad}while (!({format_expr(stmt.exit_cond)})) {{")
     for nested in stmt.loop_part:
+      lines.extend(format_stmt(nested, indent + 1, procs))
+    for nested in stmt.do_part:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, IterateStmt):
-    lines = [f"{pad}for ({format_type(stmt.typ)} {stmt.ident.name} = {format_expr(stmt.start_expr)}; {stmt.ident.name} <= {format_expr(stmt.end_expr)}; {stmt.ident.name} += {format_expr(stmt.step_expr)}) {{"]
+    # `to end` is inclusive in both directions; a negative step counts down, so
+    # the bound test must follow the step's sign (a fixed `<=` dropped every
+    # descending loop -- including the inverse of an ascending one).
+    var = stmt.ident.name
+    end = format_expr(stmt.end_expr)
+    step = format_expr(stmt.step_expr)
+    cond = f"(({step}) >= 0 ? {var} <= ({end}) : {var} >= ({end}))"
+    lines = [f"{pad}for ({format_type(stmt.typ)} {var} = {format_expr(stmt.start_expr)}; "
+             f"{cond}; {var} += ({step})) {{"]
     for nested in stmt.body:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
@@ -182,56 +328,33 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
-    # A non-l-value (value) argument can't bind to a by-reference parameter, so
-    # mirror the interpreter: bind each to a temp declared with the parameter's
-    # type (an `auto` temp deduces the promoted `int` and cannot bind to e.g. a
-    # `signed char&` parameter) and verify it reads back the same value on
-    # return — except for `constant` parameters, which the interpreter snapshots
-    # without a restore check. Wrap such a call in a `{ }` block so the temps
-    # are scoped and cannot collide with another call's temps on the same line.
-    proc = procs.get(stmt.ident.name) if procs else None
-    inner = pad + "  "
-    temps: list[str] = []
-    call_args: list[str] = []
-    checks: list[str] = []
-    for i, arg in enumerate(stmt.args):
-      if isinstance(arg, LvalExpr):
-        call_args.append(format_expr(arg))
-        continue
-      param = proc.params[i] if proc is not None and i < len(proc.params) else None
-      tmp = f"_va{i}"
-      expr = format_expr(arg)
-      ctype = "auto" if param is None else format_type(param.typ)
-      temps.append(f"{inner}{ctype} {tmp} = {expr};")
-      call_args.append(tmp)
-      if param is not None and param.decl_type == DeclType.CONSTANT:
-        continue
-      # Cast the re-evaluated expression like the interpreter normalizes it to
-      # the parameter's type, so e.g. a `u8` temp compares 255 with 255.
-      cast = "" if param is None else f"({ctype})"
-      checks.append(f'{inner}if ({tmp} != {cast}({expr})) throw "Value argument is not restored on return";')
-    call = f"{stmt.ident.name}({', '.join(call_args)});"
-    if not temps:
-      return [f"{pad}{call}"]
-    return [f"{pad}{{", *temps, f"{inner}{call}", *checks, f"{pad}}}"]
+    return _emit_call(_cname(stmt.ident.name), stmt, indent, procs)
   if isinstance(stmt, UncallStmt):
-    return [f"{pad}/* uncall {stmt.ident.name} not supported in generated C++ */"]
+    # `uncall p` runs p backwards; we emit an inverse function `p__inv` (its body
+    # is the program inverter applied to p's body) and call that.
+    return _emit_call(_cname(stmt.ident.name) + "__inv", stmt, indent, procs)
   if isinstance(stmt, PrintsStmt):
     if stmt.prints.kind == "print":
       return [f'{pad}std::cout << "{escape_cpp(stmt.prints.text or "")}";']
     if stmt.prints.kind == "printf":
       parts = render_printf(stmt.prints.text or "", [_fmt_arg(a) for a in stmt.prints.args])
       return [f"{pad}std::cout << {parts};"]
-    expr = ' << " " << '.join(_fmt_arg(a) for a in stmt.prints.args)
-    return [f'{pad}std::cout << {expr};']
+    # `show` is deprecated debug output; it has no store effect and cannot be
+    # streamed for arrays/stacks, and the store-based tests ignore it, so omit it.
+    return [f"{pad}/* show (deprecated; omitted) */"]
   if isinstance(stmt, SkipStmt):
     return [f"{pad};"]
   if isinstance(stmt, AssertStmt):
     return [f"{pad}/* assert {format_expr(stmt.expr)} */"]
   if isinstance(stmt, UserErrorStmt):
     return [f'{pad}throw "{escape_cpp(stmt.message)}";']
-  if isinstance(stmt, (PushStmt, PopStmt)):
-    return [f"{pad}/* stack operation not supported */"]
+  if isinstance(stmt, PushStmt):
+    # Janus push moves the value onto the stack and zeroes the source (reversible).
+    val = format_expr(stmt.expr)
+    return [f"{pad}{stmt.ident.name}.push_back({val}); {val} = 0;"]
+  if isinstance(stmt, PopStmt):
+    val = format_expr(stmt.expr)
+    return [f"{pad}{val} = {stmt.ident.name}.back(); {stmt.ident.name}.pop_back();"]
   raise ValueError(f"Unsupported statement {type(stmt).__name__}")
 
 
@@ -271,13 +394,21 @@ def format_expr(expr: Expr) -> str:
   if isinstance(expr, TernaryExpr):
     return f"({format_expr(expr.cond)} ? {format_expr(expr.then_expr)} : {format_expr(expr.else_expr)})"
   if isinstance(expr, SizeExpr):
-    return f"{expr.ident.name}.size()"
+    # C++ array parameters are raw pointers with no length; resolve the declared
+    # length to a constant where known.
+    if expr.ident.name in _ARRAY_LEN:
+      return str(_ARRAY_LEN[expr.ident.name])
+    return f"(int){expr.ident.name}.size()"        # a stack's depth
   if isinstance(expr, ArrayExpr):
     return "{ " + ", ".join(format_expr(item) for item in expr.items) + " }"
   if isinstance(expr, StringLiteral):
     return f'"{escape_cpp(expr.value)}"'
-  if isinstance(expr, (EmptyExpr, TopExpr, NilExpr)):
-    raise ValueError("Stack expressions are not supported in generated C++")
+  if isinstance(expr, EmptyExpr):
+    return f"{expr.ident.name}.empty()"
+  if isinstance(expr, TopExpr):
+    return f"{expr.ident.name}.back()"
+  if isinstance(expr, NilExpr):
+    return "{}"
   raise ValueError(f"Unsupported expression {type(expr).__name__}")
 
 

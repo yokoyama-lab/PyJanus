@@ -1,0 +1,26 @@
+/* Re-passing a flat struct formal to another procedure: exercises the chain
+ * fstructs_flat -> struct_var_field_refs -> [RF(base)] -> argsubst.
+ * inner() receives the same base ref as outer(), accesses s.v[0]. */
+
+struct Box {
+    int v[3];
+    int w;
+};
+
+procedure inner(Box s, int acc)
+    acc += s.v[0] + s.w
+
+procedure outer(Box s, int acc)
+    call inner(s, acc)    // re-pass flat formal
+    acc += s.v[1]
+
+procedure main()
+    Box a
+    int r
+
+    a.v[0] += 10
+    a.v[1] += 20
+    a.v[2] += 30
+    a.w    += 5
+
+    call outer(a, r)    // inner: r += 10+5=15; outer: r += 20 => r=35

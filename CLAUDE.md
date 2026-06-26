@@ -24,6 +24,7 @@ python3 -m jana_py.cli -c prog.ja        # emit C++ code
 python3 -m jana_py.cli -d prog.ja        # step-debugger output
 python3 -m jana_py.cli --circuit prog.ja --profile prog.ja
 python3 -m jana_py.cli --inverse '{"x": 10}' prog.ja   # final store -> initial store
+python3 -m jana_py.cli -I mylib prog.ja   # add an #include search dir (repeatable)
 
 # Tests (unittest-based, but run under pytest; organized per dialect under tests/<std>/)
 python3 -m pytest tests/ -q
@@ -31,6 +32,44 @@ python3 -m pytest tests/jana2014/test_reversibility.py -q          # single file
 python3 -m pytest tests/jana2014/test_reversibility.py::ReversibilityTests::test_swap   # single test
 python3 tests/jana2014/test_reversibility.py                # unittest-style files also run directly
 ```
+
+### Standard library
+
+A bundled, all-reversible standard library lives in `jana_py/lib/std/` (it ships
+with the package). `#include "std/array.ja"` resolves through the preprocessor's
+search path — relative to the including file first, then any `-I DIR`, then the
+**dialect-specific** stdlib (`jana_py/lib/<std>/`, e.g. `lib/jana2014/`), then the
+canonical janus2026 stdlib (`jana_py/lib/std`). `preprocess.STDLIB_DIR` points at
+`jana_py/lib`; the dialect is threaded via `preprocess_text(..., std=args.std)`.
+Modules:
+
+| module           | procedures |
+|------------------|------------|
+| `std/array.ja`   | reverse, rotate_left, xor_into, add_into, cswap |
+| `std/bits.ja`    | flip_bit, swap_bits, bit_reverse, rotate_bits_left |
+| `std/math.ja`    | mul_acc, divmod, gcd (reversible Euclid w/ quotient stack) |
+| `std/stack.ja`   | copy_top, move_all |
+| `std/reduce.ja`  | sum_into, dot_into, count_into (clean accumulators); min_into, max_into (need history) |
+| `std/sort.ja`    | sort (reversible bubble sort recording swap decisions in flags[]) |
+
+Every library procedure must be reversible (`uncall` undoes `call` exactly) and
+have a forward-AND-backward test (`tests/janus2026/test_stdlib_*.py`). Two
+recurring reversibility patterns the library encodes: (1) **ancilla flags** — a
+value-only comparator (`cswap`/`sort` with `fi (x < y)`) breaks its reversibility
+assertion on an already-ordered pair, so it records the swap decision in an extra
+flag bit instead; (2) **history** — operations that discard information (`gcd`,
+`sort`, `min_into`/`max_into`) are made reversible by keeping just enough history
+(a quotient stack, a flag array, a stack of deltas) for `uncall` to replay them
+backwards. Clean accumulators (`sum_into` etc.) need neither: they preserve their
+input, so `uncall` simply subtracts.
+
+The library is authored **once** in janus2026; copies for other dialects are
+*generated* by re-emitting the parsed AST with that dialect's formatter
+(`jana_py/_gen_stdlib.py` → `jana_py/lib/jana2014/std/*.ja`). Edit only the
+janus2026 source, then run `python -m jana_py._gen_stdlib`;
+`tests/janus2026/test_stdlib_dialects.py` asserts the copies are current AND that
+each computes the same store as the janus2026 original — it is the correctness
+check for the AST→dialect-source formatters.
 
 There is no lint step; the package is pure Python (`pyproject.toml` defines
 the `pyjanus` console script → `jana_py.cli:main`). CI
@@ -99,3 +138,35 @@ reversibility.
 Note: library helpers `encode.py` and `inverse.py` hardcode the `janus2026`
 parser; `parser.py` is only a backwards-compat shim re-exporting
 `parser_jana2014.parse_program` for old external callers.
+
+## Formal mechanization (`coq/`)
+
+`coq/` is a Rocq/Coq 9.1 development that machine-checks Janus's reversibility,
+**independent of the Python interpreter**. The core abstraction is the module
+type `REV_PRIM` + functor `RevLang` (`RevCore.v`): supply the atomic primitives
+and three local laws (`pinv_invol`, `pstep_det`, `pstep_rev`) and the functor
+proves the headline results once for all instances — `exec_rev`, `exec_iff`,
+`exec_det`, and `exec_injective` (reversibility: a final store determines the
+initial store). Other `.v` files are instances/extensions (denotational
+semantics, dagger-category structure, Bennett embedding, an extracted fuel
+interpreter).
+
+- Build: `cd coq && rocq makefile -f _CoqProject -o Makefile && make`. Use the
+  `rocq` on PATH (linuxbrew 9.1.1 — the toolchain the committed `.vo` files were
+  built with); mixing the opam 9.1.0 `rocq` yields "inconsistent assumptions".
+- `coq/audit.sh` builds the dev and asserts every headline theorem depends on at
+  most `functional_extensionality` — no extra axioms, no `Admitted`. CI runs it
+  (`.github/workflows/coq.yml`).
+
+### Differential testing (`coq/harness/`)
+
+The verified development is the oracle for the Python implementation:
+
+- `differentialar.py` / `differential.py` — run the **verified** interpreter
+  (`run`, extracted to OCaml from `RevExtract.v` and proved sound) against
+  `pyjanus -s` on the same `.ja` program and compare final stores. The two
+  interpreters are completely independent (extracted Coq vs hand-written Python).
+- `codegen_diff.py` — run PyJanus's interpreter against its **C++ codegen**
+  output (compile at `-O0`, run, compare stores). This is what caught the
+  codegen wrong-output bugs; it is folded into pytest. When touching `runtime.py`
+  or `c_codegen.py`, run these to catch divergence.

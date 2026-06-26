@@ -237,6 +237,60 @@ class TestEdgeCases(unittest.TestCase):
         self.assertTrue(result.equivalent)
         self.assertEqual(result.tested, 50)
 
+    def test_runtime_error_during_execution_is_treated_as_a_distinct_store(self) -> None:
+        """If one side raises (e.g. a failed assertion) it is store=None, so a
+        program that aborts on some inputs is not equivalent to one that never
+        does — the checker reports a counterexample instead of crashing."""
+        # `if x = 0 ... fi x = 1` is a reversibility-violating assertion: when
+        # x = 0 the entry branch runs but the exit assertion x = 1 fails.
+        aborts = parse("""\
+            procedure main()
+                int x
+                if x = 0 then
+                    x += 0
+                else
+                    skip
+                fi x = 1
+        """)
+        never = parse("""\
+            procedure main()
+                int x
+                skip
+        """)
+        result = check_equivalence(aborts, never, ["x"], input_range=range(0, 3))
+        self.assertFalse(result.equivalent)
+        self.assertIsNotNone(result.counterexample)
+        # the aborting side produced no store
+        store_a, _ = result.diff
+        self.assertIsNone(store_a)
+
+
+class TestNoMainProcedure(unittest.TestCase):
+    """The checker's helpers must reject programs that have no main."""
+
+    def _mainless(self) -> "Program":
+        from dataclasses import replace
+        prog = parse("""\
+            procedure main()
+                int x
+                x += 1
+        """)
+        return replace(prog, main=None)
+
+    def test_set_input_values_passes_through_mainless_program(self) -> None:
+        # _set_input_values short-circuits (it cannot bind inputs without a main).
+        result = check_equivalence(self._mainless(), self._mainless(), [])
+        # Two main-less programs both yield an empty store -> trivially equal.
+        self.assertTrue(result.equivalent)
+
+    def test_check_inverse_rejects_mainless(self) -> None:
+        with self.assertRaises(ValueError):
+            check_inverse(self._mainless(), ["x"])
+
+    def test_check_self_inverse_rejects_mainless(self) -> None:
+        with self.assertRaises(ValueError):
+            check_self_inverse(self._mainless(), ["x"])
+
 
 if __name__ == "__main__":
     unittest.main()

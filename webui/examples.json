@@ -1,0 +1,32 @@
+{
+  "stds": [
+    "janus2026",
+    "jana2014",
+    "jana2014basic",
+    "jana2014_in_out",
+    "janus1982",
+    "janus1982ext"
+  ],
+  "examples": {
+    "janus2026 — swap (XOR)": [
+      "janus2026",
+      "// swap two values reversibly (C-style); ends with a clean store\nvoid swap(int a, int b) {\n    a ^= b;\n    b ^= a;\n    a ^= b;\n}\nvoid main() {\n    int x = 0;\n    int y = 0;\n    x ^= 7;\n    y ^= 11;\n    printf(\"before: x=%d y=%d\\n\", x, y);\n    call swap(x, y);\n    printf(\"after:  x=%d y=%d\\n\", x, y);\n    y ^= 7;     // restore the store to all-zero (no leftover values)\n    x ^= 11;\n}\n",
+      ""
+    ],
+    "janus2026 — counter (call/uncall)": [
+      "janus2026",
+      "// call / uncall reversibility: build a counter up, then undo it cleanly\nvoid incr(int x) {\n    x += 1;\n}\nvoid main() {\n    int counter = 0;\n    for (int k = 0; k < 5; k += 1) {\n        call incr(counter);\n    }\n    printf(\"counter = %d\\n\", counter);\n    for (int k = 0; k < 5; k += 1) {\n        uncall incr(counter);    // restore counter = 0\n    }\n}\n",
+      ""
+    ],
+    "jana2014_in_out — add (read/write)": [
+      "jana2014_in_out",
+      "// read two numbers; write their sum and the second (write consumes the value,\n// so the store ends clean).  Backward run subtracts.\nprocedure main()\n    int x\n    int y\n    read x\n    read y\n    x += y\n    write x\n    write y\n",
+      "5 8"
+    ],
+    "jana2014_in_out — swap (read/write)": [
+      "jana2014_in_out",
+      "// reversible swap over read/write I/O; the store ends clean\nprocedure main()\n    int x\n    int y\n    read x\n    read y\n    x <=> y\n    write x\n    write y\n",
+      "3 9"
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+name: coq
+
+# Build the Rocq development and assert it is axiom-clean on every push/PR.
+# (The Python interpreter has its own workflow in test.yml.)
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up OCaml + opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.2"
+
+      - name: Install Rocq
+        run: opam install -y rocq-prover
+
+      - name: Build coq/ and audit axioms
+        # audit.sh: `rocq makefile` + `make`, then Print Assumptions on every
+        # headline theorem; fails on any axiom beyond functional_extensionality,
+        # or any Admitted.
+        run: |
+          eval "$(opam env)"
+          bash coq/audit.sh
+
+      - name: Build vjanus + conformance vs PyJanus
+        # The standalone verified interpreter (own OCaml parser + extracted run)
+        # must agree with PyJanus on the whole jana2014 corpus.
+        run: |
+          eval "$(opam env)"
+          bash coq/vjanus/build.sh
+          python3 -m pip install -e ".[dev]"
+          python3 -m pytest tests/jana2014/test_vjanus_corpus.py -q

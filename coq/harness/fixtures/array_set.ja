@@ -1,0 +1,7 @@
+procedure main()
+    int A[4]
+    int s
+    A[0] += 5
+    A[2] += 7
+    s += A[0]
+    s += A[2]

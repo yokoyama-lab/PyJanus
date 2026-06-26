@@ -1,0 +1,9 @@
+procedure inc(int a)
+    a += 1
+procedure main()
+    int x
+    int y
+    x += 5
+    call inc(x)
+    call inc(y)
+    uncall inc(y)
