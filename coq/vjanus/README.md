@@ -72,6 +72,32 @@ every main scalar, array, stack and struct, forward and via in-program
 stack-building procedure, and structs with array fields).  The whole corpus
 matches: **52 match, 0 skip**.
 
+### Variable scope
+
+jana2014 has three variable classes, and each has a distinct scope:
+
+| class | introduced by | scope | frame ref |
+|-------|---------------|-------|-----------|
+| **global** | `procedure main()` declaration block | entire `main` body | `RG n` |
+| **formal** | procedure parameter list | entire procedure body | `RF i` (positional index), substituted to the caller's ref at each call site |
+| **local** | `local x = e` | `body` in `local x = e; body; delocal x = e'` | `RL d n` (frame depth `d`) |
+
+Two scoping rules enforced by `check_program` (static error, exit 1):
+
+1. **`local x = e` — `x` is NOT yet in scope at `e`.**  The initialiser `e`
+   runs before `x` is allocated.  `local i = i + 1` is rejected: there is no
+   `i` at that point.
+
+2. **`delocal x = e'` — `x` IS still in scope at `e'`, but self-reference is
+   restricted.**  When `e'` reads `x`, the freed value references the dying
+   cell; the inverse `Enter` would try to read a dead (zero) cell instead.
+   Only the **counter idiom** (single `from`-loop stepping `x` by a constant)
+   is accepted — see the section below.  Any other self-referential delocal is
+   a static error.
+
+These rules are not enforced by PyJanus (which only runs forward), so a program
+that passes PyJanus may still be rejected by vjanus if it violates them.
+
 ### Self-referential `delocal` (the loop-counter idiom)
 
 A self-referential `delocal i = i` frees a loop counter at its *dynamic* final
