@@ -351,6 +351,36 @@ let counter_idiom nm (body : Ast.stmt list) : (int * Ast.expr) option =
      | None -> (match find_step nm loop_s with Some step -> Some (step, until) | None -> None))
   | _ -> None
 
+(* Static check: reject self-referential local/delocal that is NOT the counter
+   idiom.  Such programs cannot be lowered to a clean Enter/Exit pair:
+   - `local i = f(i)`: i is not in scope at the point of initialisation.
+   - `delocal i = f(i)` (non-counter): the freed value references the dying cell;
+     a sound lowering would require keeping history or non-local uncomputation.
+   Both are rejected with Ast.Error (exit 1) so the corpus test does not skip
+   them as "unsupported" but fails, matching the language-level error semantics. *)
+let rec check_stmts stmts = List.iter check_stmt stmts
+and check_stmt = function
+  | Ast.Local (d1, body, d2) ->
+    let nm = d1.Ast.dname in
+    let e_init = match d1.Ast.dinit with Some e -> e | None -> Ast.Num 0 in
+    let e_delocal = match d2.Ast.dinit with Some e -> e | None -> Ast.Num 0 in
+    if reads_name e_init nm then
+      raise (Ast.Error (Printf.sprintf
+        "local '%s': initialiser must not read '%s' (variable not yet in scope)" nm nm, 0, 0));
+    if reads_name e_delocal nm && counter_idiom nm body = None then
+      raise (Ast.Error (Printf.sprintf
+        "delocal '%s': self-referential delocal is only valid for loop counters \
+         (single from-loop stepping '%s' by a constant)" nm nm, 0, 0));
+    check_stmts body
+  | Ast.If (_, t, f, _) -> check_stmts t; check_stmts f
+  | Ast.From (_, do_s, loop_s, _) -> check_stmts do_s; check_stmts loop_s
+  | Ast.Iterate (_, _, _, _, _, body) -> check_stmts body
+  | _ -> ()
+
+let check_program (prog : Ast.program) =
+  List.iter (fun p -> check_stmts p.Ast.body) prog.Ast.procs;
+  check_stmts prog.Ast.mstmts
+
 let aop = function "+=" -> J.OAdd | "-=" -> J.OSub | "^=" -> J.OXor
   | o -> raise (Unsupported ("assign-op " ^ o))
 
@@ -471,14 +501,8 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
   | Local (d1, body, d2) ->
     let e0 = match d1.dinit with Some e -> e | None -> Num 0 in
     let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
-    (* A self-referential delocal that is NOT the recognised counter idiom
-       (above) stays outside the statement-reversible Enter/Exit model: freeing a
-       non-zero local reversibly would need either a history of the discarded
-       value (garbage that breaks store-matching) or uncomputing the loop
-       (non-local).  We reject it rather than encode it unsoundly — see
-       coq/vjanus/README.md.  PyJanus permits it because it only runs forward. *)
-    if reads_name e0 d1.dname || reads_name e1 d1.dname then
-      raise (Unsupported "self-referential local/delocal");
+    (* self-referential local/delocal is caught statically by check_program
+       (Ast.Error, exit 1) before lowering; reaching here means it is safe. *)
     let x = local_slot scp d1.dname in
     J.Seq (J.Enter (nat x, expr st scp e0),
            J.Seq (seq st scp body, J.Exit (nat x, expr st scp e1)))
