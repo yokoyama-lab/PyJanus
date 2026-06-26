@@ -89,11 +89,14 @@ is reversible **without any closed form for the loop bound**.  (Notably this
 makes `vjanus` *more* reversible than PyJanus here: PyJanus inverts `delocal i=i`
 to an invalid `local i=i` and so cannot `uncall` such a procedure at all.)
 
-A self-referential `delocal` that is *not* this counter idiom still exits 3
-("unsupported", a clean exit, not a crash): freeing an arbitrary non-zero local
-reversibly would need either a history of the discarded value (garbage that
-breaks store-matching) or non-local uncomputation, so it remains a principled
-boundary.
+A self-referential `delocal` that is *not* this counter idiom is a **static
+error** (exit 1, not exit 3): `check_program` walks the AST before lowering and
+rejects it with a clear message.  The reason is principled, not accidental:
+freeing an arbitrary non-zero local reversibly would need either a history of the
+discarded value (garbage that breaks store-matching) or non-local uncomputation.
+Exit 1 rather than exit 3 reflects this — exit 3 ("unsupported") signals a
+feature gap that the corpus test skips; exit 1 signals a program error that
+should fail.
 
 The lowering
 classifies each variable into the frame core's refs — a `main` global (`RG`), a
