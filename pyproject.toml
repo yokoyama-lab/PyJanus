@@ -10,10 +10,23 @@ requires-python = ">=3.10"
 license = {text = "BSD-3-Clause"}
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-cov"]
 
 [project.scripts]
 pyjanus = "jana_py.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["jana_py"]
+
+[tool.coverage.run]
+branch = true
+source = ["jana_py"]
+
+[tool.coverage.report]
+show_missing = true
+# Lines/branches we deliberately don't exercise (debug aids, unreachable guards).
+exclude_also = [
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]

@@ -1,0 +1,28 @@
+/* Passing a struct by reference: a struct actual expands to one ref per field
+ * at the call site, and a struct formal occupies one positional ref per field.
+ * Exercises vjanus's struct-parameter lowering against PyJanus. */
+
+struct Point {
+    int x;
+    int y;
+};
+
+procedure shift(Point p, int dx)
+    p.x += dx
+    p.y += dx
+
+procedure swapfields(Point p)
+    p.x <=> p.y
+
+procedure main()
+    Point a
+    Point b
+
+    a.x += 1
+    a.y += 2
+    b.x += 10
+
+    call shift(a, 5)        // a = {6, 7}
+    call shift(b, 3)        // b = {13, 3}
+    call swapfields(a)      // a = {7, 6}
+    uncall shift(b, 3)      // b = {10, 0}

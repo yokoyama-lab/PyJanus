@@ -1,0 +1,27 @@
+// std/stack.ja — reversible stack/list utilities for Janus (janus2026 dialect).
+//
+//   #include "std/stack.ja"
+//
+// Built on the reversible built-ins push / pop / top / empty / size.  push(x,s)
+// moves x onto s and zeroes x; pop is its inverse (x must enter 0).
+
+// Add the top of s into x (which should enter 0), without disturbing s.
+// Reversible: uncall subtracts it back out.  Requires s non-empty.
+void copy_top(stack s, int x) {
+    x += top(s);
+}
+
+// Move every element from src to dst (which must enter EMPTY), reversing order.
+// Reversible: `uncall move_all(src, dst)` moves them back, restoring src.
+//
+// The from-loop's entry assertion `empty(dst)` holds at the start (dst is empty)
+// and becomes false after the first push, which is exactly the reversibility
+// condition Janus requires; the loop drains until src is empty.
+void move_all(stack src, stack dst) {
+    from (empty(dst)) loop {
+        local int x = 0 {
+            pop(x, src);
+            push(x, dst);
+        } delocal int x = 0;
+    } until (empty(src))
+}

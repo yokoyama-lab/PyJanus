@@ -1,0 +1,90 @@
+// std/reduce.ja — reversible array reductions for Janus (janus2026 dialect).
+//
+//   #include "std/reduce.ja"
+//
+// Each reduction accumulates into an output that should enter 0 and *preserves
+// its input array*, so `uncall` simply subtracts the result back out.  The
+// loops use the `from (i == 0) loop { ... } until (i >= n)` shape, whose body
+// runs zero times when n == 0 (a clean no-op).
+
+// acc += sum of a[0..n-1].  Preserves a.
+void sum_into(int a[], int n, int acc) {
+    local int i = 0 {
+        from (i == 0) loop {
+            acc += a[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// acc += dot product of a and b over [0, n).  Preserves a and b.
+void dot_into(int a[], int b[], int n, int acc) {
+    local int i = 0 {
+        from (i == 0) loop {
+            acc += a[i] * b[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// cnt += number of i in [0, n) with a[i] == val.  Preserves a.
+void count_into(int a[], int n, int val, int cnt) {
+    local int i = 0 {
+        from (i == 0) loop {
+            if (a[i] == val) {
+                cnt += 1;
+            } fi (a[i] == val);
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// --- min / max: reductions that NEED history ---------------------------------
+//
+// Unlike sum/dot/count, a running minimum *discards* which earlier values lost,
+// so it cannot be undone from its result alone.  min_into therefore keeps a
+// history: `flags[i-1]` records whether step i lowered the running min, and each
+// lowering's amount is pushed onto `hist`.  That history is exactly what
+// `uncall` consumes to restore m to 0.  The array a is never modified, so it is
+// preserved.  flags must enter all-zero with n-1 entries; hist must enter empty.
+// Requires n >= 1 (m gets a[0], then is lowered toward the true minimum).
+
+// m += min(a[0..n-1]).
+void min_into(int a[], int n, int m, int flags[], stack hist) {
+    if (n > 0) {
+        m += a[0];
+        local int i = 1, int k = 0 {
+            from (i == 1) loop {
+                if (a[i] < m) {
+                    local int d = m - a[i] {
+                        m -= d;              // m becomes a[i]
+                        push(d, hist);       // record the drop; d := 0
+                    } delocal int d = 0;
+                    flags[k] ^= 1;
+                } fi (flags[k]);
+                i += 1;
+                k += 1;
+            } until (i >= n)
+        } delocal int i = n, int k = (n - 1);
+    } fi (n > 0);
+}
+
+// m += max(a[0..n-1]).  Mirror of min_into.
+void max_into(int a[], int n, int m, int flags[], stack hist) {
+    if (n > 0) {
+        m += a[0];
+        local int i = 1, int k = 0 {
+            from (i == 1) loop {
+                if (a[i] > m) {
+                    local int d = a[i] - m {
+                        m += d;              // m becomes a[i]
+                        push(d, hist);       // record the rise; d := 0
+                    } delocal int d = 0;
+                    flags[k] ^= 1;
+                } fi (flags[k]);
+                i += 1;
+                k += 1;
+            } until (i >= n)
+        } delocal int i = n, int k = (n - 1);
+    } fi (n > 0);
+}

@@ -1,0 +1,71 @@
+// std/array.ja — reversible array utilities for Janus (janus2026 dialect).
+//
+// Every procedure here is reversible: `uncall p(...)` undoes `call p(...)`
+// exactly.  Procedures take the array by reference and an explicit length `n`
+// (Janus arrays decay to pointers, so the length is passed alongside).
+//
+//   #include "std/array.ja"
+//
+// Conventions
+//   * `reverse` / `rotate_left` permute the array and are their own structural
+//     inverses under uncall.
+//   * `xor_into` / `add_into` combine two equal-length arrays elementwise.
+//   * `cswap` is the *robust* reversible comparator: it records its swap
+//     decision in an ancilla flag `did` (which must enter as 0), so it works
+//     for every input — unlike a value-only `fi (x < y)` comparator, which
+//     breaks its reversibility assertion on an already-ordered pair.
+
+// Reverse the first n elements of a in place.  No-op for n <= 1.
+void reverse(int a[], int n) {
+    if (n > 1) {
+        local int i = 0 {
+            from (i == 0) {
+                a[i] <=> a[n - 1 - i];
+                i += 1;
+            } until (i + i + 1 >= n)
+        } delocal int i = (n / 2);
+    } fi (n > 1);
+}
+
+// Rotate the first n elements one place to the left: [x0,x1,..] -> [x1,..,x0].
+// No-op for n <= 1.  Its inverse (uncall) is a rotate-right.
+void rotate_left(int a[], int n) {
+    if (n > 1) {
+        local int i = 0 {
+            from (i == 0) {
+                a[i] <=> a[i + 1];
+                i += 1;
+            } until (i + 1 >= n)
+        } delocal int i = (n - 1);
+    } fi (n > 1);
+}
+
+// dst[i] ^= src[i] for i in [0, n).  Self-inverse.
+void xor_into(int dst[], int src[], int n) {
+    local int i = 0 {
+        from (i == 0) {
+            dst[i] ^= src[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// dst[i] += src[i] for i in [0, n).  Inverse subtracts.
+void add_into(int dst[], int src[], int n) {
+    local int i = 0 {
+        from (i == 0) {
+            dst[i] += src[i];
+            i += 1;
+        } until (i >= n)
+    } delocal int i = n;
+}
+
+// Reversible comparator: swap x and y if x > y, recording the decision in the
+// ancilla bit `did` (which must enter as 0).  After the call did = 1 iff a swap
+// happened; uncall clears it and restores x, y.
+void cswap(int x, int y, int did) {
+    if (x > y) {
+        x <=> y;
+        did ^= 1;
+    } fi (did);
+}

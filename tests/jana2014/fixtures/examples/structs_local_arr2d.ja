@@ -1,0 +1,21 @@
+/* Local struct with 2-D array field: Box.grid[2][2] is accessed in the body.
+ * Exercises cantor_val for multi-dim static indices in lstructs_flat. */
+
+struct Box {
+    int grid[2][2];
+    int n;
+};
+
+procedure main()
+    Box a
+    int s
+
+    a.grid[0][0] += 1
+    a.grid[0][1] += 2
+    a.grid[1][0] += 3
+    a.grid[1][1] += 4
+    a.n += 10
+
+    local struct Box e = a
+        s += e.grid[0][0] + e.grid[0][1] + e.grid[1][0] + e.grid[1][1] + e.n
+    delocal struct Box e = a
