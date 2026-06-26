@@ -330,34 +330,11 @@ let cantor_val = function
   | [] -> 0
   | x :: rest -> List.fold_left (fun acc j -> (acc + j) * (acc + j + 1) / 2 + j) x rest
 
-(* the constant signed step by which [nm] is incremented at top level of [stmts]
-   (`nm += c` -> +c, `nm -= c` -> -c); None if there is no such single step *)
-let rec find_step nm = function
-  | [] -> None
-  | Ast.Assign ({ lname; sels = []; fields = []; _ }, "+=", Ast.Num c) :: _ when lname = nm -> Some c
-  | Ast.Assign ({ lname; sels = []; fields = []; _ }, "-=", Ast.Num c) :: _ when lname = nm -> Some (- c)
-  | _ :: rest -> find_step nm rest
-
-(* Recognise the counter idiom `from i=START do {…; i += STEP} loop … until COND`
-   (a single from-loop incrementing [nm] by a constant), returning (STEP, COND).
-   This is what a self-referential `delocal i = i` frees: knowing STEP and COND
-   lets us count [nm] back down to START with a clean reverse loop, so the local
-   is freed at the non-self-referential value START — no closed form needed. *)
-let counter_idiom nm (body : Ast.stmt list) : (int * Ast.expr) option =
-  match body with
-  | [Ast.From (_entry, do_s, loop_s, until)] ->
-    (match find_step nm do_s with
-     | Some step -> Some (step, until)
-     | None -> (match find_step nm loop_s with Some step -> Some (step, until) | None -> None))
-  | _ -> None
-
-(* Static check: reject self-referential local/delocal that is NOT the counter
-   idiom.  Such programs cannot be lowered to a clean Enter/Exit pair:
-   - `local i = f(i)`: i is not in scope at the point of initialisation.
-   - `delocal i = f(i)` (non-counter): the freed value references the dying cell;
-     a sound lowering would require keeping history or non-local uncomputation.
-   Both are rejected with Ast.Error (exit 1) so the corpus test does not skip
-   them as "unsupported" but fails, matching the language-level error semantics. *)
+(* Static check: reject self-referential local/delocal.
+   - `local i = f(i)`: i is not in scope at initialisation.
+   - `delocal i = f(i)`: the freed value references the dying cell; a sound
+     lowering would require keeping history or non-local uncomputation.
+   Both are rejected with Ast.Error (exit 1). *)
 let rec check_stmts stmts = List.iter check_stmt stmts
 and check_stmt = function
   | Ast.Local (d1, body, d2) ->
@@ -367,10 +344,10 @@ and check_stmt = function
     if reads_name e_init nm then
       raise (Ast.Error (Printf.sprintf
         "local '%s': initialiser must not read '%s' (variable not yet in scope)" nm nm, 0, 0));
-    if reads_name e_delocal nm && counter_idiom nm body = None then
+    if reads_name e_delocal nm then
       raise (Ast.Error (Printf.sprintf
-        "delocal '%s': self-referential delocal is only valid for loop counters \
-         (single from-loop stepping '%s' by a constant)" nm nm, 0, 0));
+        "delocal '%s': self-referential delocal is not allowed (expression must \
+         not read '%s')" nm nm, 0, 0));
     check_stmts body
   | Ast.If (_, t, f, _) -> check_stmts t; check_stmts f
   | Ast.From (_, do_s, loop_s, _) -> check_stmts do_s; check_stmts loop_s
@@ -472,32 +449,6 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
                  J.Seq (acc, J.Exit (nat (base + off), field_src s2 f))))
         body' (struct_fields st sname)
     end
-  | Local (d1, body, d2)
-    when (let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
-          reads_name e1 d1.dname                          (* self-referential delocal *)
-          && not (reads_name (match d1.dinit with Some e -> e | None -> Num 0) d1.dname)
-          && counter_idiom d1.dname body <> None) ->
-    (* Loop-aware lowering of `local i=START; from i=START do {…; i += STEP} …
-       until COND; delocal i = i`.  Freeing a loop counter at its dynamic final
-       value is not statement-reversible directly (the delocal value references
-       the freed variable).  Instead, after the loop we count i back down to
-       START with a clean reverse loop — `from COND do {i -= STEP} until i=START`
-       — which touches nothing but i, then free it at START (a live, non-self-
-       referential value).  The reverse loop is an ordinary reversible from-loop;
-       its inverse counts i back up to the final value, so the whole composite is
-       reversible without any closed form for the loop bound. *)
-    let nm = d1.dname in
-    let step, until = match counter_idiom nm body with Some x -> x | None -> assert false in
-    let start = match d1.dinit with Some e -> e | None -> Num 0 in
-    let x = local_slot scp nm in
-    let xref = J.RL (nat x) in
-    let start_e = expr st scp start in
-    let main = seq st scp body in                         (* i: START -> final *)
-    let dec = J.Asn (xref, J.OSub, J.Cst (z step)) in     (* i -= STEP (signed) *)
-    let back = J.Loop (expr st scp until, dec, J.Skip,    (* i: final -> START *)
-                       J.Bin (J.BEq, J.Rd xref, start_e)) in
-    J.Seq (J.Enter (nat x, start_e),
-           J.Seq (main, J.Seq (back, J.Exit (nat x, start_e))))
   | Local (d1, body, d2) ->
     let e0 = match d1.dinit with Some e -> e | None -> Num 0 in
     let e1 = match d2.dinit with Some e -> e | None -> Num 0 in

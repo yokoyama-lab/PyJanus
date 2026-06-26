@@ -89,40 +89,47 @@ Two scoping rules enforced by `check_program` (static error, exit 1):
    `i` at that point.
 
 2. **`delocal x = e'` — `x` IS still in scope at `e'`, but self-reference is
-   restricted.**  When `e'` reads `x`, the freed value references the dying
+   forbidden.**  When `e'` reads `x`, the freed value references the dying
    cell; the inverse `Enter` would try to read a dead (zero) cell instead.
-   Only the **counter idiom** (single `from`-loop stepping `x` by a constant)
-   is accepted — see the section below.  Any other self-referential delocal is
-   a static error.
+   Any self-referential delocal is a static error — see the section below.
 
 These rules are not enforced by PyJanus (which only runs forward), so a program
 that passes PyJanus may still be rejected by vjanus if it violates them.
 
-### Self-referential `delocal` (the loop-counter idiom)
+### Self-referential `delocal` — static error
 
-A self-referential `delocal i = i` frees a loop counter at its *dynamic* final
-value (e.g. `local i = 0; from i = 0 … until i+1 >= n; delocal i = i`).  Freeing
-a non-zero local is not statement-reversible in isolation — the delocal value
-references the variable being freed, so the inverse `Enter` would read it back as
-the dead (zero) cell.  `vjanus` handles the common **counter idiom** with a
-*loop-aware* lowering: when the body is a single `from`-loop that steps `i` by a
-constant `STEP`, after the loop it counts `i` back down to its start with a clean
-reverse loop — `from COND do { i -= STEP } until i = START` — which touches
-nothing but `i`, then frees it at `START` (a live, non-self-referential value).
-The reverse loop is an ordinary reversible `from`-loop; its inverse counts `i`
-back up to the final value, so the whole `local … loop … delocal i=i` composite
-is reversible **without any closed form for the loop bound**.  (Notably this
-makes `vjanus` *more* reversible than PyJanus here: PyJanus inverts `delocal i=i`
-to an invalid `local i=i` and so cannot `uncall` such a procedure at all.)
+Any `delocal x = e` where `e` reads `x` is a **static error** (exit 1):
+`check_program` walks the AST before lowering and rejects it with a clear
+message.  The reason is fundamental: freeing a non-zero local reversibly requires
+the delocal expression to give the cell's current value without reading the cell
+itself — otherwise the inverse `Enter` would try to read a dead (zero) cell.
 
-A self-referential `delocal` that is *not* this counter idiom is a **static
-error** (exit 1, not exit 3): `check_program` walks the AST before lowering and
-rejects it with a clear message.  The reason is principled, not accidental:
-freeing an arbitrary non-zero local reversibly would need either a history of the
-discarded value (garbage that breaks store-matching) or non-local uncomputation.
-Exit 1 rather than exit 3 reflects this — exit 3 ("unsupported") signals a
-feature gap that the corpus test skips; exit 1 signals a program error that
-should fail.
+The canonical rewrite for a loop counter is to keep the final value in a separate
+non-self-referential expression.  For example, instead of:
+
+```janus
+local int i = 0
+    from i = 0 do { body; i += 1 } until i = n
+delocal int i = i               // ERROR: reads i
+```
+
+use `iterate` or a helper variable whose delocal expression does not mention itself:
+
+```janus
+iterate int i = 0 to n - 1     // no local/delocal needed at all
+    body
+end
+```
+
+or, when `n / 2` iterations are needed:
+
+```janus
+local int pairs = n / 2         // delocal reads n, not pairs
+    iterate int i = 0 to pairs - 1
+        arr[i * 2] <=> arr[i * 2 + 1]
+    end
+delocal int pairs = n / 2
+```
 
 The lowering
 classifies each variable into the frame core's refs — a `main` global (`RG`), a
