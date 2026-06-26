@@ -57,10 +57,8 @@ multi-dim arrays, struct arrays and array fields are flattened row-major to matc
 PyJanus, and the seed accepts either flat or nested input.
 `tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
 inverse vs PyJanus, over the whole corpus) — it matches on every program, with no
-skips.  (The self-referential `delocal` is invertible on both sides: vjanus via
-its loop-aware lowering, and PyJanus via a matching reverse-count desugaring in
-`jana_py/inverse.py`, added so it no longer inverts `delocal i=i` to an invalid
-`local i=i`.)
+skips.  Self-referential `delocal` is banned statically (exit 1) in vjanus, so
+the corpus contains no such programs.
 
 ## Compatibility & scope
 
