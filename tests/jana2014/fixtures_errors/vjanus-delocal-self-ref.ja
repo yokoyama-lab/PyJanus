@@ -1,0 +1,10 @@
+/* Self-referential delocal that is NOT the counter idiom.
+   PyJanus accepts it (runs forward only); vjanus must reject it
+   statically (exit 1) because a sound reversible lowering is impossible
+   without history or non-local uncomputation. */
+procedure main()
+    int x
+    x += 5
+    local int t = 0
+        t += x
+    delocal int t = t * 2
