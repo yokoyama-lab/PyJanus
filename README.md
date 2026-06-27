@@ -142,13 +142,17 @@ Example programs live under dialect-specific test fixtures:
 | `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
 | `reversible_ca_ring.ja` | Rule 90R on a cyclic ring (periodic boundary) |
 | `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
+| `gray_code_roundtrip.ja` | `call gray; uncall gray` = identity (encode/decode reversibility) |
+| `reversible_gates.ja` | Universal reversible logic gates: Toffoli (CCNOT) and Fredkin (CSWAP) |
 
-The three above are clean reversible simulations of injective maps built purely
-from the XOR-update operator `^=` (no ancillae, no history): each has a no-I/O
-twin under `tests/jana2014/fixtures/examples/` that the verified `vjanus`
-interpreter checks against PyJanus, and an `// in:/out:`-annotated copy under
-`tests/jana2014_in_out/programs/` exercised forward AND backward by the I/O
-harness.
+These are clean reversible simulations of injective maps built purely from the
+XOR-update operator `^=` and controlled swaps (no ancillae, no history). Each
+has a no-I/O twin under `tests/jana2014/fixtures/examples/` checked against
+PyJanus by **two independent Coq-extracted interpreters** — `vjanus` (the
+frame-stacked core, `coq/vjanus/`) and the flat-store `driverar` (`coq/harness/`)
+— and most also have an `// in:/out:`-annotated copy under
+`tests/jana2014_in_out/programs/` (`gray_code`, `toffoli_gate`, the two CAs) run
+forward AND backward by the I/O harness.
 
 ## Tests
 

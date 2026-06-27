@@ -1,0 +1,35 @@
+// Toffoli gate (CCNOT) — the universal reversible logic gate.
+//
+// The target t is flipped iff both controls a and b are 1: t ^= a AND b
+// (here a*b, since a,b are bits). The controls pass through unchanged, so the
+// gate is its own inverse — running it twice, or backward, restores the input.
+// A clean reversible simulation of an injective boolean map: no ancillae, no
+// history. Toffoli is universal, so any reversible circuit is a composition of
+// these (compare fredkin_gate, the controlled-swap counterpart).
+//
+// case: flip_up      # both controls set, 0 -> 1
+// in: 1 1 0
+// out: 1 1 1
+// case: flip_down    # both controls set, 1 -> 0
+// in: 1 1 1
+// out: 1 1 0
+// case: one_control  # not both set, target untouched
+// in: 1 0 0
+// out: 1 0 0
+// case: other_control
+// in: 0 1 1
+// out: 0 1 1
+procedure toffoli(int a, int b, int t)
+    t ^= a * b
+
+procedure main()
+    int a
+    int b
+    int t
+    read a
+    read b
+    read t
+    call toffoli(a, b, t)
+    write a
+    write b
+    write t
