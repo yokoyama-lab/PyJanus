@@ -31,12 +31,19 @@ let ident s = match (peek s).t with
 
 (* ----- expressions (precedence climbing) ----- *)
 
+(* Precedence climbing, mirroring jana_py/parser_jana2014.py's BIN_PRECEDENCE so
+   vjanus parses the same tree. Bitwise & | ^ sit between && and the comparisons
+   (PyJanus level 3). The verified frame core has no bitwise *expression*
+   operator (only XOR as the `^=` assignment op), so lower.ml lowers a binary
+   ^/&/| to a clean Unsupported (exit 3, a feature gap the corpus skips) rather
+   than the parser rejecting a valid program with a misleading parse error. *)
 let binop_level = function
   | "||" -> Some 1
   | "&&" -> Some 2
-  | "=" | "==" | "!=" | "#" | "<" | "<=" | ">" | ">=" -> Some 3
-  | "+" | "-" -> Some 4
-  | "*" | "/" | "%" -> Some 5
+  | "&" | "|" | "^" -> Some 3
+  | "=" | "==" | "!=" | "#" | "<" | "<=" | ">" | ">=" -> Some 4
+  | "+" | "-" -> Some 5
+  | "*" | "/" | "%" -> Some 6
   | _ -> None
 
 let norm_op = function "=" -> "==" | "#" -> "!=" | o -> o
@@ -187,7 +194,7 @@ and arg s =
     let l = lval s in
     (match (peek s).t with
      | OP ("+" | "-" | "*" | "/" | "%" | "=" | "==" | "!=" | "#"
-          | "<" | "<=" | ">" | ">=" | "&&" | "||") ->
+          | "<" | "<=" | ">" | ">=" | "&&" | "||" | "&" | "|" | "^") ->
         s.p <- save; AVal (expr s)              (* it was the start of an expression *)
      | _ -> ALv l)
   | _ -> AVal (expr s)

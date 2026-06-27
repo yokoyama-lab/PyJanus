@@ -1,0 +1,39 @@
+// Universal reversible logic gates — Toffoli (CCNOT) and Fredkin (CSWAP).
+//
+// No-I/O verified-oracle twin: input baked into main, result left in the store,
+// so test_vjanus_corpus.py diffs the Coq-extracted vjanus `run` against PyJanus.
+//
+//   toffoli(a,b,t): t ^= a*b   — flip target iff both controls are 1
+//   fredkin(c,x,y): if c then x<=>y — swap the pair iff the control is 1
+//
+// Both preserve their controls, so each is its own inverse (`uncall` undoes it);
+// together they are universal for reversible computation. Applied across four
+// bit-lanes with assorted controls; lane k swaps/flips per ctrl[k].
+procedure toffoli(int a, int b, int t)
+    t ^= a * b
+
+procedure fredkin(int c, int x, int y)
+    if c = 1
+    then x <=> y
+    fi c = 1
+
+procedure main()
+    int ctrl[4]
+    int p[4]
+    int q[4]
+    ctrl[0] += 1
+    ctrl[2] += 1
+    p[0] += 5
+    p[1] += 6
+    p[2] += 7
+    p[3] += 8
+    q[0] += 50
+    q[1] += 60
+    q[2] += 70
+    q[3] += 80
+    // controlled swaps: lanes 0 and 2 swap p<->q, lanes 1 and 3 untouched
+    iterate int i = 0 to 3
+        call fredkin(ctrl[i], p[i], q[i])
+    end
+    // Toffoli on the control bits: ctrl[3] ^= ctrl[0] * ctrl[2] = 1*1 = 1
+    call toffoli(ctrl[0], ctrl[2], ctrl[3])
