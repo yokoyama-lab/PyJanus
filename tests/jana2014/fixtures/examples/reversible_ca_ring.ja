@@ -1,0 +1,25 @@
+// Cyclic-ring second-order reversible cellular automaton — no-I/O variant.
+//
+// The verified-oracle twin of tests/jana2014_in_out/programs/reversible_ca_ring.ja:
+// a Rule 90R evolution on a 5-cell ring with periodic boundaries (neighbours
+// wrap with `% 5`), input baked into main and the result left in the store, so
+// tests/jana2014/test_vjanus_corpus.py diffs the Coq-extracted `run` against
+// PyJanus on it. Exercises modular index expressions through the verified core.
+//
+//     new[i] = (cur[(i+4)%5] XOR cur[(i+1)%5]) XOR prev[i]
+//
+// Two `^=` statements per cell (the verified core has XOR only as the
+// assignment operator); `uncall step` inverts a step.
+procedure step(int dst[], int src[])
+    iterate int i = 0 to 4
+        dst[i] ^= src[(i + 4) % 5]
+        dst[i] ^= src[(i + 1) % 5]
+    end
+
+procedure main()
+    int a[5]
+    int b[5]
+    b[0] += 2
+    b[4] += 3
+    call step(a, b)
+    call step(b, a)
