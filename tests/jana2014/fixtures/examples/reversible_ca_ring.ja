@@ -8,8 +8,8 @@
 //
 //     new[i] = (cur[(i+4)%5] XOR cur[(i+1)%5]) XOR prev[i]
 //
-// Two `^=` statements per cell (the verified core has XOR only as the
-// assignment operator); `uncall step` inverts a step.
+// Two `^=` statements per cell (equivalently one with `src[(i+4)%5] ^
+// src[(i+1)%5]`, which vjanus also accepts); `uncall step` inverts a step.
 procedure step(int dst[], int src[])
     iterate int i = 0 to 4
         dst[i] ^= src[(i + 4) % 5]

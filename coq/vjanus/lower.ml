@@ -263,6 +263,7 @@ let rec expr st scp (e : Ast.expr) : J.expr =
      | "!=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BEq, l, r))
      | "&&" -> J.Bin (J.BMul, l, r)
      | "||" -> J.Bin (J.BAdd, J.Bin (J.BMul, l, l), J.Bin (J.BMul, r, r))
+     | "^" -> J.Bin (J.BXor, l, r) | "&" -> J.Bin (J.BAnd, l, r) | "|" -> J.Bin (J.BOr, l, r)
      | o -> raise (Unsupported ("operator " ^ o)))
 
 (* multi-dim indices fold to one via an injective Cantor pairing (as lower.ml) *)

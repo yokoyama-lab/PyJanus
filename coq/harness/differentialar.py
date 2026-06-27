@@ -136,9 +136,10 @@ class T:
             return f"(b eq {self.expr(sc, e['expr'])} (c 0))"
         if "op" in e:
             op, l, r = e["op"], self.expr(sc, e["left"]), self.expr(sc, e["right"])
-            # arithmetic
+            # arithmetic + bitwise
             r2 = {"+": f"(b add {l} {r})", "-": f"(b sub {l} {r})", "*": f"(b mul {l} {r})",
-                  "/": f"(b div {l} {r})", "%": f"(b mod {l} {r})"}.get(op)
+                  "/": f"(b div {l} {r})", "%": f"(b mod {l} {r})",
+                  "^": f"(b xor {l} {r})", "&": f"(b and {l} {r})", "|": f"(b or {l} {r})"}.get(op)
             if r2:
                 return r2
             # comparisons / logicals appear only in conditions: encode by truthiness

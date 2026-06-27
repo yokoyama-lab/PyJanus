@@ -33,10 +33,8 @@ let ident s = match (peek s).t with
 
 (* Precedence climbing, mirroring jana_py/parser_jana2014.py's BIN_PRECEDENCE so
    vjanus parses the same tree. Bitwise & | ^ sit between && and the comparisons
-   (PyJanus level 3). The verified frame core has no bitwise *expression*
-   operator (only XOR as the `^=` assignment op), so lower.ml lowers a binary
-   ^/&/| to a clean Unsupported (exit 3, a feature gap the corpus skips) rather
-   than the parser rejecting a valid program with a misleading parse error. *)
+   (PyJanus level 3); lower.ml lowers them to the verified core's BAnd/BOr/BXor
+   (Z.land/lor/lxor in RevFrame.v), so e.g. `dst[i] ^= a ^ b` runs directly. *)
 let binop_level = function
   | "||" -> Some 1
   | "&&" -> Some 2
