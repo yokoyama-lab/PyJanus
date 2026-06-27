@@ -1,0 +1,40 @@
+// Reflected binary Gray code — a clean reversible bijection on bit vectors.
+//
+// The Gray encoding g[i] = b[i] XOR b[i+1] (with the most-significant bit kept,
+// i.e. g = b XOR (b >> 1)) is a bijection: consecutive integers differ in
+// exactly one Gray bit. Done in place over a bit array with a single `^=` per
+// bit it is reversible by construction — running backward replays the XORs in
+// reverse order, which is exactly Gray DEcoding. No ancillae, no history.
+//
+// Bits are read most-significant first (b3 b2 b1 b0). Encoding scans low to
+// high so each bits[i+1] is still the original binary bit when read; the
+// backward (decode) direction scans high to low.
+//
+// case: five        # 0101 -> Gray 0111 = 7
+// in: 0 1 0 1
+// out: 0 1 1 1
+// case: seven       # 0111 -> Gray 0100 = 4
+// in: 0 1 1 1
+// out: 0 1 0 0
+// case: eight       # 1000 -> Gray 1100 = 12
+// in: 1 0 0 0
+// out: 1 1 0 0
+// case: zero        # 0000 -> 0000
+// in: 0 0 0 0
+// out: 0 0 0 0
+procedure gray(int bits[])
+    iterate int i = 0 to 2
+        bits[i] ^= bits[i+1]
+    end
+
+procedure main()
+    int bits[4]
+    read bits[3]
+    read bits[2]
+    read bits[1]
+    read bits[0]
+    call gray(bits)
+    write bits[3]
+    write bits[2]
+    write bits[1]
+    write bits[0]

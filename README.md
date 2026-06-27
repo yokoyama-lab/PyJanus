@@ -139,6 +139,16 @@ Example programs live under dialect-specific test fixtures:
 | `sqrt.ja` | Integer square root |
 | `run-length-enc.ja` | Run-length encoding |
 | `stack-operations.ja` | Stack push/pop operations |
+| `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
+| `reversible_ca_ring.ja` | Rule 90R on a cyclic ring (periodic boundary) |
+| `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
+
+The three above are clean reversible simulations of injective maps built purely
+from the XOR-update operator `^=` (no ancillae, no history): each has a no-I/O
+twin under `tests/jana2014/fixtures/examples/` that the verified `vjanus`
+interpreter checks against PyJanus, and an `// in:/out:`-annotated copy under
+`tests/jana2014_in_out/programs/` exercised forward AND backward by the I/O
+harness.
 
 ## Tests
 
