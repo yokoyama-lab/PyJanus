@@ -9,9 +9,9 @@
 //
 // Update: new[i] = (cur[i-1] XOR cur[i+1]) XOR prev[i]. Written as two `^=`
 // statements (each individually reversible; their composition is the XOR of
-// both neighbours) so it needs no binary `^` in expressions — the verified
-// core has XOR only as the assignment operator. Real cells are indices 1..3;
-// guard cells 0 and 4 stay 0 (zero boundary). `uncall step` inverts a step.
+// both neighbours; equivalently `dst[i] ^= src[i-1] ^ src[i+1]`, which vjanus
+// also accepts). Real cells are indices 1..3; guard cells 0 and 4 stay 0
+// (zero boundary). `uncall step` inverts a step.
 procedure step(int dst[], int src[])
     iterate int i = 1 to 3
         dst[i] ^= src[i-1]

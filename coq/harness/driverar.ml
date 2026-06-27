@@ -36,7 +36,8 @@ let nexti () = int_of_string (next ())
 let aop_of = function "add" -> AAdd | "sub" -> ASub | "xor" -> AXor | s -> failwith ("aop " ^ s)
 let bop_of = function
   | "add" -> OAdd | "sub" -> OSub | "mul" -> OMul | "eq" -> OEq | "lt" -> OLt
-  | "div" -> ODiv | "mod" -> OMod | s -> failwith ("bop " ^ s)
+  | "div" -> ODiv | "mod" -> OMod
+  | "xor" -> OXor | "and" -> OAnd | "or" -> OOr | s -> failwith ("bop " ^ s)
 let read_nats n = let l = ref [] in for _ = 1 to n do l := nexti () :: !l done; List.rev !l
 
 let rec pexpr () =

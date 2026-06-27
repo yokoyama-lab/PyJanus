@@ -114,11 +114,17 @@ Proof. destruct o; intros a b; simpl; try lia.
 
 (* total binary operators for expressions (read-only; no inverse needed), at
    parity with RevArr's [binop]/[denote] so a frame program computes identically *)
-Inductive binop := BAdd | BSub | BMul | BEq | BLt | BDiv | BMod.
+Inductive binop := BAdd | BSub | BMul | BEq | BLt | BDiv | BMod | BXor | BAnd | BOr.
 Definition bden (o : binop) (a b : Z) : Z :=
   match o with BAdd => a + b | BSub => a - b | BMul => a * b
     | BEq => if Z.eqb a b then 1 else 0 | BLt => if Z.ltb a b then 1 else 0
-    | BDiv => Z.div a b | BMod => Z.modulo a b end.
+    | BDiv => Z.div a b | BMod => Z.modulo a b
+    | BXor => Z.lxor a b | BAnd => Z.land a b | BOr => Z.lor a b end.
+
+(* the bitwise operators denote like PyJanus's & | ^ : 12 (1100), 10 (1010) *)
+Example bden_bitwise :
+  bden BAnd 12 10 = 8 /\ bden BOr 12 10 = 14 /\ bden BXor 12 10 = 6.
+Proof. repeat split; reflexivity. Qed.
 
 Inductive expr := Cst (z : Z) | Rd (r : ref) | ARd (r : ref) (idx : expr) | Bin (o : binop) (a b : expr).
 

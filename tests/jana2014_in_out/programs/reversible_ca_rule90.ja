@@ -26,9 +26,9 @@
 // in: 1 2 3 4 5 6
 // out: 6 0 4 6 7 4
 //
-// The step is written as two `^=` statements (rather than one with a binary
-// `^` in the RHS) so the very same program runs under the verified vjanus
-// interpreter; the no-I/O twin is tests/jana2014/fixtures/examples/.
+// The step is written as two `^=` statements (equivalently one with a binary
+// `^` in the RHS, which the verified vjanus interpreter also accepts); the
+// no-I/O twin is tests/jana2014/fixtures/examples/.
 procedure step(int dst[], int src[])
     iterate int i = 1 to 3
         dst[i] ^= src[i-1]

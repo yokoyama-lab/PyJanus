@@ -38,18 +38,22 @@ def test_self_referential_delocal_is_error() -> None:
 
 @pytest.mark.skipif(not VJANUS.exists(),
                     reason="vjanus not built (run coq/vjanus/build.sh)")
-def test_binary_bitwise_operator_is_unsupported_not_parse_error() -> None:
-    """A binary bitwise operator (`^`/`&`/`|`) in an expression is a feature the
-    verified core lacks (it has XOR only as the `^=` assignment operator), so it
-    must parse and then exit 3 ("unsupported") -- a clean feature gap the corpus
-    test skips -- rather than exit 1 with a misleading "expected statement" parse
-    error on a perfectly valid jana2014 program."""
+def test_binary_bitwise_operators_are_supported() -> None:
+    """Binary bitwise operators (`^`/`&`/`|`) in expressions are lowered to the
+    verified core's BXor/BAnd/BOr (Z.lxor/land/lor) and run directly -- they used
+    to be a feature gap. x=12 (1100), y=10 (1010): &=8, |=14, ^=6."""
     prog = (
         "procedure main()\n"
         "    int x\n"
         "    int y\n"
-        "    x += 6\n"
-        "    y += x ^ 3\n"
+        "    int a\n"
+        "    int o\n"
+        "    int e\n"
+        "    x += 12\n"
+        "    y += 10\n"
+        "    a += x & y\n"
+        "    o += x | y\n"
+        "    e += x ^ y\n"
     )
     with tempfile.NamedTemporaryFile("w", suffix=".ja", delete=True) as f:
         f.write(prog)
@@ -58,11 +62,13 @@ def test_binary_bitwise_operator_is_unsupported_not_parse_error() -> None:
             [str(VJANUS), "-s", f.name],
             capture_output=True, text=True,
         )
-    assert result.returncode == 3, (
-        f"Expected exit 3 (unsupported feature), got {result.returncode}.\n"
-        f"stdout: {result.stdout!r}\n"
-        f"stderr: {result.stderr!r}"
+    assert result.returncode == 0, (
+        f"Expected exit 0, got {result.returncode}.\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
     )
-    assert "operator" in result.stderr.lower() or "unsupported" in result.stderr.lower(), (
-        f"Expected an 'unsupported operator' message: {result.stderr!r}"
+    store = dict(
+        line.split(" = ", 1) for line in result.stdout.splitlines() if " = " in line
+    )
+    assert store.get("a") == "8" and store.get("o") == "14" and store.get("e") == "6", (
+        f"Unexpected bitwise results: {store!r}"
     )
