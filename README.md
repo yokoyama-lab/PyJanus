@@ -153,6 +153,9 @@ frame-stacked core, `coq/vjanus/`) and the flat-store `driverar` (`coq/harness/`
 — and most also have an `// in:/out:`-annotated copy under
 `tests/jana2014_in_out/programs/` (`gray_code`, `toffoli_gate`, the two CAs) run
 forward AND backward by the I/O harness.
+[`docs/reversible-pearls.md`](docs/reversible-pearls.md) catalogs these and
+future candidates drawn from Bird's *Pearls of Functional Algorithm Design* and
+JFP functional pearls (Burrows–Wheeler, arithmetic coding, permutation ranking, …).
 
 ## Tests
 
