@@ -153,8 +153,8 @@ has a no-I/O twin under `tests/jana2014/fixtures/examples/` checked against
 PyJanus by **two independent Coq-extracted interpreters** — `vjanus` (the
 frame-stacked core, `coq/vjanus/`) and the flat-store `driverar` (`coq/harness/`)
 — and most also have an `// in:/out:`-annotated copy under
-`tests/jana2014_in_out/programs/` (`gray_code`, `toffoli_gate`, the two CAs) run
-forward AND backward by the I/O harness.
+`tests/jana2014_in_out/programs/` (`gray_code`, `toffoli_gate`, `base_convert`,
+`lehmer_code`, the two CAs) run forward AND backward by the I/O harness.
 [`docs/reversible-pearls.md`](docs/reversible-pearls.md) catalogs these and
 future candidates drawn from Bird's *Pearls of Functional Algorithm Design* and
 JFP functional pearls (Burrows–Wheeler, arithmetic coding, permutation ranking, …).
