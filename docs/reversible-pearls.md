@@ -27,6 +27,7 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 | `bitwise_ops` | 式中ビット演算 `& | ^` | 検証コア `BAnd/BOr/BXor`（`Z.land/lor/lxor`） |
 | `base_convert` | 基数変換（Horner 桁抽出）整数 → 桁列 | `d[i] += (n / b^i) % b`（純式・`+=` のみ，`uncall` で減算） |
 | `lehmer_code`（I/O）/ `injective_lehmer`（両コア） | 順列 ⇄ Lehmer符号 ⇄ 整数（PFAD ch.12） | インプレース左ランク変換＋階乗進法（local コピー乗算） |
+| `cantor_pair` | Cantor ペアリング ℕ×ℕ → ℕ | `z += (x+y)(x+y+1)/2 + y`（純式・`+=` のみ） |
 | `injective_*`（既存） | 単射算術・iterate 等 | — |
 
 ## 将来候補（Bird/JFP 由来）
@@ -35,7 +36,6 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 
 | # | 候補 | 出典 | 全単射の構造 | 逆の機構 | 難度 | 価値 |
 |---|------|------|------------|----------|:---:|:---:|
-| 2 | Cantor / boustrophedon ペアリング | 数え上げ Pearl | ℕ×ℕ ⇄ ℕ | 三角数の逆 | 低 | 中（lower.ml 内で既使用） |
 | 4 | 整数算術符号化 | PFAD ch.24–25 *Arithmetic coding* | メッセージ ⇄ 整数区間 | 区間の逆細分 | 中〜高 | 高（可逆圧縮テーマ） |
 | 5 | **Burrows–Wheeler 変換 + 逆** | **PFAD ch.13 + Bird&Mu JFP 2004** | 文字列 ⇄ (BWT, index) | **LF-mapping**（last-to-first） | 高 | 最高 |
 | 6 | 双射BWT (BBWT) | arXiv 2004.12590 | 文字列 ⇄ BWT（index 不要） | Lyndon 分解＋LF | 高 | 高 |
@@ -56,8 +56,8 @@ Boyer–Moore / KMP（ch.16–17），maximum segment sum 系。
 
 ## 推奨シーケンス
 
-- **Tier 1（低コスト・すぐ効く）**: ✅ ① 基数変換（`base_convert`）→ ✅ ③ Lehmer
-  rank/unrank（`lehmer_code` I/O ＋ `injective_lehmer` 両コア）→ ② Cantor ペアリング（残）
+- **Tier 1（完了）**: ✅ ① 基数変換（`base_convert`）・✅ ③ Lehmer rank/unrank
+  （`lehmer_code` I/O ＋ `injective_lehmer` 両コア）・✅ ② Cantor ペアリング（`cantor_pair`）
 - **Tier 2（中）**: ④ 整数算術符号化（可逆 divmod を丁寧に）
 - **Tier 3（目玉）**: ⑤ **BWT + 逆**（Bird&Mu の calculational な逆導出が `uncall` に対応；
   固定長文字列でまず）→ ⑥ 双射BWT はその発展

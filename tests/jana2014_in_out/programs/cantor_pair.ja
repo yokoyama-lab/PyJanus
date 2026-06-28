@@ -1,0 +1,36 @@
+// Cantor pairing N x N -> N as a clean reversible I/O program.
+//
+// Reads x and y, writes their pairing z = (x+y)(x+y+1)/2 + y, then echoes x and
+// y. z is computed with a pure expression and `+=` (no reversible `/=` needed),
+// leaving x,y intact; echoing them makes the run reversible end to end (the full
+// unpair from z alone needs a triangular-root loop, see the no-I/O twin under
+// tests/jana2014/fixtures/examples/ and docs/reversible-pearls.md). Backward
+// consumes the output stream in reverse and reproduces the input.
+//
+// Distinct (x,y) give distinct z (injective): (1,2)=8 but (2,1)=7.
+//
+// case: origin
+// in: 0 0
+// out: 0 0 0
+// case: row
+// in: 1 2
+// out: 8 1 2
+// case: col
+// in: 2 1
+// out: 7 2 1
+// case: bigger
+// in: 3 5
+// out: 41 3 5
+procedure pair(int x, int y, int z)
+    z += (x + y) * (x + y + 1) / 2 + y
+
+procedure main()
+    int x
+    int y
+    int z
+    read x
+    read y
+    call pair(x, y, z)
+    write z
+    write x
+    write y

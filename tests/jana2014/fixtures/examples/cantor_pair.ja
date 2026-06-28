@@ -1,0 +1,25 @@
+// Cantor pairing — a clean reversible simulation of the bijection N x N -> N.
+//
+//   pair(x,y) = (x+y)(x+y+1)/2 + y
+//
+// computed with pure expressions (binary +, *, / = the verified cores' BAdd/
+// BMul/BDiv) into a fresh cell z, accumulated with `+=`. The product of two
+// consecutive integers is even, so the `/2` is exact. No reversible `*=`/`/=`
+// is needed (the cores lack those), so the very same program is checked by BOTH
+// extracted interpreters — vjanus (frame core) and driverar (flat core) —
+// against PyJanus. x,y are read-only, so `uncall pair` subtracts z back to 0:
+// the map (x,y) |-> z is injective and cleanly invertible.
+//
+// (The inverse-from-z-alone unpairing needs a triangular-root search — a sqrt-
+// style reversible loop, cf. sqrt.ja — and is left as a follow-up; see
+// docs/reversible-pearls.md.)  Here pair(3,5) = 8*9/2 + 5 = 41.
+procedure pair(int x, int y, int z)
+    z += (x + y) * (x + y + 1) / 2 + y
+
+procedure main()
+    int x
+    int y
+    int z
+    x += 3
+    y += 5
+    call pair(x, y, z)
