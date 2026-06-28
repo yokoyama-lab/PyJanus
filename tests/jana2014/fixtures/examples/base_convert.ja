@@ -1,0 +1,26 @@
+// Base conversion (Horner digit extraction) — a clean reversible injective map.
+//
+// From Bird's calculational tradition (Horner's rule / mixed-radix numbers,
+// see docs/reversible-pearls.md). The i-th base-b digit of n is
+//   d[i] = (n / b^i) mod b,
+// extracted with PURE expressions (binary `/` and `%`, which the verified cores
+// have as BDiv/BMod) and accumulated with `+=`. So it needs no reversible `*=`
+// or `/=` (which the cores lack) and runs through BOTH extracted interpreters —
+// vjanus (frame core) and driverar (flat core) — diffed against PyJanus by the
+// corpus tests. n and b are read-only, so `uncall to_digits` subtracts the
+// digits back to 0: the map (n,b) |-> digits is injective and cleanly invertible.
+//
+// Here n = 2026, b = 10 -> digits (least-significant first) 6, 2, 0, 2.
+procedure to_digits(int n, int b, int d[])
+    d[0] += n % b
+    d[1] += (n / b) % b
+    d[2] += (n / (b*b)) % b
+    d[3] += (n / (b*b*b)) % b
+
+procedure main()
+    int n
+    int b
+    int d[4]
+    n += 2026
+    b += 10
+    call to_digits(n, b, d)

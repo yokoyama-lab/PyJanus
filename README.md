@@ -144,9 +144,11 @@ Example programs live under dialect-specific test fixtures:
 | `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
 | `gray_code_roundtrip.ja` | `call gray; uncall gray` = identity (encode/decode reversibility) |
 | `reversible_gates.ja` | Universal reversible logic gates: Toffoli (CCNOT) and Fredkin (CSWAP) |
+| `base_convert.ja` | Base conversion (Horner digit extraction), injective `(n,b) -> digits` |
 
-These are clean reversible simulations of injective maps built purely from the
-XOR-update operator `^=` and controlled swaps (no ancillae, no history). Each
+These are clean reversible simulations of injective maps built from the
+XOR-update operator `^=`, controlled swaps, and pure-expression digit extraction
+(no ancillae, no history). Each
 has a no-I/O twin under `tests/jana2014/fixtures/examples/` checked against
 PyJanus by **two independent Coq-extracted interpreters** — `vjanus` (the
 frame-stacked core, `coq/vjanus/`) and the flat-store `driverar` (`coq/harness/`)

@@ -25,6 +25,7 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 | `gray_code` / `gray_code_roundtrip` | 反射 Gray 符号（全単射） | `g[i] ^= b[i+1]`，`uncall` で復号 |
 | `reversible_gates` / `toffoli_gate` | 普遍可逆ゲート Toffoli・Fredkin | 制御保存ゲート（各自己逆） |
 | `bitwise_ops` | 式中ビット演算 `& | ^` | 検証コア `BAnd/BOr/BXor`（`Z.land/lor/lxor`） |
+| `base_convert` | 基数変換（Horner 桁抽出）整数 → 桁列 | `d[i] += (n / b^i) % b`（純式・`+=` のみ，`uncall` で減算） |
 | `injective_*`（既存） | 単射算術・Lehmer・iterate 等 | — |
 
 ## 将来候補（Bird/JFP 由来）
@@ -33,7 +34,6 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 
 | # | 候補 | 出典 | 全単射の構造 | 逆の機構 | 難度 | 価値 |
 |---|------|------|------------|----------|:---:|:---:|
-| 1 | 基数変換（Horner） | Bird–Meertens / Horner則 | 整数 ⇄ 桁列 | divmod の逆＝Horner評価 | 低 | 中 |
 | 2 | Cantor / boustrophedon ペアリング | 数え上げ Pearl | ℕ×ℕ ⇄ ℕ | 三角数の逆 | 低 | 中（lower.ml 内で既使用） |
 | 3 | 順列のランク付け（Lehmer / 階乗進法） | PFAD ch.12 *Ranking suffixes* | 順列 ⇄ ランク | unranking | 低〜中 | 中（既存 `injective_lehmer` の発展） |
 | 4 | 整数算術符号化 | PFAD ch.24–25 *Arithmetic coding* | メッセージ ⇄ 整数区間 | 区間の逆細分 | 中〜高 | 高（可逆圧縮テーマ） |
@@ -43,10 +43,21 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 対象外（非単射のため可逆化できない）: smallest free number（PFAD ch.1），
 Boyer–Moore / KMP（ch.16–17），maximum segment sum 系。
 
+## 検証コアの制約メモ（重要）
+
+検証コア（RevArr/RevFrame）の可逆代入演算子は `+= / -= / ^=`（`AAdd/ASub/AXor`）のみ。
+**`*=` / `/=` は持たない**（その可逆性は除算可能性の前提を伴い，ビット演算のような総関数
+追加では済まず可逆性の再証明が要る）。したがって `N /= b` を使う「N を破壊する divmod
+ループ」は両コアで検証できない（vjanus は exit 3 でスキップ）。
+
+回避策＝**純式での桁抽出**: `d[i] += (n / b^i) % b`。`/` `%` は式中の二項演算
+（`BDiv/BMod`）なので `/=` 不要，`+=` だけで可逆になり両コアで検証可能。`base_convert`
+はこの方式。算術符号化（④）も同様に「破壊的除算を避ける」設計が鍵。
+
 ## 推奨シーケンス
 
-- **Tier 1（低コスト・すぐ効く）**: ① 基数変換（Horner）→ ③ Lehmer rank/unrank（既存を
-  I/O＋両コア化）→ ② Cantor ペアリング
+- **Tier 1（低コスト・すぐ効く）**: ✅ ① 基数変換（`base_convert`，実装済）→ ③ Lehmer
+  rank/unrank（既存を I/O＋両コア化）→ ② Cantor ペアリング
 - **Tier 2（中）**: ④ 整数算術符号化（可逆 divmod を丁寧に）
 - **Tier 3（目玉）**: ⑤ **BWT + 逆**（Bird&Mu の calculational な逆導出が `uncall` に対応；
   固定長文字列でまず）→ ⑥ 双射BWT はその発展
