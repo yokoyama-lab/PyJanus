@@ -1,0 +1,65 @@
+// Integer arithmetic coding as a bijective range-ANS (rANS) coder, as a clean
+// reversible I/O program. Reads a 4-symbol binary message and writes the single
+// integer state x that encodes it under the model f0 = 3, f1 = 1 (total M = 4).
+//
+// rANS makes the encode a bijection on x, so decoding is the encoder run
+// backwards: `uncall encode` reads the symbols back out of x. The state map
+//     x |-> (x / f_s) * M + C_s + (x mod f_s)
+// is realised with NO destructive `/=` or `*=` -- a value-preserving divmod
+// (`/`, `%` as pure expressions) splits x into (q, r), then the mirror rebuilds
+// the new state and clears the ancillas. The if-fi closes on the slot test
+// `x mod M < f0`, which is exactly how the decoder recovers the symbol. The
+// message is consumed into x; backward reconstructs it. See the no-I/O twin
+// tests/jana2014/fixtures/examples/injective_arith_coding.ja (checked by the
+// verified flat-array core) and docs/reversible-pearls.md.
+//
+// Backward consumes the output stream in reverse and reproduces the input.
+//
+// case: mixed        # 0->3->4->19->25
+// in: 1 0 1 0
+// out: 25
+// case: mixed2       # 0->0->3->4->19
+// in: 0 1 0 1
+// out: 19
+// case: ones         # symbol 1 four times: x := 4x + 3
+// in: 1 1 1 1
+// out: 255
+procedure encode_sym(int x, int m, int q, int r)
+    if m = 0 then
+        // symbol 0: f = 3, C = 0
+        q += x / 3
+        r += x % 3
+        x -= q * 3 + r
+        x += q * 4
+        x += r
+        q -= x / 4
+        r -= x % 4
+    else
+        // symbol 1: f = 1, C = 3 (r stays 0 since x % 1 = 0)
+        q += x
+        x -= q
+        x += q * 4
+        x += 3
+        q -= x / 4
+        m -= 1
+    fi x % 4 < 3
+
+procedure encode(int m[], int n, int x, int q, int r)
+    local int i = 0
+        from i = 0 loop
+            call encode_sym(x, m[i], q, r)
+            i += 1
+        until i = n
+    delocal int i = n
+
+procedure main()
+    int m[4]
+    int x
+    int q
+    int r
+    read m[0]
+    read m[1]
+    read m[2]
+    read m[3]
+    call encode(m, 4, x, q, r)
+    write x
