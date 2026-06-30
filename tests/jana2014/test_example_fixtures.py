@@ -129,6 +129,15 @@ class AdaptedExampleTests(unittest.TestCase):
     # already-sorted, pivot is the max: nothing moves, final pivot swap suppressed.
     self.assertIn("part b:    1 2 3 4  (pivot@3)  flags=111", result.stdout)
 
+  def test_injective_arith_coding_rans_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_arith_coding.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # rANS folds [1,0,1,0] into x = 25 under the f0=3,f1=1 model, consuming the
+    # message (every symbol ends 0) and leaving the q,r ancillas clean.
+    self.assertIn("encoded:   x=25   msg=0000  (q=0 r=0)", result.stdout)
+    # uncall is the decoder: it reads the symbols back and clears x to 0.
+    self.assertIn("decoded:   msg=1010   x=0  (q=0 r=0)", result.stdout)
+
   def test_injective_mini_cipher_three_round_feistel(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_mini_cipher.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
