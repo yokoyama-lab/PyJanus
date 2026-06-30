@@ -138,6 +138,15 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall is the decoder: it reads the symbols back and clears x to 0.
     self.assertIn("decoded:   msg=1010   x=0  (q=0 r=0)", result.stdout)
 
+  def test_injective_bwt_inverse_lf_mapping_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_bwt_inverse.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # L = [1,2,3,1,0], I = 4 is the BWT of s = [3,1,2,1,0]; LF reconstruction
+    # recovers s, with all ancillas uncomputed (only s survives).
+    self.assertIn("decoded s: 3 1 2 1 0", result.stdout)
+    # uncall is the forward BWT: it clears s and hands (L, I) back.
+    self.assertIn("restored:  L=12310 I=4 s=00000", result.stdout)
+
   def test_injective_mini_cipher_three_round_feistel(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_mini_cipher.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
