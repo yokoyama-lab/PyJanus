@@ -28,6 +28,7 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 | `base_convert` | 基数変換（Horner 桁抽出）整数 → 桁列 | `d[i] += (n / b^i) % b`（純式・`+=` のみ，`uncall` で減算） |
 | `lehmer_code`（I/O）/ `injective_lehmer`（両コア） | 順列 ⇄ Lehmer符号 ⇄ 整数（PFAD ch.12） | インプレース左ランク変換＋階乗進法（local コピー乗算） |
 | `cantor_pair` | Cantor ペアリング ℕ×ℕ → ℕ | `z += (x+y)(x+y+1)/2 + y`（純式・`+=` のみ） |
+| `injective_partition`（両コア）/ `partition`（I/O） | 可逆 Lomuto partition（quicksort の心臓部） | 走査位置ごとの分岐ビットを `flags[]` に記録（sort_network と同型）；恒等swap は内側 `if j > lo+p` で抑止 |
 | `injective_*`（既存） | 単射算術・iterate 等 | — |
 
 ## 将来候補（Bird/JFP 由来）
@@ -58,7 +59,8 @@ Boyer–Moore / KMP（ch.16–17），maximum segment sum 系。
 
 - **Tier 1（完了）**: ✅ ① 基数変換（`base_convert`）・✅ ③ Lehmer rank/unrank
   （`lehmer_code` I/O ＋ `injective_lehmer` 両コア）・✅ ② Cantor ペアリング（`cantor_pair`）
-- **Tier 2（中）**: ④ 整数算術符号化（可逆 divmod を丁寧に）
+- **Tier 2（中）**: ✅ 可逆 Lomuto partition（`injective_partition` 両コア ＋ `partition` I/O；
+  swap 決定を `flags[]` に記録し `uncall` が逆スキャッタ）・④ 整数算術符号化（可逆 divmod を丁寧に）
 - **Tier 3（目玉）**: ⑤ **BWT + 逆**（Bird&Mu の calculational な逆導出が `uncall` に対応；
   固定長文字列でまず）→ ⑥ 双射BWT はその発展
 
