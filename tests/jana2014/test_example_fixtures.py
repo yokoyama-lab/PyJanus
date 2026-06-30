@@ -117,6 +117,18 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall of the chain restores the permutation and clears the integer.
     self.assertIn("restored: 2 0 3 1 (int=0)", result.stdout)
 
+  def test_injective_partition_reversible_lomuto(self) -> None:
+    result = run_program(EXAMPLE_DIR / "injective_partition.ja")
+    self.assertEqual(result.returncode, 0, result.stderr)
+    # pivot = a[7] = 6; five elements are smaller, so the pivot lands at index 5.
+    self.assertIn("part a:    3 2 5 1 4 6 7 8  (pivot@5)", result.stdout)
+    # one decision bit per scanned position 0..6 (1 = element went left).
+    self.assertIn("flags a:   1011110", result.stdout)
+    # uncall scatters the elements back and clears p.
+    self.assertIn("uncall a:  3 8 2 5 1 4 7 6  (p=0)", result.stdout)
+    # already-sorted, pivot is the max: nothing moves, final pivot swap suppressed.
+    self.assertIn("part b:    1 2 3 4  (pivot@3)  flags=111", result.stdout)
+
   def test_injective_mini_cipher_three_round_feistel(self) -> None:
     result = run_program(EXAMPLE_DIR / "injective_mini_cipher.ja")
     self.assertEqual(result.returncode, 0, result.stderr)

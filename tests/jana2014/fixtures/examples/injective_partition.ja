@@ -1,0 +1,77 @@
+/*
+ * Level 8: a reversible Lomuto partition (the heart of quicksort).
+ *
+ * Partitioning rearranges a[lo..hi] around the pivot a[hi] so that every
+ * element < pivot precedes it and every element >= pivot follows it. A bare
+ * partition is NOT reversible: it discards which interleaving of small/large
+ * elements the input had (many inputs map to the same partitioned layout).
+ *
+ * As with the reversible sorting network, we record one decision bit per
+ * scanned position into flags[]:
+ *
+ *     if a[j] < a[hi] then            // does a[j] belong left of the pivot?
+ *         if j > lo + p then          // is its slot strictly left of j?
+ *             a[lo + p] <=> a[j]      // ...then move it there (avoid self-swap)
+ *         fi j > lo + p
+ *         p += 1
+ *         flags[j - lo] += 1
+ *     fi flags[j - lo] = 1            // close on the recorded bit, not the value
+ *
+ * After the swap a[j] no longer holds its original value, so the post-condition
+ * must test the recorded flag, not `a[j] < a[hi]` -- exactly the trick that
+ * makes the network's comparator reversible. The inner `j > lo + p` guard is
+ * positional (data-independent, identical forwards and backwards), so it needs
+ * no history: it only suppresses the degenerate a[i] <=> a[i] self-swap, which
+ * Janus rejects as an alias.
+ *
+ * p enters 0 and exits as the count of elements < pivot, i.e. the pivot's final
+ * index is lo + p. flags[] enters all-zero with at least (hi - lo) slots.
+ *
+ *   uncall partition replays the bits in reverse: it scatters each flagged
+ *   element back to where it came from, clearing flags and p -- the partition's
+ *   inverse, for free.
+ */
+
+procedure partition(int a[], int lo, int hi, int flags[], int p)
+    local int j = lo
+        from j = lo loop
+            if a[j] < a[hi] then
+                if j > lo + p then
+                    a[lo + p] <=> a[j]
+                fi j > lo + p
+                p += 1
+                flags[j - lo] += 1
+            fi flags[j - lo] = 1
+            j += 1
+        until j = hi
+    delocal int j = hi
+    if lo + p < hi then
+        a[lo + p] <=> a[hi]
+    fi lo + p < hi
+
+procedure main()
+    int a[8] = {3, 8, 2, 5, 1, 4, 7, 6}
+    int flags[8]
+    int p
+    int b[4] = {1, 2, 3, 4}
+    int flags_b[4]
+    int q
+
+    // Case A: a mixed array. pivot = a[7] = 6.
+    //   < 6 : 3 8(no) 2 5 1 4 7(no)  -> five smalls, pivot lands at index 5.
+    call partition(a, 0, 7, flags, p)
+    printf("part a:    %d %d %d %d %d %d %d %d  (pivot@%d)\n",
+           a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], p)
+    printf("flags a:   %d%d%d%d%d%d%d\n",
+           flags[0], flags[1], flags[2], flags[3], flags[4], flags[5], flags[6])
+
+    // uncall scatters the elements back, restoring the input and clearing flags.
+    uncall partition(a, 0, 7, flags, p)
+    printf("uncall a:  %d %d %d %d %d %d %d %d  (p=%d)\n",
+           a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], p)
+
+    // Case B: already in order, pivot is the maximum -> every element is < pivot,
+    // p = hi - lo, no element ever moves, and the final pivot swap is suppressed.
+    call partition(b, 0, 3, flags_b, q)
+    printf("part b:    %d %d %d %d  (pivot@%d)  flags=%d%d%d\n",
+           b[0], b[1], b[2], b[3], q, flags_b[0], flags_b[1], flags_b[2])
