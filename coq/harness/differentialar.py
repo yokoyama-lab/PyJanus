@@ -329,13 +329,25 @@ class T:
             return f"(swap {self.target(sc, s['left'])} {self.target(sc, s['right'])})"
         if "ident" in s and "expr" in s and "args" not in s and "mod_op" not in s:   # push/pop(x, s)
             arr, top = self.stack_ids(sc, s["ident"]["name"])
-            xt = self.target(sc, s["expr"]["lval"])
-            swap = f"(swap (la {arr} (v {top})) {xt})"
+            lval = s["expr"]["lval"]
             inc = f"(asgn (ls {top}) add (c 1))"
             dec = f"(asgn (ls {top}) sub (c 1))"
-            if self.kw_at(s["pos"], "pop", "push") == "pop":
-                return f"(seq {dec} {swap})"
-            return f"(seq {swap} {inc})"
+            is_pop = self.kw_at(s["pos"], "pop", "push") == "pop"
+            sel = lval.get("selectors")
+            if sel:
+                # value is an array element A[idx]: decouple idx into a fresh temp so the
+                # verified interpreter's swap sees a plain (v t) index — it gets stuck on a
+                # swap whose l-value index itself reads an array cell.  idx is recomputed to
+                # zero the temp; it is stable across the swap in well-formed programs (the
+                # swapped cell A[idx] is not idx's own source cell).
+                A = self.gid(sc, lval["ident"]["name"])
+                idx = self._index(sc, sel)
+                t = self.fresh(sc)
+                swap = f"(swap (la {arr} (v {top})) (la {A} (v {t})))"
+                core = f"(seq {dec} {swap})" if is_pop else f"(seq {swap} {inc})"
+                return f"(seq (asgn (ls {t}) add {idx}) (seq {core} (asgn (ls {t}) sub {idx})))"
+            swap = f"(swap (la {arr} (v {top})) {self.target(sc, lval)})"
+            return f"(seq {dec} {swap})" if is_pop else f"(seq {swap} {inc})"
         raise Unsupported(f"stmt {sorted(s)}")
 
     def seq(self, sc, stmts):
