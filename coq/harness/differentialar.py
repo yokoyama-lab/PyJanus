@@ -8,8 +8,12 @@ serves both.  The driver is given a *report list* (built from PyJanus's `-s`
 output: main's scalars and every declared array cell) and prints those
 locations; we compare positionally.
 
-Skipped: multi-dim arrays, array-element swap, `local`/`delocal`, `for`, stacks,
-`/`, `>=`/`<=`, and programs PyJanus rejects at run time (e.g. out-of-bounds).
+Supported: scalars, arrays (incl. multi-dim via Cantor folding and by-reference),
+array-element swap, `local`/`delocal` (scalar; bare `local int x` / `delocal int x`
+default to 0), stacks (`push`/`pop`/`top`/`empty`/`size`), `iterate`/`for`, `/`, `%`,
+`>=`/`<=`/`!=`/`&&`/`||`, reference procedures and value args.
+Skipped: locally-declared *arrays* (`local int A[...]`), self-referential
+`delocal x = x`, and programs PyJanus rejects at run time (e.g. out-of-bounds).
 
 Usage:  differentialar.py <driver-binary> <file.ja> [file.ja ...]
 """
@@ -238,8 +242,9 @@ class T:
             if self._reads(ed["init_expr"], xname) or self._reads(xd["init_expr"], xname):
                 raise Unsupported("self-referential local/delocal")
             x = self.gid(sc, ed["ident"]["name"])
-            e0 = self.expr(sc, ed["init_expr"])
-            e1 = self.expr(sc, xd["init_expr"])
+            # a bare `local int x` / `delocal int x` (no initializer) defaults to 0
+            e0 = self.expr(sc, ed["init_expr"]) if ed.get("init_expr") is not None else "(c 0)"
+            e1 = self.expr(sc, xd["init_expr"]) if xd.get("init_expr") is not None else "(c 0)"
             return f"(seq (enter {x} {e0}) (seq {self.seq(sc, s['body'])} (exit {x} {e1})))"
         if "start_expr" in s and "step_expr" in s:          # iterate int i = start to end [step]
             i = self.gid(sc, s["ident"]["name"])
