@@ -1,0 +1,9 @@
+procedure work(int out[])
+    local int len
+    len += 5
+    out[0] += len
+    len -= out[0]
+    delocal int len
+procedure main()
+    int out[3]
+    call work(out)
