@@ -9,11 +9,13 @@ output: main's scalars and every declared array cell) and prints those
 locations; we compare positionally.
 
 Supported: scalars, arrays (incl. multi-dim via Cantor folding and by-reference),
-array-element swap, `local`/`delocal` (scalar; bare `local int x` / `delocal int x`
+array-element swap, structs (`s[i].f` -> `s[i][ord(f)]`), `local`/`delocal`
+(scalars and **constant-dimension** local arrays; bare `local int x`/`delocal int x`
 default to 0), stacks (`push`/`pop`/`top`/`empty`/`size`), `iterate`/`for`, `/`, `%`,
-`>=`/`<=`/`!=`/`&&`/`||`, reference procedures and value args.
-Skipped: locally-declared *arrays* (`local int A[...]`), self-referential
-`delocal x = x`, and programs PyJanus rejects at run time (e.g. out-of-bounds).
+`>=`/`<=`/`!=`/`&&`/`||`, the ternary `c ? a : b`, reference procedures and value args.
+Skipped: local arrays with a *non-constant* dimension (`local int A[size(in)]`,
+`A[i+1]`), self-referential `delocal x = x`, and programs PyJanus rejects at run
+time (e.g. out-of-bounds).
 
 Usage:  differentialar.py <driver-binary> <file.ja> [file.ja ...]
 """
@@ -142,6 +144,12 @@ class T:
         return False
 
     def expr(self, sc, e):
+        if "cond" in e:                                      # ternary  c ? a : b
+            c = self.expr(sc, e["cond"])
+            a = self.expr(sc, e["then_expr"])
+            b = self.expr(sc, e["else_expr"])
+            nz = f"(b sub (c 1) (b eq {c} (c 0)))"           # 1 if c != 0 else 0
+            return f"(b add (b mul {nz} {a}) (b mul (b sub (c 1) {nz}) {b}))"
         if "op" in e and "expr" in e:                        # unary: !e (logical not)
             if e["op"] != "!":
                 raise Unsupported(f"unary {e['op']}")
@@ -248,7 +256,19 @@ class T:
                 _, top = self.stack_ids(sc, ed["ident"]["name"])
                 return f"(seq (enter {top} (c 0)) (seq {self.seq(sc, s['body'])} (exit {top} (c 0))))"
             if ed.get("dimensions") or xd.get("dimensions"):
-                raise Unsupported("local array")
+                # A local array with CONSTANT dimensions (non-recursive scope) gets its
+                # own global array slots (flat-gid): it starts 0, and Janus guarantees the
+                # program restores it to 0 before delocal, so repeated entries (loops /
+                # multiple calls) reuse the same zeroed slots.  No enter/exit is emitted
+                # for the cells; they are internal scratch, not part of main's store.
+                dims = ed.get("dimensions") or xd.get("dimensions") or []
+                if not all("value" in d for d in dims):
+                    raise Unsupported("local array with non-constant dimension")
+                L = 1
+                for d in dims:
+                    L *= int(d["value"])
+                self.arrlen[(sc, ed["ident"]["name"])] = L   # for size(A)
+                return self.seq(sc, s["body"])
             xname = ed["ident"]["name"]
             # dead-cell Exit needs the exit expr independent of x (known final value);
             # `delocal x = x`-style self-references need a whole-block argument.
