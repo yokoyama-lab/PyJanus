@@ -32,6 +32,7 @@ def cli(args, ja):
 
 
 ARR_RE = re.compile(r"^(\w+)(?:\[\d+\])+\s*=\s*(\{.*\})\s*$")     # possibly nested
+STRUCT_ARR_RE = re.compile(r"^(\w+)\[\d+\]\s*=\s*(\{\{.*\}\})\s*$")  # struct array: {{f = v, …}, …}
 STK_RE = re.compile(r"^(\w+)\s*=\s*<(.*)\]\s*$")                  # stack: <top, …, bottom]
 NIL_RE = re.compile(r"^(\w+)\s*=\s*nil\s*$")                      # empty stack
 SCA_RE = re.compile(r"^(\w+)\s*=\s*(-?\d+)\s*$")
@@ -43,6 +44,11 @@ def parse_store(res):
     scal, arr, stk = {}, {}, {}
     for line in res.stdout.splitlines():
         line = line.strip()
+        m = STRUCT_ARR_RE.match(line)                        # struct array: {{f = v, …}, …}
+        if m:
+            entries = re.findall(r"\{([^{}]*)\}", m.group(2))
+            arr[m.group(1)] = [[int(kv.split("=")[1]) for kv in e.split(",")] for e in entries]
+            continue
         m = ARR_RE.match(line)
         if m:
             arr[m.group(1)] = ast.literal_eval(m.group(2).replace("{", "[").replace("}", "]"))
@@ -98,6 +104,8 @@ class T:
         self.tmpn = 0
         self.stacks = set()                                  # (scope, name) that are stacks
         self.arrlen = {}                                     # (scope, name) -> length, for size()
+        self.struct_fields = {}                              # structName -> [field names, in order]
+        self.field_ord = {}                                  # field name -> ordinal (across structs)
 
     def stack_ids(self, sc, name):                           # a stack = array + top counter
         self.stacks.add((sc, name))
@@ -201,7 +209,12 @@ class T:
         return acc
 
     def _index(self, sc, sel):
-        return self.cantor_expr([self.expr(sc, s["expr"]) for s in sel])
+        # array-index selectors carry an "expr"; a struct field selector `.f`
+        # carries an "ident" and is lowered to its ordinal (so `d[i].f` folds like
+        # the 2-D cell `d[i][ord(f)]`).
+        idxs = [self.expr(sc, s["expr"]) if "expr" in s
+                else f"(c {self.field_ord[s['ident']['name']]})" for s in sel]
+        return self.cantor_expr(idxs)
 
     def read(self, sc, lv):
         sel = lv.get("selectors", [])
@@ -320,12 +333,17 @@ def translate(ja):
     if r.returncode != 0:
         raise Unsupported("parse failed")
     ast = json.loads(r.stdout)
-    if ast.get("struct_defs"):
-        raise Unsupported("uses structs")
     if "main" not in ast:
         raise Unsupported("no main")
     with open(ja) as f:
         p = T(f.read().splitlines())
+    # structs: a `Struct s[N]` is lowered to an int array `s[N][F]` (F = #fields),
+    # a field `.f` to its ordinal; this agrees with pyjanus -s's struct dump.
+    p.struct_fields = {sd["ident"]["name"]: [fd["ident"]["name"] for fd in sd["fields"]]
+                       for sd in (ast.get("struct_defs") or [])}
+    for fields in p.struct_fields.values():
+        for i, fn in enumerate(fields):
+            p.field_ord.setdefault(fn, i)
     procs = ast.get("procs", [])
     for i, proc in enumerate(procs):
         p.procmap[proc["procname"]["name"]] = i
@@ -412,7 +430,10 @@ def translate(ja):
         dims = vd.get("dimensions", [])
         ie = vd.get("init_expr")
         if dims:
-            arrays.append((nm, g, [int(d["value"]) for d in dims]))
+            dlist = [int(d["value"]) for d in dims]
+            if vd["typ"]["kind"] == "struct":                # struct array -> extra field dim
+                dlist.append(len(p.struct_fields[vd["typ"]["name"]]))
+            arrays.append((nm, g, dlist))
             if ie is not None:                               # int A[..] = {..} (possibly nested)
                 if "items" not in ie:
                     raise Unsupported("array initializer form")
