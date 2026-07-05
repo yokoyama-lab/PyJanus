@@ -8,8 +8,14 @@ serves both.  The driver is given a *report list* (built from PyJanus's `-s`
 output: main's scalars and every declared array cell) and prints those
 locations; we compare positionally.
 
-Skipped: multi-dim arrays, array-element swap, `local`/`delocal`, `for`, stacks,
-`/`, `>=`/`<=`, and programs PyJanus rejects at run time (e.g. out-of-bounds).
+Supported: scalars, arrays (incl. multi-dim via Cantor folding and by-reference),
+array-element swap, structs (`s[i].f` -> `s[i][ord(f)]`), `local`/`delocal`
+(scalars and **constant-dimension** local arrays; bare `local int x`/`delocal int x`
+default to 0), stacks (`push`/`pop`/`top`/`empty`/`size`), `iterate`/`for`, `/`, `%`,
+`>=`/`<=`/`!=`/`&&`/`||`, the ternary `c ? a : b`, reference procedures and value args.
+Skipped: local arrays with a *non-constant* dimension (`local int A[size(in)]`,
+`A[i+1]`), self-referential `delocal x = x`, and programs PyJanus rejects at run
+time (e.g. out-of-bounds).
 
 Usage:  differentialar.py <driver-binary> <file.ja> [file.ja ...]
 """
@@ -28,6 +34,7 @@ def cli(args, ja):
 
 
 ARR_RE = re.compile(r"^(\w+)(?:\[\d+\])+\s*=\s*(\{.*\})\s*$")     # possibly nested
+STRUCT_ARR_RE = re.compile(r"^(\w+)\[\d+\]\s*=\s*(\{\{.*\}\})\s*$")  # struct array: {{f = v, …}, …}
 STK_RE = re.compile(r"^(\w+)\s*=\s*<(.*)\]\s*$")                  # stack: <top, …, bottom]
 NIL_RE = re.compile(r"^(\w+)\s*=\s*nil\s*$")                      # empty stack
 SCA_RE = re.compile(r"^(\w+)\s*=\s*(-?\d+)\s*$")
@@ -39,6 +46,11 @@ def parse_store(res):
     scal, arr, stk = {}, {}, {}
     for line in res.stdout.splitlines():
         line = line.strip()
+        m = STRUCT_ARR_RE.match(line)                        # struct array: {{f = v, …}, …}
+        if m:
+            entries = re.findall(r"\{([^{}]*)\}", m.group(2))
+            arr[m.group(1)] = [[int(kv.split("=")[1]) for kv in e.split(",")] for e in entries]
+            continue
         m = ARR_RE.match(line)
         if m:
             arr[m.group(1)] = ast.literal_eval(m.group(2).replace("{", "[").replace("}", "]"))
@@ -94,6 +106,8 @@ class T:
         self.tmpn = 0
         self.stacks = set()                                  # (scope, name) that are stacks
         self.arrlen = {}                                     # (scope, name) -> length, for size()
+        self.struct_fields = {}                              # structName -> [field names, in order]
+        self.field_ord = {}                                  # field name -> ordinal (across structs)
 
     def stack_ids(self, sc, name):                           # a stack = array + top counter
         self.stacks.add((sc, name))
@@ -130,6 +144,12 @@ class T:
         return False
 
     def expr(self, sc, e):
+        if "cond" in e:                                      # ternary  c ? a : b
+            c = self.expr(sc, e["cond"])
+            a = self.expr(sc, e["then_expr"])
+            b = self.expr(sc, e["else_expr"])
+            nz = f"(b sub (c 1) (b eq {c} (c 0)))"           # 1 if c != 0 else 0
+            return f"(b add (b mul {nz} {a}) (b mul (b sub (c 1) {nz}) {b}))"
         if "op" in e and "expr" in e:                        # unary: !e (logical not)
             if e["op"] != "!":
                 raise Unsupported(f"unary {e['op']}")
@@ -197,7 +217,12 @@ class T:
         return acc
 
     def _index(self, sc, sel):
-        return self.cantor_expr([self.expr(sc, s["expr"]) for s in sel])
+        # array-index selectors carry an "expr"; a struct field selector `.f`
+        # carries an "ident" and is lowered to its ordinal (so `d[i].f` folds like
+        # the 2-D cell `d[i][ord(f)]`).
+        idxs = [self.expr(sc, s["expr"]) if "expr" in s
+                else f"(c {self.field_ord[s['ident']['name']]})" for s in sel]
+        return self.cantor_expr(idxs)
 
     def read(self, sc, lv):
         sel = lv.get("selectors", [])
@@ -231,15 +256,28 @@ class T:
                 _, top = self.stack_ids(sc, ed["ident"]["name"])
                 return f"(seq (enter {top} (c 0)) (seq {self.seq(sc, s['body'])} (exit {top} (c 0))))"
             if ed.get("dimensions") or xd.get("dimensions"):
-                raise Unsupported("local array")
+                # A local array with CONSTANT dimensions (non-recursive scope) gets its
+                # own global array slots (flat-gid): it starts 0, and Janus guarantees the
+                # program restores it to 0 before delocal, so repeated entries (loops /
+                # multiple calls) reuse the same zeroed slots.  No enter/exit is emitted
+                # for the cells; they are internal scratch, not part of main's store.
+                dims = ed.get("dimensions") or xd.get("dimensions") or []
+                if not all("value" in d for d in dims):
+                    raise Unsupported("local array with non-constant dimension")
+                L = 1
+                for d in dims:
+                    L *= int(d["value"])
+                self.arrlen[(sc, ed["ident"]["name"])] = L   # for size(A)
+                return self.seq(sc, s["body"])
             xname = ed["ident"]["name"]
             # dead-cell Exit needs the exit expr independent of x (known final value);
             # `delocal x = x`-style self-references need a whole-block argument.
             if self._reads(ed["init_expr"], xname) or self._reads(xd["init_expr"], xname):
                 raise Unsupported("self-referential local/delocal")
             x = self.gid(sc, ed["ident"]["name"])
-            e0 = self.expr(sc, ed["init_expr"])
-            e1 = self.expr(sc, xd["init_expr"])
+            # a bare `local int x` / `delocal int x` (no initializer) defaults to 0
+            e0 = self.expr(sc, ed["init_expr"]) if ed.get("init_expr") is not None else "(c 0)"
+            e1 = self.expr(sc, xd["init_expr"]) if xd.get("init_expr") is not None else "(c 0)"
             return f"(seq (enter {x} {e0}) (seq {self.seq(sc, s['body'])} (exit {x} {e1})))"
         if "start_expr" in s and "step_expr" in s:          # iterate int i = start to end [step]
             i = self.gid(sc, s["ident"]["name"])
@@ -291,13 +329,25 @@ class T:
             return f"(swap {self.target(sc, s['left'])} {self.target(sc, s['right'])})"
         if "ident" in s and "expr" in s and "args" not in s and "mod_op" not in s:   # push/pop(x, s)
             arr, top = self.stack_ids(sc, s["ident"]["name"])
-            xt = self.target(sc, s["expr"]["lval"])
-            swap = f"(swap (la {arr} (v {top})) {xt})"
+            lval = s["expr"]["lval"]
             inc = f"(asgn (ls {top}) add (c 1))"
             dec = f"(asgn (ls {top}) sub (c 1))"
-            if self.kw_at(s["pos"], "pop", "push") == "pop":
-                return f"(seq {dec} {swap})"
-            return f"(seq {swap} {inc})"
+            is_pop = self.kw_at(s["pos"], "pop", "push") == "pop"
+            sel = lval.get("selectors")
+            if sel:
+                # value is an array element A[idx]: decouple idx into a fresh temp so the
+                # verified interpreter's swap sees a plain (v t) index — it gets stuck on a
+                # swap whose l-value index itself reads an array cell.  idx is recomputed to
+                # zero the temp; it is stable across the swap in well-formed programs (the
+                # swapped cell A[idx] is not idx's own source cell).
+                A = self.gid(sc, lval["ident"]["name"])
+                idx = self._index(sc, sel)
+                t = self.fresh(sc)
+                swap = f"(swap (la {arr} (v {top})) (la {A} (v {t})))"
+                core = f"(seq {dec} {swap})" if is_pop else f"(seq {swap} {inc})"
+                return f"(seq (asgn (ls {t}) add {idx}) (seq {core} (asgn (ls {t}) sub {idx})))"
+            swap = f"(swap (la {arr} (v {top})) {self.target(sc, lval)})"
+            return f"(seq {dec} {swap})" if is_pop else f"(seq {swap} {inc})"
         raise Unsupported(f"stmt {sorted(s)}")
 
     def seq(self, sc, stmts):
@@ -315,12 +365,17 @@ def translate(ja):
     if r.returncode != 0:
         raise Unsupported("parse failed")
     ast = json.loads(r.stdout)
-    if ast.get("struct_defs"):
-        raise Unsupported("uses structs")
     if "main" not in ast:
         raise Unsupported("no main")
     with open(ja) as f:
         p = T(f.read().splitlines())
+    # structs: a `Struct s[N]` is lowered to an int array `s[N][F]` (F = #fields),
+    # a field `.f` to its ordinal; this agrees with pyjanus -s's struct dump.
+    p.struct_fields = {sd["ident"]["name"]: [fd["ident"]["name"] for fd in sd["fields"]]
+                       for sd in (ast.get("struct_defs") or [])}
+    for fields in p.struct_fields.values():
+        for i, fn in enumerate(fields):
+            p.field_ord.setdefault(fn, i)
     procs = ast.get("procs", [])
     for i, proc in enumerate(procs):
         p.procmap[proc["procname"]["name"]] = i
@@ -407,7 +462,10 @@ def translate(ja):
         dims = vd.get("dimensions", [])
         ie = vd.get("init_expr")
         if dims:
-            arrays.append((nm, g, [int(d["value"]) for d in dims]))
+            dlist = [int(d["value"]) for d in dims]
+            if vd["typ"]["kind"] == "struct":                # struct array -> extra field dim
+                dlist.append(len(p.struct_fields[vd["typ"]["name"]]))
+            arrays.append((nm, g, dlist))
             if ie is not None:                               # int A[..] = {..} (possibly nested)
                 if "items" not in ie:
                     raise Unsupported("array initializer form")

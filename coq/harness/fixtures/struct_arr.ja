@@ -1,0 +1,10 @@
+struct Pair {
+    int a;
+    int b;
+}
+procedure bump(Pair p[], int i)
+    p[i].a += 3
+    p[i].b += 4
+procedure main()
+    Pair p[2]
+    call bump(p, 1)
