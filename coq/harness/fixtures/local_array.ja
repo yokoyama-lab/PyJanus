@@ -1,0 +1,12 @@
+procedure work(int out[])
+    local int tmp[3]
+    tmp[0] += 5
+    tmp[1] += 7
+    out[0] += tmp[0]
+    out[1] += tmp[1]
+    tmp[0] -= out[0]
+    tmp[1] -= out[1]
+    delocal int tmp[3]
+procedure main()
+    int out[3]
+    call work(out)
