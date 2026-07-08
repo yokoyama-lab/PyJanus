@@ -380,6 +380,11 @@ let lv_read st scp (lv : Ast.lval) : J.expr = expr st scp (Lv lv)
 let rec stmt st scp (s : Ast.stmt) : J.stmt =
   match s with
   | Skip -> J.Skip
+  | Io kw ->
+    (* reversible read/write is the jana2014_in_out dialect; the verified frame
+       core is a pure store transformer with no I/O, so skip cleanly (exit 3)
+       rather than silently dropping the statement and diverging from PyJanus *)
+    raise (Unsupported ("I/O statement '" ^ kw ^ "' (jana2014_in_out; no I/O in the verified core)"))
   | Assign (lv, op, e) -> assign_lv st scp lv (aop op) (expr st scp e)
   | Swap (a, b) ->
     (* no Swap primitive in the frame core: a^=b; b^=a; a^=b (each reversible),
@@ -399,10 +404,29 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let incr = J.Asn (xref, J.OAdd, ep) in
     J.Seq (J.Enter (nat x, es),
            J.Seq (J.Loop (istart, J.Skip, J.Seq (seq st scp body, incr), istop), J.Exit (nat x, stop)))
-  | Local (d1, _, _) when d1.ddims <> [] ->
-    (* local arrays are not yet lowered to the frame core (locals are single
-       depth-indexed slots); skip cleanly (exit 3) rather than parse-error *)
-    raise (Unsupported "local array declaration (not yet)")
+  | Local (d1, body, _) when d1.ddims <> [] ->
+    (* local array: one depth-frame RL slot serves as the array base (exactly as
+       a flat struct local does), cells addressed by ARd/AAsn(RL base, Cantor
+       idx) via ref_of finding the name in scp.locals.  A fresh frame slot holds
+       a clean (all-zero) array, and jana2014 requires the array be cleared
+       before delocal, so we bracket the body with a per-cell +0 / -0 that marks
+       the clean init/de-init reversibly (mirrors the struct-with-array-field
+       local).  Initialised local arrays aren't expressible (the grammar has no
+       aggregate expression after `=`), so dinit is always None here. *)
+    if d1.dinit <> None then raise (Unsupported "local array initializer");
+    let base = local_slot scp d1.dname in
+    let base_ref = J.RL (nat base) in
+    let body' = seq st scp body in
+    let rec enum = function
+      | [] -> [[]]
+      | d :: rest ->
+        List.concat_map (fun i -> List.map (fun t -> i :: t) (enum rest))
+          (List.init d (fun i -> i)) in
+    let cells = List.map cantor_val (enum d1.ddims) in
+    List.fold_left (fun acc cell ->
+        J.Seq (J.AAsn (base_ref, J.Cst (z cell), J.OAdd, J.Cst (z 0)),
+               J.Seq (acc, J.AAsn (base_ref, J.Cst (z cell), J.OSub, J.Cst (z 0)))))
+      body' cells
   | Local (d1, body, d2) when d1.dis_stack ->
     (* local stack: only the top counter is a scalar local to Enter/Exit; the
        backing array cells live in the same depth-d frame and are clean (0) on

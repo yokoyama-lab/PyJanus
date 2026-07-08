@@ -152,8 +152,8 @@ def test_flat_struct_array_field_initializer() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Ternary `c ? t : e` is supported (desugared to c*t + (1-c)*e); local
-#    arrays are cleanly unsupported (exit 3), not a hard parse error.
+# 3. Ternary `c ? t : e` and local arrays are supported; reversible read/write
+#    (the jana2014_in_out I/O dialect) is cleanly unsupported (exit 3).
 # ---------------------------------------------------------------------------
 
 def test_ternary_expression_supported() -> None:
@@ -171,25 +171,44 @@ def test_ternary_expression_supported() -> None:
     assert store["c"] == "20"
 
 
-def test_local_array_is_unsupported_not_error() -> None:
+def test_local_array_supported() -> None:
+    """A `local int tmp[n]` lives in one depth-frame RL slot used as an array
+    base; cleared to 0 before delocal, it agrees with PyJanus."""
     src = (
         "procedure work(int out[])\n"
         "    local int tmp[3]\n"
         "    tmp[0] += 5\n"
+        "    tmp[1] += 7\n"
         "    out[0] += tmp[0]\n"
+        "    out[1] += tmp[1]\n"
         "    tmp[0] -= out[0]\n"
+        "    tmp[1] -= out[1]\n"
         "    delocal int tmp[3]\n"
         "procedure main()\n"
         "    int out[3]\n"
         "    call work(out)\n"
+    )
+    store = _assert_agrees(src)
+    assert store["out"] == "{5,7,0}"
+
+
+def test_io_read_write_is_unsupported() -> None:
+    """`read`/`write` mutate the store, so vjanus must not silently drop them;
+    the verified core has no I/O, so it skips cleanly (exit 3)."""
+    src = (
+        "procedure main()\n"
+        "    int x\n"
+        "    read x\n"
+        "    x += 1\n"
+        "    write x\n"
     )
     result = _run_vjanus(src)
     assert result.returncode == 3, (
         f"Expected exit 3 (unsupported), got {result.returncode}.\n"
         f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
     )
-    assert "local array" in result.stderr, (
-        f"Expected 'unsupported: local array …' message: {result.stderr!r}"
+    assert "read" in result.stderr or "I/O" in result.stderr, (
+        f"Expected an I/O-unsupported message: {result.stderr!r}"
     )
 
 

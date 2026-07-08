@@ -120,7 +120,11 @@ let rec stmt s =
   | KW "uncall" -> adv s; let n, a = call_target s in Uncall (n, a)
   | KW "push" -> adv s; eat_op s "("; let x = lval s in eat_op s ","; let st = ident s in eat_op s ")"; Push (x, st)
   | KW "pop" -> adv s; eat_op s "("; let x = lval s in eat_op s ","; let st = ident s in eat_op s ")"; Pop (x, st)
-  | (KW "printf" | KW "print" | KW "show" | KW "read" | KW "write" | KW "error") ->
+  (* read/write mutate the store, so silently dropping them would diverge from
+     PyJanus; keep the keyword and let lowering reject the I/O dialect (exit 3).
+     printf/print/show/error have no store effect, so they stay dropped. *)
+  | KW ("read" | "write" as kw) -> print_like s; Io kw
+  | (KW "printf" | KW "print" | KW "show" | KW "error") ->
       print_like s; Skip
   | ID _ -> assign_or_swap s
   | _ -> err s "expected statement"
