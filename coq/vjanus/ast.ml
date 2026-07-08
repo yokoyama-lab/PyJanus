@@ -21,8 +21,10 @@ and lval = { lname : string; sels : expr list; fields : string list; fsels : exp
 type arg = ALv of lval | AVal of expr
 
 (* local/delocal declaration head: name, whether a stack, struct type (if any),
-   initializer (None => 0; for a struct local the init is an l-value to copy) *)
-type decl = { dname : string; dis_stack : bool; dstruct : string option; dinit : expr option }
+   array dims ([] => scalar), initializer (None => 0; for a struct local the
+   init is an l-value to copy) *)
+type decl = { dname : string; dis_stack : bool; dstruct : string option;
+              ddims : int list; dinit : expr option }
 
 type stmt =
   | Skip

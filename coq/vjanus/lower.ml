@@ -399,6 +399,10 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let incr = J.Asn (xref, J.OAdd, ep) in
     J.Seq (J.Enter (nat x, es),
            J.Seq (J.Loop (istart, J.Skip, J.Seq (seq st scp body, incr), istop), J.Exit (nat x, stop)))
+  | Local (d1, _, _) when d1.ddims <> [] ->
+    (* local arrays are not yet lowered to the frame core (locals are single
+       depth-indexed slots); skip cleanly (exit 3) rather than parse-error *)
+    raise (Unsupported "local array declaration (not yet)")
   | Local (d1, body, d2) when d1.dis_stack ->
     (* local stack: only the top counter is a scalar local to Enter/Exit; the
        backing array cells live in the same depth-d frame and are clean (0) on
@@ -603,6 +607,20 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let rec emit_init g item prefix = match item with
     | VA items -> List.iteri (fun k sub -> emit_init g sub (prefix @ [k])) items
     | VE e -> inits := J.AAsn (J.RG (nat g), J.Cst (z (cantor_val prefix)), J.OAdd, expr st mscp e) :: !inits in
+  (* struct value initializer `= {f0, f1, …}`: write each field of one struct
+     instance.  `w cell e` stores value `e` at the instance-relative cell index;
+     fields follow the layout `offs` (declaration order), and an array field
+     walks its nested aggregate with a Cantor-folded intra-field index — exactly
+     the addressing `field_access` uses (field_offset + Cantor(fsels)). *)
+  let emit_struct w offs item = match item with
+    | VA fitems when List.length fitems = List.length offs ->
+      List.iter2 (fun (_, off, _) fit ->
+        let rec go it prefix = match it with
+          | VA items -> List.iteri (fun k sub -> go sub (prefix @ [k])) items
+          | VE e -> w (off + cantor_val prefix) e
+        in go fit []) offs fitems
+    | VA _ -> raise (Unsupported "struct initializer arity mismatch")
+    | VE _ -> raise (Unsupported "scalar initializer on struct") in
   List.iter (fun (vd : Ast.vdecl) ->
     if vd.vis_stack then begin
       let (a, t) = global_stack st vd.vname in
@@ -624,19 +642,42 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
         let base = gslot st vd.vname in
         Hashtbl.replace st.gsarrays vd.vname (sname, base, size);
         sarrays := (vd.vname, base, vd.vdims, size, offsets) :: !sarrays;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct array initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it ->
+           (* outer aggregate indexes elements (Cantor-folded, like `index`),
+              cell = elem*size + field-cell; the leaf VA is one element's fields *)
+           let rec emit_elems prefix item =
+             if List.length prefix < List.length vd.vdims then
+               (match item with
+                | VA items -> List.iteri (fun k sub -> emit_elems (prefix @ [k]) sub) items
+                | VE _ -> raise (Unsupported "struct array initializer shape"))
+             else
+               let ebase = cantor_val prefix * size in
+               emit_struct
+                 (fun cell e -> inits := J.AAsn (J.RG (nat base), J.Cst (z (ebase + cell)), J.OAdd, expr st mscp e) :: !inits)
+                 offsets item
+           in emit_elems [] it)
       end else if struct_has_array_field st sname then begin
         (* scalar struct WITH array fields: one base array slot, GA-addressed *)
         let base = gslot st vd.vname in
         Hashtbl.replace st.gstructs_flat vd.vname (sname, base);
         flatstructs := (vd.vname, base, offsets) :: !flatstructs;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it -> emit_struct
+             (fun cell e -> inits := J.AAsn (J.RG (nat base), J.Cst (z cell), J.OAdd, expr st mscp e) :: !inits)
+             offsets it)
       end else begin
         (* pure scalar struct: consecutive scalar slots G(base .. base+size-1) *)
         let base = st.nglob in st.nglob <- st.nglob + size;
         Hashtbl.replace st.gstructs vd.vname (sname, base);
         structs := (vd.vname, base, List.map (fun (f, o, _) -> (f, o)) offsets) :: !structs;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it -> emit_struct
+             (fun cell e -> inits := J.Asn (J.RG (nat (base + cell)), J.OAdd, expr st mscp e) :: !inits)
+             offsets it)
       end
     end else begin
       let g = gslot st vd.vname in

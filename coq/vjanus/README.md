@@ -67,8 +67,23 @@ This is verified, not asserted: `tests/jana2014/test_vjanus_corpus.py` runs the
 whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
 `call`/`uncall` (including nested struct-by-reference, the reverse of a
-stack-building procedure, and structs with array fields).  The whole corpus
-matches: **52 match, 0 skip**.
+stack-building procedure, and structs with array fields).  The corpus matches
+on every program in the verified subset (only local-array programs skip).
+
+### Feature coverage vs. base jana2014
+
+Two axes where vjanus's front end meets `parser_jana2014.py`, checked by
+`tests/jana2014/test_vjanus_features.py`:
+
+| jana2014 construct | vjanus | note |
+|--------------------|--------|------|
+| `+= / -= / ^=`, `<=>` | ✅ run | the frame core's `OAdd/OSub/OXor` |
+| `*= / /=` | ⊘ exit 3 (skip) | no multiplicative update in the verified core (`RevFrame.v`); accepted syntactically so the corpus *skips*, not parse-errors |
+| `* / %` in expressions | ✅ run | `BMul/BDiv/BMod` |
+| ternary `c ? t : e` | ✅ run | condition is boolean (0/1) in jana2014, so desugared to the pure `c*t + (1-c)*e` |
+| struct value initializers `= {..}` | ✅ run | scalar struct, array-of-structs, and struct-with-array-fields |
+| `read` / `write` (jana2014_in_out) | ⊘ no-op | parsed but lowered to `skip`; the I/O dialect is out of scope |
+| local arrays `local int a[n]` | ⊘ exit 3 (skip) | locals are single depth-indexed slots; not yet lowered |
 
 ### Variable scope
 
