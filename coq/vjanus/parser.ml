@@ -46,7 +46,20 @@ let binop_level = function
 
 let norm_op = function "=" -> "==" | "#" -> "!=" | o -> o
 
-let rec expr s = expr_bin s 1
+(* Ternary `c ? t : e` sits above the binary operators (lowest precedence,
+   right-associative), mirroring parser_jana2014.py's parse_expression.  jana2014
+   requires the condition to be boolean (0/1) — PyJanus type-errors otherwise — so
+   it desugars to the pure arithmetic `c*t + (1-c)*e`, which the verified frame
+   core evaluates with BMul/BAdd/BSub (no conditional-expression primitive). *)
+let rec expr s =
+  let c = expr_bin s 1 in
+  if at_op s "?" then begin
+    adv s;
+    let t = expr s in
+    eat_op s ":";
+    let e = expr s in
+    Bin ("+", Bin ("*", c, t), Bin ("*", Bin ("-", Num 1, c), e))
+  end else c
 and expr_bin s minl =
   let left = ref (expr_unary s) in
   let continue = ref true in
@@ -121,8 +134,11 @@ and assign_or_swap s =
   let l = lval s in
   match (peek s).t with
   | OP "<=>" -> adv s; let r = lval s in Swap (l, r)
-  | OP ("+=" | "-=" | "^=" as o) -> adv s; let e = expr s in Assign (l, o, e)
-  | _ -> err s "expected '+=', '-=', '^=' or '<=>'"
+  (* `*=` / `/=` are accepted here so lowering can reject them as a clean
+     "unsupported" (exit 3) rather than a hard parse error (exit 1): the verified
+     frame core has no multiplicative update, only OAdd/OSub/OXor. *)
+  | OP ("+=" | "-=" | "^=" | "*=" | "/=" as o) -> adv s; let e = expr s in Assign (l, o, e)
+  | _ -> err s "expected '+=', '-=', '^=', '*=', '/=' or '<=>'"
 
 and if_stmt s =
   eat_kw s "if"; let entry = expr s in
@@ -167,10 +183,19 @@ and decl s =
                  else if at_kw s "stack" then (adv s; true)
                  else (ignore (opt_kw s "int"); ignore (opt_kw s "bool"); false) in
   let nm = ident s in
+  (* array dims: `local int tmp[3]` — parsed so the head is well-formed; lowering
+     rejects local arrays as unsupported (exit 3), not a parse error (exit 1) *)
+  let dims = ref [] in
+  while at_op s "[" do
+    adv s;
+    (match (peek s).t with NUM n -> adv s; dims := n :: !dims
+     | _ -> err s "array dimension must be a constant");
+    eat_op s "]"
+  done;
   let init = if opt_op s "=" then
       (if at_kw s "nil" then (adv s; None) else Some (expr s))
     else None in
-  { dname = nm; dis_stack = is_stack; dstruct; dinit = init }
+  { dname = nm; dis_stack = is_stack; dstruct; ddims = List.rev !dims; dinit = init }
 
 and call_target s =
   let n = ident s in
@@ -242,7 +267,8 @@ and vdecl s =
     adv s;
     let vn = ident s in
     let dims = dims_of s in
-    { vname = vn; vis_stack = false; vstruct = Some nm; vdims = dims; vinit = None }
+    let init = if opt_op s "=" then Some (vinit s) else None in
+    { vname = vn; vis_stack = false; vstruct = Some nm; vdims = dims; vinit = init }
   | _ ->
     let k = typ_kw s in
     let nm = ident s in
