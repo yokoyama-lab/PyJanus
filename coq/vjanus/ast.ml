@@ -39,6 +39,7 @@ type stmt =
   | Uncall of string * arg list
   | Push of lval * string            (* push(x, s) *)
   | Pop of lval * string             (* pop(x, s) *)
+  | Io of string                     (* read/write (jana2014_in_out); keyword kept for the error *)
 
 type vinit = VE of expr | VA of vinit list
 
