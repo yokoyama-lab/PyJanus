@@ -89,6 +89,28 @@ not enough.
 | `RevJanus.v` | `store = var → Z` | `x op= e` (with `¬ occurs x e`), `x <=> y` | `janus_reversible` |
 | `RevToy.v` | `Z` (a counter) | `Inc`, `Dec` | `toy_reversible` |
 | `RevExt.v` | `loc → Z` (scalars + array cells + local cells) | array/scalar `l op= e`, `l1 <=> l2`, `local`/`delocal` enter/exit | `ext_reversible` |
+| `RevIO.v` | `(nat → Z) × list Z × list Z` (store + input + output streams) | `read`/`write` and their stream duals `unread`/`unwrite` | `io_reversible` |
+| `RevMul.v` | `Z` (a register) | `x *= k`, `x /= k` (relational; nonzero-factor guard, `/=` partial) | `mul_reversible` |
+
+`RevIO.v` gives the `jana2014_in_out` I/O dialect a *verified* reversible
+semantics (read consumes the input, its inverse pushes it back; write emits to
+output, its inverse pops it) — the reversibility that `vjanus` can otherwise only
+refuse.  `RevMul.v` accounts for Janus's multiplicative updates `*=` / `/=`,
+which the *total* frame-core `aop` (`OAdd/OSub/OXor`) cannot host: as a
+`REV_PRIM` **relation** they fit exactly — `*=` is injective iff the factor is
+nonzero, and `/=` is the corresponding *partial* inverse (it relates a value to
+another only when the factor divides it).
+
+`RevLowering.v` verifies the two `vjanus` translation rules that do **not** map a
+source construct to a single core primitive (and so carry real proof
+obligations): the swap `x <=> y`, lowered to the XOR triple
+`x ^= y; y ^= x; x ^= y` — proved to compute the swap and to be its own inverse —
+and the clean local-array bracket `a[c] += 0 … a[c] -= 0`, proved to be the
+identity on the store.  It also proves that an *aliased* swap (`a[i] <=> a[i]`)
+collapses the cell to 0, which is exactly why `vjanus` and the PyJanus runtime
+reject it.  Whole-translator soundness (a Coq model of all of `lower.ml` proved
+to commute with the source semantics) remains future work — see
+`docs/vjanus-lowering-soundness.md`.
 
 All reversibility theorems are obtained purely as instances of the generic
 `exec_injective` — no per-language reversibility proof is repeated. The Janus
