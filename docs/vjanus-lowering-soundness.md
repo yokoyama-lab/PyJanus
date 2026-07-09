@@ -78,9 +78,10 @@ today, as in most verified pipelines).
    and so is best proved against `RevFrame.v` rather than in isolation.
 2. Formalize the jana2014 **expression** semantics in Coq and prove the
    expression-lowering (`expr` in `lower.ml`) preserves values — the smallest
-   self-contained slice of full soundness. (Note: this would also pin down the
-   boolean-coercion rules — e.g. `||` is lowered to `l*l + r*r`, valid only when
-   its result is consumed as a truth value; formalizing expressions makes that
-   side condition explicit.)
+   self-contained slice of full soundness. This would systematically pin down the
+   boolean-coercion rules (jana2014 requires `&&`/`||` operands to be `0/1`, so
+   `&& = l*r` and `|| = l + r - l*r`; a wrong `|| = l*l + r*r` used to yield 2
+   when both operands held — caught by hand and fixed, but a value-level
+   expression-preservation proof would have flagged it mechanically).
 3. Tackle a single statement form end-to-end (e.g. `Assign`) against a Coq source
    semantics, establishing the simulation skeleton the other forms slot into.

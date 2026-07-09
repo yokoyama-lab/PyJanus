@@ -261,8 +261,11 @@ let rec expr st scp (e : Ast.expr) : J.expr =
      | ">=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BLt, l, r))
      | "<=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BLt, r, l))
      | "!=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BEq, l, r))
+     (* jana2014 requires boolean operands for && / || (PyJanus type-errors
+        otherwise), so l, r are 0/1: && = l*r, || = l + r - l*r (inclusion-
+        exclusion). The earlier || = l*l + r*r wrongly yields 2 when both hold. *)
      | "&&" -> J.Bin (J.BMul, l, r)
-     | "||" -> J.Bin (J.BAdd, J.Bin (J.BMul, l, l), J.Bin (J.BMul, r, r))
+     | "||" -> J.Bin (J.BSub, J.Bin (J.BAdd, l, r), J.Bin (J.BMul, l, r))
      | "^" -> J.Bin (J.BXor, l, r) | "&" -> J.Bin (J.BAnd, l, r) | "|" -> J.Bin (J.BOr, l, r)
      | o -> raise (Unsupported ("operator " ^ o)))
 

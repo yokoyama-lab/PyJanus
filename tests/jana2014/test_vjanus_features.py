@@ -171,6 +171,44 @@ def test_ternary_expression_supported() -> None:
     assert store["c"] == "20"
 
 
+def test_logical_or_value_both_true() -> None:
+    """`a || b` used as a value with both operands true must be 1, not 2.
+    jana2014 requires boolean operands, so `||` lowers to `a + b - a*b` (OR),
+    not the old `a*a + b*b` (= a + b, which gave 2).  Also exercised through the
+    ternary, whose desugaring assumes a 0/1 condition."""
+    src = (
+        "procedure main()\n"
+        "    int a\n"
+        "    int b\n"
+        "    int r\n"
+        "    int t\n"
+        "    a += 1\n"
+        "    b += 1\n"
+        "    r += (a > 0 || b > 0)\n"          # both true -> 1
+        "    t += (a > 0 || b > 0 ? 5 : 9)\n"  # condition must be 0/1 -> 5
+    )
+    store = _assert_agrees(src)
+    assert store["r"] == "1"
+    assert store["t"] == "5"
+
+
+def test_logical_and_value() -> None:
+    """`&&` lowers to `l*r`, already correct for booleans."""
+    src = (
+        "procedure main()\n"
+        "    int a\n"
+        "    int b\n"
+        "    int r\n"
+        "    int u\n"
+        "    a += 1\n"
+        "    r += (a > 0 && a > 0)\n"    # 1
+        "    u += (a > 0 && b > 0)\n"    # b=0 -> false -> 0
+    )
+    store = _assert_agrees(src)
+    assert store["r"] == "1"
+    assert store["u"] == "0"
+
+
 def test_local_array_supported() -> None:
     """A `local int tmp[n]` lives in one depth-frame RL slot used as an array
     base; cleared to 0 before delocal, it agrees with PyJanus."""
