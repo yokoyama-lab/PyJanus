@@ -30,3 +30,6 @@ RevGolomb.v
 RevVarint.v
 RevZigzag.v
 RevDeltaN.v
+RevIO.v
+RevMul.v
+RevLowering.v

@@ -25,6 +25,7 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevInverse RevCat RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
+Require Import RevIO RevMul RevLowering.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
@@ -70,6 +71,15 @@ Print Assumptions RevZigzag.zigzag_decode.
 Print Assumptions RevZigzag.zig_unzig.
 Print Assumptions RevDeltaN.deltaN_computes.
 Print Assumptions RevDeltaN.deltaN_reversible.
+(* reversible I/O (jana2014_in_out read/write), multiplicative update,
+   and the two nontrivial vjanus lowering encodings *)
+Print Assumptions RevIO.io_reversible.
+Print Assumptions RevIO.io_iff.
+Print Assumptions RevMul.mul_reversible.
+Print Assumptions RevLowering.xor3_swaps.
+Print Assumptions RevLowering.xor3_selfinverse.
+Print Assumptions RevLowering.xor3_alias_zero.
+Print Assumptions RevLowering.add_zero_noop.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"
