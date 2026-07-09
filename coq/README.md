@@ -101,16 +101,18 @@ which the *total* frame-core `aop` (`OAdd/OSub/OXor`) cannot host: as a
 nonzero, and `/=` is the corresponding *partial* inverse (it relates a value to
 another only when the factor divides it).
 
-`RevLowering.v` verifies the two `vjanus` translation rules that do **not** map a
+`RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
 source construct to a single core primitive (and so carry real proof
 obligations): the swap `x <=> y`, lowered to the XOR triple
-`x ^= y; y ^= x; x ^= y` — proved to compute the swap and to be its own inverse —
-and the clean local-array bracket `a[c] += 0 … a[c] -= 0`, proved to be the
-identity on the store.  It also proves that an *aliased* swap (`a[i] <=> a[i]`)
-collapses the cell to 0, which is exactly why `vjanus` and the PyJanus runtime
-reject it.  Whole-translator soundness (a Coq model of all of `lower.ml` proved
-to commute with the source semantics) remains future work — see
-`docs/vjanus-lowering-soundness.md`.
+`x ^= y; y ^= x; x ^= y` — proved to compute the swap and to be its own inverse
+(and to collapse an *aliased* `a[i] <=> a[i]` to 0, which is why it is rejected);
+the stack `push`/`pop`, lowered to an XOR-swap of the top cell plus a counter
+bump — proved that `pop` undoes `push`; the clean local-array bracket
+`a[c] += 0 … a[c] -= 0`, proved to be the identity on the store; and injectivity
+of both struct-array cell addressing (`elem*n + off`) and the Cantor fold of
+multi-dimensional indices — no two distinct indices alias.  Whole-translator
+soundness (a Coq model of all of `lower.ml` proved to commute with the source
+semantics) remains future work — see `docs/vjanus-lowering-soundness.md`.
 
 All reversibility theorems are obtained purely as instances of the generic
 `exec_injective` — no per-language reversibility proof is repeated. The Janus

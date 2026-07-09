@@ -96,3 +96,99 @@ Proof. intros c s. rewrite Z.add_0_r. apply upd_same. Qed.
 
 Theorem sub_zero_noop : forall c s, upd c (s c - 0) s = s.
 Proof. intros c s. rewrite Z.sub_0_r. apply upd_same. Qed.
+
+(** ** 4. Stack [push]/[pop]: XOR-swap into the top cell, plus a counter bump.
+
+    [vjanus] lowers [push(x,s)] to
+    [s.arr[top] ^= x; x ^= s.arr[top]; s.arr[top] ^= x; top += 1]
+    — an XOR swap of the top cell and [x], then a counter increment — and [pop]
+    to the same swap after [top -= 1].  Both touch the same cell (arr[top]), so
+    we model that cell [c], the register [x], and the counter [t].  Correctness:
+    [pop] undoes [push]; and with a clean top cell it is the stack semantics
+    (the value moves onto the stack, [x] is consumed to 0). *)
+Definition push (st : Z * Z * nat) : Z * Z * nat :=
+  match st with (c, x, t) => match xor3 (c, x) with (c', x') => (c', x', S t) end end.
+Definition pop (st : Z * Z * nat) : Z * Z * nat :=
+  match st with
+  | (c, x, S t') => match xor3 (c, x) with (c', x') => (c', x', t') end
+  | (c, x, O)    => (c, x, O)
+  end.
+
+Theorem pop_push : forall c x t, pop (push (c, x, t)) = (c, x, t).
+Proof.
+  intros c x t. unfold push. rewrite (xor3_swaps c x).
+  unfold pop. rewrite (xor3_swaps x c). reflexivity.
+Qed.
+
+(** With a clean top cell (c = 0), push stores x and zeroes the register. *)
+Theorem push_clean : forall x t, push (0, x, t) = (x, 0, S t).
+Proof. intros x t. unfold push. rewrite (xor3_swaps 0 x). reflexivity. Qed.
+
+(** ** 5. Struct-array cell addressing is injective.
+
+    A struct-array element field lowers to the flat cell [elem*n + off], where
+    [n] is the slot count per element and [off < n] is the field offset within an
+    element.  This addressing never makes two distinct (element, field) pairs
+    alias — the Euclidean-division uniqueness that keeps the lowering sound. *)
+Theorem addr_injective :
+  forall n e1 o1 e2 o2 : nat,
+    (o1 < n)%nat -> (o2 < n)%nat ->
+    (e1 * n + o1 = e2 * n + o2)%nat -> e1 = e2 /\ o1 = o2.
+Proof.
+  intros n e1 o1 e2 o2 H1 H2 H.
+  apply (Nat.div_mod_unique n e1 e2 o1 o2 H1 H2).
+  rewrite (Nat.mul_comm n e1), (Nat.mul_comm n e2). exact H.
+Qed.
+
+(** ** 6. The Cantor pairing folding multi-dim array indices is injective.
+
+    [vjanus]'s [cantor_val] folds a multi-dimensional index [a, b, …] into one
+    flat cell with the Cantor pairing [(a+b)*(a+b+1)/2 + b] (nested for higher
+    rank).  Distinct multi-indices must map to distinct cells or the array
+    lowering would alias.  We prove the two-argument pairing injective; the
+    triangular number is defined by the recurrence [T(k+1) = (k+1) + T(k)] (so
+    [T k = k*(k+1)/2], proved in [tri_closed]) which makes the monotonicity the
+    whole argument turns on definitional. *)
+Section Cantor.
+Local Open Scope nat_scope.
+
+Fixpoint tri (k : nat) : nat :=
+  match k with O => 0 | S k' => S k' + tri k' end.
+
+Definition cantor2 (a b : nat) : nat := tri (a + b) + b.
+
+(** The standard closed form, tying [cantor2] to [vjanus]'s [cantor_val]. *)
+Lemma tri_closed : forall k, tri k = k * (k + 1) / 2.
+Proof.
+  assert (H2 : forall k, 2 * tri k = k * (k + 1)).
+  { induction k; simpl tri; [ reflexivity | nia ]. }
+  intro k. rewrite <- (Nat.div_mul (tri k) 2) by lia.
+  rewrite (Nat.mul_comm (tri k) 2), H2. reflexivity.
+Qed.
+
+Lemma tri_mono : forall k1 k2, k1 <= k2 -> tri k1 <= tri k2.
+Proof. intros k1 k2 H. induction H; simpl; lia. Qed.
+
+Lemma tri_step_bound : forall s b, b <= s -> tri s + b < tri (S s).
+Proof. intros s b H. simpl. lia. Qed.
+
+Lemma diag_unique : forall s1 b1 s2 b2,
+  b1 <= s1 -> b2 <= s2 -> tri s1 + b1 = tri s2 + b2 -> s1 = s2.
+Proof.
+  intros s1 b1 s2 b2 Hb1 Hb2 H.
+  destruct (Nat.lt_trichotomy s1 s2) as [L | [E | G]]; [ | assumption | ].
+  - exfalso. assert (tri (S s1) <= tri s2) by (apply tri_mono; lia).
+    pose proof (tri_step_bound s1 b1 Hb1). lia.
+  - exfalso. assert (tri (S s2) <= tri s1) by (apply tri_mono; lia).
+    pose proof (tri_step_bound s2 b2 Hb2). lia.
+Qed.
+
+Theorem cantor2_injective : forall a1 b1 a2 b2,
+  cantor2 a1 b1 = cantor2 a2 b2 -> a1 = a2 /\ b1 = b2.
+Proof.
+  intros a1 b1 a2 b2 H. unfold cantor2 in H.
+  assert (Hs : a1 + b1 = a2 + b2)
+    by (apply (diag_unique (a1 + b1) b1 (a2 + b2) b2); lia).
+  rewrite Hs in H. split; lia.
+Qed.
+End Cantor.

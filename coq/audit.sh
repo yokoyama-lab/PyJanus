@@ -80,6 +80,11 @@ Print Assumptions RevLowering.xor3_swaps.
 Print Assumptions RevLowering.xor3_selfinverse.
 Print Assumptions RevLowering.xor3_alias_zero.
 Print Assumptions RevLowering.add_zero_noop.
+Print Assumptions RevLowering.pop_push.
+Print Assumptions RevLowering.push_clean.
+Print Assumptions RevLowering.addr_injective.
+Print Assumptions RevLowering.cantor2_injective.
+Print Assumptions RevLowering.tri_closed.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"

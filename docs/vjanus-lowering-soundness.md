@@ -16,21 +16,34 @@ verified today and what a full proof would require.
    program in the verified subset matches. This is strong empirical evidence, not
    a proof.
 
-2. **Rule-level correctness for the two nontrivial encodings** (`coq/RevLowering.v`,
-   machine-checked, no axioms beyond `functional_extensionality`). Most lowering
-   rules map one source construct to one core primitive, so they are correct by
-   construction. Exactly two rules *encode* a construct with no core counterpart,
-   and those are where a translator can silently go wrong:
+2. **Rule-level correctness for the encodings that carry proof obligations**
+   (`coq/RevLowering.v`, machine-checked, no axioms beyond
+   `functional_extensionality`; the arithmetic-addressing lemmas need none).
+   Most lowering rules map one source construct to one core primitive, so they
+   are correct by construction. The rules that *encode* a construct with no
+   direct core counterpart — where a translator can silently go wrong — are each
+   verified in isolation:
 
    - **Swap → XOR triple.** The frame core has no `Swap` primitive, so `x <=> y`
-     becomes `x ^= y; y ^= x; x ^= y`. `RevLowering.xor3_swaps` proves the triple
-     computes the swap; `xor3_selfinverse` proves it is its own inverse (so
-     `uncall` of a swap is correct). `xor3_alias_zero` proves that if the two
-     operands alias the *same* cell the triple collapses it to 0 — the reason an
-     aliased `a[i] <=> a[i]` is rejected statically.
+     becomes `x ^= y; y ^= x; x ^= y`. `xor3_swaps` proves the triple computes
+     the swap; `xor3_selfinverse` proves it is its own inverse (so `uncall` of a
+     swap is correct). `xor3_alias_zero` proves that if the two operands alias
+     the *same* cell the triple collapses it to 0 — the reason an aliased
+     `a[i] <=> a[i]` is rejected statically.
+   - **Stack `push`/`pop` → XOR-swap + counter.** `push(x,s)` lowers to an XOR
+     swap of the top cell and `x` followed by `top += 1` (and `pop` the reverse).
+     `pop_push` proves `pop` undoes `push`; `push_clean` proves that with a clean
+     top cell it is the intended stack move (value onto the stack, `x` consumed
+     to 0).
    - **Clean local-array bracket.** `local int a[n]` is lowered by bracketing the
      body with per-cell `a[c] += 0` / `a[c] -= 0`. `add_zero_noop` / `sub_zero_noop`
      prove each bracket is the identity on the store.
+   - **Array cell addressing is injective (no aliasing).** Struct-array element
+     fields address `elem*n + off` (`off < n`): `addr_injective` proves distinct
+     (element, field) pairs never collide. Multi-dimensional array indices fold
+     via the Cantor pairing `(a+b)*(a+b+1)/2 + b`: `cantor2_injective` proves
+     distinct index pairs never collide (`tri_closed` ties the fixpoint
+     triangular number to `vjanus`'s closed-form `cantor_val`).
 
 ## What a full soundness proof would require
 
@@ -57,11 +70,17 @@ today, as in most verified pipelines).
 
 ## Suggested increments (small → large)
 
-1. Grow `RevLowering.v` to cover more rules in isolation (by-value call via
-   `Enter`/`Exit`; the stack `push`/`pop` XOR-swap-plus-counter; struct-field
-   addressing `elem*size + offset`).
+1. **(done)** Rule-in-isolation lemmas in `RevLowering.v`: the swap XOR triple,
+   the stack `push`/`pop` XOR-swap-plus-counter, the clean local-array bracket,
+   and injectivity of both struct-array addressing and the Cantor index fold.
+   The one remaining rule of this kind is the by-value call idiom (`Enter`/`Exit`
+   on a fresh local around the call), which needs the frame core's `Enter`/`Exit`
+   and so is best proved against `RevFrame.v` rather than in isolation.
 2. Formalize the jana2014 **expression** semantics in Coq and prove the
    expression-lowering (`expr` in `lower.ml`) preserves values — the smallest
-   self-contained slice of full soundness.
+   self-contained slice of full soundness. (Note: this would also pin down the
+   boolean-coercion rules — e.g. `||` is lowered to `l*l + r*r`, valid only when
+   its result is consumed as a truth value; formalizing expressions makes that
+   side condition explicit.)
 3. Tackle a single statement form end-to-end (e.g. `Assign`) against a Coq source
    semantics, establishing the simulation skeleton the other forms slot into.
