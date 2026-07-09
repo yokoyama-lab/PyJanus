@@ -35,13 +35,19 @@ let ident s = match (peek s).t with
    vjanus parses the same tree. Bitwise & | ^ sit between && and the comparisons
    (PyJanus level 3); lower.ml lowers them to the verified core's BAnd/BOr/BXor
    (Z.land/lor/lxor in RevFrame.v), so e.g. `dst[i] ^= a ^ b` runs directly. *)
+(* Levels mirror parser_jana2014.py's BIN_PRECEDENCE exactly, including the
+   shifts (between comparisons and +/-) and ** (tightest).  vjanus's lowering has
+   no core primitive for << >> **, so they parse here at the right precedence and
+   are rejected as unsupported (exit 3) instead of causing a parse error. *)
 let binop_level = function
   | "||" -> Some 1
   | "&&" -> Some 2
   | "&" | "|" | "^" -> Some 3
   | "=" | "==" | "!=" | "#" | "<" | "<=" | ">" | ">=" -> Some 4
-  | "+" | "-" -> Some 5
-  | "*" | "/" | "%" -> Some 6
+  | "<<" | ">>" -> Some 5
+  | "+" | "-" -> Some 6
+  | "*" | "/" | "%" -> Some 7
+  | "**" -> Some 8
   | _ -> None
 
 let norm_op = function "=" -> "==" | "#" -> "!=" | o -> o

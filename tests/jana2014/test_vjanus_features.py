@@ -79,6 +79,26 @@ def _assert_agrees(src: str) -> dict[str, str]:
 # 1. `*=` / `/=` are cleanly unsupported (exit 3), not a hard parse error.
 # ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize("expr", ["1 << 3", "8 >> 1", "2 ** 3"])
+def test_shift_and_power_are_unsupported_not_error(expr: str) -> None:
+    """`<<` `>>` `**` are valid jana2014 (PyJanus supports them) but have no
+    verified-core primitive; vjanus must skip cleanly (exit 3), not parse-error
+    (exit 1).  They parse at the correct precedence, then lowering rejects them."""
+    src = (
+        "procedure main()\n"
+        "    int x\n"
+        f"    x += {expr}\n"
+    )
+    result = _run_vjanus(src)
+    assert result.returncode == 3, (
+        f"Expected exit 3 (unsupported), got {result.returncode}.\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert "operator" in result.stderr, (
+        f"Expected an 'unsupported: operator …' message: {result.stderr!r}"
+    )
+
+
 @pytest.mark.parametrize("op", ["*=", "/="])
 def test_multiplicative_update_is_unsupported_not_error(op: str) -> None:
     src = (
