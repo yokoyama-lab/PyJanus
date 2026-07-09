@@ -33,3 +33,4 @@ RevDeltaN.v
 RevIO.v
 RevMul.v
 RevLowering.v
+RevMod.v

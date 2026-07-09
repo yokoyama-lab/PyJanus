@@ -29,6 +29,15 @@ let ident s = match (peek s).t with
   | KW x -> adv s; x   (* allow keyword-like field/proc names where the grammar does *)
   | _ -> err s "expected identifier"
 
+(* sized integer types (i8..u64): valid jana2014, but the verified Z core cannot
+   run their wrapping faithfully (that needs a modular core — coq/RevMod.v), so
+   they are rejected as unsupported (exit 3), not misparsed. *)
+let is_int_type_kw = function
+  | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" -> true
+  | _ -> false
+let unsupported_int_type k =
+  raise (Ast.Unsupported ("sized integer type " ^ k ^ " (needs a modular core)"))
+
 (* ----- expressions (precedence climbing) ----- *)
 
 (* Precedence climbing, mirroring jana_py/parser_jana2014.py's BIN_PRECEDENCE so
@@ -88,7 +97,11 @@ and expr_unary s =
 and expr_atom s =
   match (peek s).t with
   | NUM n -> adv s; Num n
-  | OP "(" -> adv s; let e = expr s in eat_op s ")"; e
+  | OP "(" ->
+    (match (peek2 s).t with           (* `( iN ) e` is a cast to a sized int type *)
+     | KW k when is_int_type_kw k -> unsupported_int_type k
+     | _ -> ());
+    adv s; let e = expr s in eat_op s ")"; e
   | KW "true" -> adv s; Num 1
   | KW "false" -> adv s; Num 0
   | KW "nil" -> adv s; err s "nil is only valid as a stack initializer"
@@ -184,6 +197,8 @@ and local_stmt s =
   Local (d1, body, d2)
 
 and decl s =
+  (match (peek s).t with            (* `local iN x` — sized int types unsupported *)
+   | KW k when is_int_type_kw k -> unsupported_int_type k | _ -> ());
   let dstruct =
     if at_kw s "struct" then (adv s; Some (ident s))            (* `struct Name x` *)
     else match (peek s).t with
@@ -259,6 +274,7 @@ let typ_kw s =
   match (peek s).t with
   | KW ("int" | "bool") -> adv s; `Int
   | KW "stack" -> adv s; `Stack
+  | KW k when is_int_type_kw k -> unsupported_int_type k
   | _ -> err s "expected a type"
 
 let rec dims_of s =
@@ -333,6 +349,7 @@ let procedure s =
     let vds = ref [] in
     while (match (peek s).t with
            | KW ("int" | "stack" | "bool") -> true
+           | KW k when is_int_type_kw k -> true   (* -> vdecl -> typ_kw rejects (exit 3) *)
            | ID nm when is_struct_name s nm -> true
            | _ -> false) do
       vds := vdecl s :: !vds

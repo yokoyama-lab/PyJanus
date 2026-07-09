@@ -84,6 +84,8 @@ Two axes where vjanus's front end meets `parser_jana2014.py`, checked by
 | struct value initializers `= {..}` | ✅ run | scalar struct, array-of-structs, and struct-with-array-fields |
 | local arrays `local int a[n]` | ✅ run | one depth-frame RL slot as the array base (like a flat struct local), cleared to 0 before delocal |
 | `read` / `write` (jana2014_in_out) | ⊘ exit 3 (skip) | the verified core is a pure store transformer with no I/O; rejected cleanly rather than silently dropped |
+| `<<` `>>` `**` | ⊘ exit 3 (skip) | valid jana2014, but no verified-core primitive; parsed at the right precedence, then rejected |
+| sized int types `i8`..`u64` (decls, params, locals, casts) | ⊘ exit 3 (skip) | wrapping needs a modular core; the `Z` core cannot run them faithfully (see `../RevMod.v`) |
 
 ### Variable scope
 

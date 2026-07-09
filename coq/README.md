@@ -91,6 +91,7 @@ not enough.
 | `RevExt.v` | `loc → Z` (scalars + array cells + local cells) | array/scalar `l op= e`, `l1 <=> l2`, `local`/`delocal` enter/exit | `ext_reversible` |
 | `RevIO.v` | `(nat → Z) × list Z × list Z` (store + input + output streams) | `read`/`write` and their stream duals `unread`/`unwrite` | `io_reversible` |
 | `RevMul.v` | `Z` (a register) | `x *= k`, `x /= k` (relational; nonzero-factor guard, `/=` partial) | `mul_reversible` |
+| `RevMod.v` | `Z` held canonical in `[0, M)` | modular `x += k`, `x -= k` (wrapping, `mod M`) | `mod_reversible` |
 
 `RevIO.v` gives the `jana2014_in_out` I/O dialect a *verified* reversible
 semantics (read consumes the input, its inverse pushes it back; write emits to
@@ -100,6 +101,15 @@ which the *total* frame-core `aop` (`OAdd/OSub/OXor`) cannot host: as a
 `REV_PRIM` **relation** they fit exactly — `*=` is injective iff the factor is
 nonzero, and `/=` is the corresponding *partial* inverse (it relates a value to
 another only when the factor divides it).
+
+`RevMod.v` is the basis for Janus's **sized integer types** (`i8`/`i16`/`i32`/…,
+and the global `-m bits` mode): each register has a modulus `M = 2^bits`, so every
+update wraps.  Wrapping a plain `Z` cell is not reversible (it is injective only
+*within* one residue window), so — with the register held canonical in `[0, M)` —
+the modular updates `x += k` / `x -= k` are proved mutually inverse bijections.
+This is why `vjanus` (a pure `Z` machine) declines sized-int programs (exit 3):
+running them faithfully needs a modular core, and `RevMod.v` is its verified
+target.
 
 `RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
 source construct to a single core primitive (and so carry real proof

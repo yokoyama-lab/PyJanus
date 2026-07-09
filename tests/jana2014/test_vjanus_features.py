@@ -99,6 +99,30 @@ def test_shift_and_power_are_unsupported_not_error(expr: str) -> None:
     )
 
 
+@pytest.mark.parametrize("src", [
+    # main variable declaration
+    "procedure main()\n    i32 x\n    x += 5\n",
+    # procedure parameter
+    "procedure f(i16 y)\n    y += 1\nprocedure main()\n    int x\n    call f(x)\n",
+    # local declaration
+    "procedure main()\n    int x\n    local i8 t\n        t += 1\n    delocal i8 t\n",
+    # cast expression
+    "procedure main()\n    int x\n    x += (u8) 300\n",
+])
+def test_sized_int_types_are_unsupported_not_error(src: str) -> None:
+    """Sized integer types (i8..u64) are valid jana2014, but their wrapping
+    needs a modular core (coq/RevMod.v); vjanus must skip cleanly (exit 3), not
+    parse-error (exit 1).  Covers declarations, parameters, locals, and casts."""
+    result = _run_vjanus(src)
+    assert result.returncode == 3, (
+        f"Expected exit 3 (unsupported), got {result.returncode}.\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert "sized integer type" in result.stderr, (
+        f"Expected a 'sized integer type …' message: {result.stderr!r}"
+    )
+
+
 @pytest.mark.parametrize("op", ["*=", "/="])
 def test_multiplicative_update_is_unsupported_not_error(op: str) -> None:
     src = (
