@@ -60,3 +60,4 @@ type program = { structs : structdef list; procs : proc list;
                  mvdecls : vdecl list; mstmts : stmt list }
 
 exception Error of string * int * int   (* message, line, column *)
+exception Unsupported of string         (* valid jana2014 vjanus cannot lower -> exit 3 *)
