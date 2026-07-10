@@ -25,9 +25,10 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevInverse RevCat RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
-Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod.
+Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
+Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
@@ -93,6 +94,8 @@ Print Assumptions ExtModFacts256.extmod_reversible.
 Print Assumptions RevExtMod.i8_cell_wraps.
 Print Assumptions RevExtractMod.Run256.run_sound.
 Print Assumptions RevExtractMod.Run256.run_injective.
+Print Assumptions SModFacts8.smod_reversible.
+Print Assumptions RevSMod.s8_wraps.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"
