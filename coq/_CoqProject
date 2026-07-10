@@ -34,3 +34,4 @@ RevIO.v
 RevMul.v
 RevLowering.v
 RevMod.v
+RevExtMod.v
