@@ -92,6 +92,7 @@ not enough.
 | `RevIO.v` | `(nat → Z) × list Z × list Z` (store + input + output streams) | `read`/`write` and their stream duals `unread`/`unwrite` | `io_reversible` |
 | `RevMul.v` | `Z` (a register) | `x *= k`, `x /= k` (relational; nonzero-factor guard, `/=` partial) | `mul_reversible` |
 | `RevMod.v` | `Z` held canonical in `[0, M)` | modular `x += k`, `x -= k` (wrapping, `mod M`) | `mod_reversible` |
+| `RevExtMod.v` | modular store `loc → Z` (scalars + array cells + local cells, each canonical in `[0, M)`) | modular `l op= e`, `l1 <=> l2`, `local`/`delocal` (values wrap `mod M`); expressions unbounded | `extmod_reversible` |
 
 `RevIO.v` gives the `jana2014_in_out` I/O dialect a *verified* reversible
 semantics (read consumes the input, its inverse pushes it back; write emits to
@@ -110,6 +111,20 @@ the modular updates `x += k` / `x -= k` are proved mutually inverse bijections.
 This is why `vjanus` (a pure `Z` machine) declines sized-int programs (exit 3):
 running them faithfully needs a modular core, and `RevMod.v` is its verified
 target.
+
+`RevExtMod.v` is that **modular core**, built the same way as `RevExt.v` (a
+`RevCore` instance with a store over scalars, array cells and local cells) but
+with every register held canonical in `[0, M)` and every assignment wrapping
+`mod M` — while expression intermediates stay unbounded, exactly matching
+PyJanus (a binary-op result is `UNBOUND`; only a store wraps).  The canonical
+guard `0 <= a l < M` baked into an update's `pstep` is what a `Z/M` cell type
+would enforce structurally; each update yields `_ mod M`, so it is preserved.
+`extmod_reversible` / `extmod_iff` come for free from the functor, giving
+reversibility of bounded-int array/local programs (the `i8` example wraps
+`250 += 10` to `4`, reversibly, in an array cell).  What remains to make `vjanus`
+*run* sized ints is the engineering step of extracting an executable interpreter
+from this core (as `RevExtractFrame.v` does for `RevFrame.v`) and threading a
+modulus through `vjanus`'s lowering.
 
 `RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
 source construct to a single core primitive (and so carry real proof
