@@ -93,6 +93,8 @@ not enough.
 | `RevMul.v` | `Z` (a register) | `x *= k`, `x /= k` (relational; nonzero-factor guard, `/=` partial) | `mul_reversible` |
 | `RevMod.v` | `Z` held canonical in `[0, M)` | modular `x += k`, `x -= k` (wrapping, `mod M`) | `mod_reversible` |
 | `RevExtMod.v` | modular store `loc → Z` (scalars + array cells + local cells, each canonical in `[0, M)`) | modular `l op= e`, `l1 <=> l2`, `local`/`delocal` (values wrap `mod M`); expressions unbounded | `extmod_reversible` |
+| `RevSMod.v` | `Z` held canonical in the signed window `[-2^(b-1), 2^(b-1))` | signed-modular `x += k`, `x -= k` (the `-m bits` register) | `smod_reversible` |
+| `RevExtSMod.v` | signed-modular store `loc → Z` (scalars + array cells + local cells, each canonical in the signed window) | signed-modular `l op= e`, `l1 <=> l2`, `local`/`delocal`; **every expression result wraps too** (the `-m bits` mode) | `extsmod_reversible` |
 
 `RevIO.v` gives the `jana2014_in_out` I/O dialect a *verified* reversible
 semantics (read consumes the input, its inverse pushes it back; write emits to
@@ -128,10 +130,25 @@ for the modular language, proved sound (`run_sound : run fuel Γ s a = Some b �
 exec Γ s a b`, hence `run_injective`) and extracted to OCaml (`janus_modular.ml`,
 at `M = 256`).  The `Prim` step goes through a functional `pstep_fn` that refines
 the relation `pstep` — the modular update's canonicity guard `0 ≤ a l < M` becomes
-a runtime test.  What remains to make `vjanus` *run* sized ints is now only the
-glue: lowering sized-int jana2014 to this core's `stmt`/`expr` and threading the
-per-program modulus (as `vjanus`'s `lower.ml` + `glue.ml` already do for the
-unbounded `RevFrame` core).
+a runtime test.
+
+Janus's **global** `-m bits` mode is semantically distinct from the per-variable
+sized types above: it wraps *every* value — expression intermediates included —
+into the **signed** window `[-2^(b-1), 2^(b-1))` (PyJanus's `_normalize_int`
+falls through to the `mod_bits` branch on every binary-operator result, not just
+at assignment).  `RevSMod.v` verifies the signed wrap `norm` itself (lands in the
+window, is a ring map onto it, and its wrapping updates are mutually inverse
+bijections — checked against PyJanus's `-m 8` output directly: `100 += 50`
+wraps to `-106` in both).  `RevExtSMod.v` threads that wrap through `eval`
+itself (so `(100 + 50) - 90` wraps mid-computation to `60`, again checked against
+`-m 8`), giving `extsmod_reversible` for a genuinely `-m`-faithful store core.
+`RevExtractSMod.v` extracts its runnable, sound interpreter to OCaml
+(`janus_smod.ml`, at `bits = 8`) the same way as `RevExtractMod.v`.
+
+What remains to make `vjanus` *run* sized ints or `-m` is now only the glue:
+lowering jana2014 to the relevant core's `stmt`/`expr` and threading the modulus
+(per-variable for `i8`/…, or global for `-m bits`) — as `vjanus`'s `lower.ml` +
+`glue.ml` already do for the unbounded `RevFrame` core.
 
 `RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
 source construct to a single core primitive (and so carry real proof
