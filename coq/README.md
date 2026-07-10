@@ -121,10 +121,17 @@ guard `0 <= a l < M` baked into an update's `pstep` is what a `Z/M` cell type
 would enforce structurally; each update yields `_ mod M`, so it is preserved.
 `extmod_reversible` / `extmod_iff` come for free from the functor, giving
 reversibility of bounded-int array/local programs (the `i8` example wraps
-`250 += 10` to `4`, reversibly, in an array cell).  What remains to make `vjanus`
-*run* sized ints is the engineering step of extracting an executable interpreter
-from this core (as `RevExtractFrame.v` does for `RevFrame.v`) and threading a
-modulus through `vjanus`'s lowering.
+`250 += 10` to `4`, reversibly, in an array cell).
+
+`RevExtractMod.v` makes that core **runnable**: a fuel-bounded interpreter [run]
+for the modular language, proved sound (`run_sound : run fuel Γ s a = Some b →
+exec Γ s a b`, hence `run_injective`) and extracted to OCaml (`janus_modular.ml`,
+at `M = 256`).  The `Prim` step goes through a functional `pstep_fn` that refines
+the relation `pstep` — the modular update's canonicity guard `0 ≤ a l < M` becomes
+a runtime test.  What remains to make `vjanus` *run* sized ints is now only the
+glue: lowering sized-int jana2014 to this core's `stmt`/`expr` and threading the
+per-program modulus (as `vjanus`'s `lower.ml` + `glue.ml` already do for the
+unbounded `RevFrame` core).
 
 `RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
 source construct to a single core primitive (and so carry real proof

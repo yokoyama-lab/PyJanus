@@ -35,3 +35,4 @@ RevMul.v
 RevLowering.v
 RevMod.v
 RevExtMod.v
+RevExtractMod.v

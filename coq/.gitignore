@@ -22,6 +22,8 @@ janus_arr.ml
 janus_arr.mli
 janus_frame.ml
 janus_frame.mli
+janus_modular.ml
+janus_modular.mli
 *.cmo
 *.cmi
 
