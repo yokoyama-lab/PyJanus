@@ -1,0 +1,118 @@
+// mergesort using internally optimal garbage with optimal garbage
+// Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.31
+
+procedure merge(int a[], int p, int q, int r, int ord[])
+  local stack ll = nil // temporary stack
+  local stack ll_o = nil // temporary stack
+  local stack rr = nil // temporary stack
+  local stack rr_o = nil // temporary stack
+  local int n1 = q - p + 1
+    local int n2 = r - q
+      local int i = n1
+        // show(n1,n2,i)
+        from  i = n1
+        do    local int t = a[p+i-1]   // push(a[p+i-1],ll)
+                a[p+i-1] ^= t
+                push(t,ll)
+              delocal int t = 0
+	      local int t = ord[p+i-1]   // push(ord[p+i-1],ll_o)
+                ord[p+i-1] ^= t
+                push(t,ll_o)
+              delocal int t = 0
+        loop  i -= 1
+        until i = 1
+      delocal int i = 1
+      local int j = n2
+        from  j = n2
+        do    local int t = a[q+j]   // push(a[q+j],rr)
+                a[q+j] ^= t
+                push(t,rr)
+              delocal int t = 0
+              local int t = ord[q+j]   // push(ord[q+j],rr_o)
+                ord[q+j] ^= t
+                push(t,rr_o)
+              delocal int t = 0
+        loop  j -= 1
+        until j = 1
+      delocal int j = 1
+      // show(ll,rr,p)
+      local int k = p
+        from  k = p
+        loop  if empty(rr) || ((!empty(ll)) && (top(ll) <= top(rr))) then
+                local int t = 0   // pop(a[k],ll)
+                  pop(t,ll)
+                  a[k] ^= t
+                delocal int t = a[k]
+                local int t = 0   // pop(ord[k],ll_o)
+                  pop(t,ll_o)
+                  ord[k] ^= t
+                delocal int t = ord[k]
+                // local int t = 1   // push(1,gbg)
+                //   push(t,gbg)
+                // delocal int t = 0
+              else
+                local int t = 0   // pop(a[k],rr)
+                  pop(t,rr)
+                  a[k] ^= t
+                delocal int t = a[k]
+                local int t = 0   // pop(ord[k],rr_o)
+                  pop(t,rr_o)
+                  ord[k] ^= t
+                delocal int t = ord[k]
+                // local int t = -1  // push(-1,gbg)
+                //   push(t,gbg)
+                // delocal int t = 0
+              // fi top(gbg) = 1
+              fi ord[k] <= q
+              k += 1
+        until empty(ll) && empty(rr)
+      delocal int k = r + 1
+    delocal int n2 = r - q
+  delocal int n1 = q - p + 1
+  delocal stack rr_o = nil
+  delocal stack rr = nil
+  delocal stack ll_o = nil
+  delocal stack ll = nil
+
+procedure msort(int a[], int p, int r, int ord[])
+  if p < r then
+    local int q = (p+r) / 2
+      call msort(a,p,q,ord)
+      q += 1
+      call msort(a,q,r,ord)
+      q -= 1
+      call merge(a,p,q,r,ord)
+    delocal int q = (p+r) / 2
+  fi p < r
+
+procedure main()
+  int a[8]     // input array
+  int ord[8]   // order
+  stack gbg    // garbage stack
+  int gbfg     // garbage
+  int p
+  int r
+
+  // p.35
+  a[0]  += 5
+  a[1]  += 2
+  a[2]  += 4
+  a[3]  += 7
+  a[4]  += 1
+  a[5]  += 3
+  a[6]  += 2
+  a[7]  += 6
+
+  ord[0]  += 0
+  ord[1]  += 1
+  ord[2]  += 2
+  ord[3]  += 3
+  ord[4]  += 4
+  ord[5]  += 5
+  ord[6]  += 6
+  ord[7]  += 7
+
+  r += 7
+  call msort(a,p,r,ord)
+
+  // uncall msort(ord,p,r,gbg)

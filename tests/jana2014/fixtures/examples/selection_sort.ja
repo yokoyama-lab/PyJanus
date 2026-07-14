@@ -1,0 +1,77 @@
+//////////////////////////////////////////////////////////////////////
+// selection sort with optimal garbage (linear size)
+// Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.29 Exercise 2.2-2
+//////////////////////////////////////////////////////////////////////
+
+// set the maximum of a[j..n-1] to p
+procedure max(int p, int j, int a[], int n)
+  local stack gb = nil
+    call max_sub(p,j,a,n,gb)
+    local int pp = p
+      uncall max_sub(pp,j,a,n,gb)
+    delocal int pp = 0
+  delocal stack gb = nil
+
+procedure max_sub(int p, int j, int a[], int n, stack gb)
+  p ^= j
+  j += 1
+  from  empty(gb)
+  loop  if a[p] > a[j] then
+          push(p,gb)
+          p ^= j
+          local int t = 1   // push(1,gb)
+            push(t,gb)
+          delocal int t = 0
+        else
+          local int t = -1  // push(-1,gb)
+            push(t,gb)
+          delocal int t = 0
+        fi top(gb) = 1
+        j += 1
+  until j=n
+
+procedure ssort_sub(int a[], int n, int ftab[])
+  local int i = 0
+    from  i = 0
+    loop  local int j = i
+            local int p = 0
+              call max(p,j,a,n)
+              local int t1 = a[j] ^ a[p] // a[j] <=> a[p]
+                a[j] ^= t1
+                a[p] ^= t1
+              delocal int t1 = a[j] ^ a[p]
+              ftab[j] ^= p - i
+            delocal int p = ftab[j] + i
+          delocal int j = i
+          i += 1
+    until i = n
+  delocal int i = n
+
+procedure id_perm(int p[], int n)
+  local int i = 0
+    from  i = 0
+    loop  p[i] ^= i
+          i += 1
+    until i = n
+  delocal int i = n
+
+procedure ssort(int a[], int n, int ftab[], int p[])
+  call ssort_sub(a,n,ftab)
+  // call id_perm(p,n)
+  // uncall ssort_sub(p,n,ftab)
+
+procedure main()
+  int a[6]     // input array
+  int n        // size of stk[]
+  int ftab[6]  // factorial table
+  int p[6]     // permutation
+
+  n += 6
+  a[0] += 50
+  a[1] += 20
+  a[2] += 40
+  a[3] += 60
+  a[4] += 10
+  a[5] += 30
+
+  call ssort(a,n,ftab,p)
