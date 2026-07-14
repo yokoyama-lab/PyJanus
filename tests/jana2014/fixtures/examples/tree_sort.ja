@@ -1,0 +1,216 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Comparison Sort, general case (via reversible AVL tree)
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1,
+//   Theorem 6.5 (reversible comparison sort of n d-bit elements:
+//   Theta(n lg n) time, Theta(n d) auxiliary space, 0 energy).
+//
+// When elements are small (d = o(lg n)) the index-augmented merge sort
+// (msort2.j, Thm 6.4) is not space-optimal.  The paper's remedy reduces
+// the array to its *unique keys* using a reversible AVL tree and then
+// does a Counting Sort consulting that tree.  This file realizes that
+// composition directly as a reversible AVL *tree sort*:
+//   * insert every element into a reversible AVL tree; a duplicate key
+//     only bumps a per-node multiplicity cnt[] (this is the counting
+//     part -- the tree stores each distinct key once),
+//   * an in-order walk of the tree emits each key cnt[] times into the
+//     output, in sorted order.
+// Every step is a reversible AVL operation, so `uncall sort` restores the
+// empty tree and a zero output: 0 energy.
+//   forward: (a preserved) -> (a, b sorted, AVL tree of distinct keys)
+//////////////////////////////////////////////////////////////////////
+
+procedure setchild(int arr[], int node, int val, stack alog)
+  local int old = 0
+    old ^= arr[node]
+    arr[node] ^= old
+    push(old,alog)
+  delocal int old = 0
+  arr[node] ^= val
+
+procedure setroot(int root, int val, stack alog)
+  local int old = 0
+    old ^= root
+    root ^= old
+    push(old,alog)
+  delocal int old = 0
+  root ^= val
+
+procedure hmax(int ht[], int ia, int ib, int out)
+  if ht[ia] < ht[ib] then out ^= ht[ib] else out ^= ht[ia] fi ht[ia] < ht[ib]
+
+procedure upht(int ht[], int left[], int right[], int node, stack hlog)
+  local int m = 0
+    call hmax(ht,left[node],right[node],m)
+    local int old = 0
+      old ^= ht[node]
+      ht[node] ^= old
+      push(old,hlog)
+    delocal int old = 0
+    ht[node] ^= m
+    ht[node] += 1
+  delocal int m = ht[node] - 1
+
+procedure rot_right(int key[], int left[], int right[], int ht[],
+                    int p, int ret, stack alog, stack hlog)
+  local int l = left[p]
+    call setchild(left,p,right[l],alog)
+    call setchild(right,l,p,alog)
+    call upht(ht,left,right,p,hlog)
+    call upht(ht,left,right,l,hlog)
+    ret ^= l
+  delocal int l = ret
+
+procedure rot_left(int key[], int left[], int right[], int ht[],
+                   int p, int ret, stack alog, stack hlog)
+  local int r = right[p]
+    call setchild(right,p,left[r],alog)
+    call setchild(left,r,p,alog)
+    call upht(ht,left,right,p,hlog)
+    call upht(ht,left,right,r,hlog)
+    ret ^= r
+  delocal int r = ret
+
+procedure rebalance(int key[], int left[], int right[], int ht[],
+                    int node, int ret, stack alog, stack hlog, stack rlog)
+  call upht(ht,left,right,node,hlog)
+  local int bf = ht[left[node]] - ht[right[node]]
+    local int code = 0
+      if bf > 1 then
+        local int lbf = ht[left[left[node]]] - ht[right[left[node]]]
+          if lbf < 0 then code += 3 else code += 1 fi lbf < 0
+        delocal int lbf = ht[left[left[node]]] - ht[right[left[node]]]
+      else
+        if bf < -1 then
+          local int rbf = ht[left[right[node]]] - ht[right[right[node]]]
+            if rbf > 0 then code += 4 else code += 2 fi rbf > 0
+          delocal int rbf = ht[left[right[node]]] - ht[right[right[node]]]
+        fi bf < -1
+      fi bf > 1
+      push(code,rlog)
+    delocal int code = 0
+  delocal int bf = ht[left[node]] - ht[right[node]]
+  if top(rlog) = 1 then
+    call rot_right(key,left,right,ht,node,ret,alog,hlog)
+  else
+    if top(rlog) = 2 then
+      call rot_left(key,left,right,ht,node,ret,alog,hlog)
+    else
+      if top(rlog) = 3 then
+        local int sub = 0
+          call rot_left(key,left,right,ht,left[node],sub,alog,hlog)
+          call setchild(left,node,sub,alog)
+        delocal int sub = left[node]
+        call rot_right(key,left,right,ht,node,ret,alog,hlog)
+      else
+        if top(rlog) = 4 then
+          local int sub = 0
+            call rot_right(key,left,right,ht,right[node],sub,alog,hlog)
+            call setchild(right,node,sub,alog)
+          delocal int sub = right[node]
+          call rot_left(key,left,right,ht,node,ret,alog,hlog)
+        else
+          ret ^= node
+        fi top(rlog) = 4
+      fi top(rlog) = 3
+    fi top(rlog) = 2
+  fi top(rlog) = 1
+
+// insert x, incrementing cnt on a duplicate key; new subtree root -> ret
+procedure bins(int key[], int left[], int right[], int ht[], int cnt[],
+               int node, int x, int nfree, int ret,
+               stack alog, stack hlog, stack rlog)
+  if node = 0 then
+    ret ^= nfree
+    key[nfree] ^= x
+    ht[nfree] ^= 1
+    cnt[nfree] ^= 1
+    nfree += 1
+  else
+    if x < key[node] then
+      local int subret = 0
+        call bins(key,left,right,ht,cnt,left[node],x,nfree,subret,alog,hlog,rlog)
+        call setchild(left,node,subret,alog)
+      delocal int subret = left[node]
+      call rebalance(key,left,right,ht,node,ret,alog,hlog,rlog)
+    else
+      if x > key[node] then
+        local int subret = 0
+          call bins(key,left,right,ht,cnt,right[node],x,nfree,subret,alog,hlog,rlog)
+          call setchild(right,node,subret,alog)
+        delocal int subret = right[node]
+        call rebalance(key,left,right,ht,node,ret,alog,hlog,rlog)
+      else
+        cnt[node] += 1          // duplicate key: bump multiplicity
+        ret ^= node
+      fi x > key[node]
+    fi x < key[node]
+  fi node = 0
+
+procedure insert(int key[], int left[], int right[], int ht[], int cnt[],
+                 int root, int x, int nfree,
+                 stack alog, stack hlog, stack rlog)
+  local int subret = 0
+    call bins(key,left,right,ht,cnt,root,x,nfree,subret,alog,hlog,rlog)
+    call setroot(root,subret,alog)
+  delocal int subret = root
+
+// in-order walk: append key[node] cnt[node] times to b[], advancing pos
+procedure inorder(int key[], int left[], int right[], int cnt[],
+                  int node, int b[], int pos)
+  if node = 0 then
+    skip
+  else
+    call inorder(key,left,right,cnt,left[node],b,pos)
+    local int i = 0
+      from  i = 0
+      loop  b[pos] ^= key[node]
+            pos += 1
+            i += 1
+      until i = cnt[node]
+    delocal int i = cnt[node]
+    call inorder(key,left,right,cnt,right[node],b,pos)
+  fi node = 0
+
+procedure treesort(int a[], int n, int b[],
+                   int key[], int left[], int right[], int ht[], int cnt[],
+                   int root, int nfree, stack alog, stack hlog, stack rlog)
+  // build the reversible AVL tree of distinct keys with multiplicities
+  local int j = 0
+    from  j = 0
+    loop  call insert(key,left,right,ht,cnt,root,a[j],nfree,alog,hlog,rlog)
+          j += 1
+    until j = n
+  delocal int j = n
+  // emit sorted output by in-order traversal
+  local int pos = 0
+    call inorder(key,left,right,cnt,root,b,pos)
+  delocal int pos = n
+
+procedure main()
+  int a[6]        // input (small domain, with duplicates)
+  int n
+  int b[6]        // sorted output
+  int key[7]      // AVL node arrays (index 0 = null; up to n distinct keys)
+  int left[7]
+  int right[7]
+  int ht[7]
+  int cnt[7]      // per-node multiplicity
+  int root
+  int nfree
+  stack alog
+  stack hlog
+  stack rlog
+
+  n += 6
+  nfree += 1
+
+  a[0] += 3
+  a[1] += 1
+  a[2] += 2
+  a[3] += 3
+  a[4] += 1
+  a[5] += 3
+
+  call treesort(a,n,b,key,left,right,ht,cnt,root,nfree,alog,hlog,rlog)
+  // expected b = {1, 1, 2, 3, 3, 3}
