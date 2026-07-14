@@ -1,0 +1,54 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Duplicated Insertion Sort
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1.1,
+//   Theorem 6.6 (Reversible Duplicated Insertion Sort:
+//   Theta(n^2) time, Theta(n) space, 0 energy).
+//
+// For each element a[i], count how many elements are strictly smaller
+// (its rank), write it to b[rank], then UNROLL the counting so the
+// counter returns to zero.  Only the writes to b survive, so the
+// procedure is reversible.  Requires distinct keys (as does the
+// pseudocode B[count]=A[i] in the paper).
+//   forward : (a, b=0) -> (a, b sorted)
+//   uncall  : restores b=0 from (a, b).
+//////////////////////////////////////////////////////////////////////
+
+// count += number of elements of a[] strictly smaller than a[i]
+procedure rank(int a[], int i, int n, int count)
+  local int j = 0
+    from  j = 0
+    loop  if a[i] > a[j] then
+            count += 1
+          fi a[i] > a[j]
+          j += 1
+    until j = n
+  delocal int j = n
+
+procedure disort(int a[], int n, int b[])
+  local int i = 0
+    from  i = 0
+    loop  local int count = 0
+            call rank(a,i,n,count)     // count = rank of a[i]
+            b[count] ^= a[i]           // place element
+            uncall rank(a,i,n,count)   // unroll: count back to 0
+          delocal int count = 0
+          i += 1
+    until i = n
+  delocal int i = n
+
+procedure main()
+  int a[6]   // input (distinct keys)
+  int b[6]   // sorted output
+  int n
+
+  n += 6
+  a[0] += 50
+  a[1] += 20
+  a[2] += 40
+  a[3] += 60
+  a[4] += 10
+  a[5] += 30
+
+  call disort(a,n,b)
+  // expected b = {10, 20, 30, 40, 50, 60}

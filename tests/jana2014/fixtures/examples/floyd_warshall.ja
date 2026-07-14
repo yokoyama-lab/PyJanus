@@ -1,0 +1,79 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Floyd-Warshall (all-pairs shortest paths)
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.4,
+//   Theorem 6.20 (Reversible Floyd-Warshall: Theta(V^3) time,
+//   O(V^3) space, 0 energy; cf. Frank99).
+//
+// path[i*V+j] holds the current shortest distance i->j (0 on the
+// diagonal, inf when no path is known yet).  For every (k,i,j):
+//   path[i][j] = min(path[i][j], path[i][k] + path[k][j]).
+// Made reversible by: uncomputing the candidate sum after use, logging
+// each overwritten path[i][j] (dlog), and logging one decision bit per
+// triple (blog) so the "if sum < path[i][j]" branch is reversible.
+// (When a relaxation fires we have i!=k and j!=k, so the cells feeding
+// `sum` are never the cell being overwritten.)  0 energy.
+//   outputs: path[] (shortest paths), logs dlog/blog.
+//////////////////////////////////////////////////////////////////////
+
+procedure floyd_warshall(int path[], int v_n, stack dlog, stack blog)
+  local int k = 0
+    from  k = 0
+    loop  local int i = 0
+            from  i = 0
+            loop  local int j = 0
+                    from  j = 0
+                    loop  local int sum = path[i*v_n+k] + path[k*v_n+j]
+                            if sum < path[i*v_n+j] then
+                              local int od = 0
+                                od ^= path[i*v_n+j]
+                                path[i*v_n+j] ^= od
+                                push(od,dlog)
+                              delocal int od = 0
+                              path[i*v_n+j] ^= sum
+                              local int one = 1
+                                push(one,blog)
+                              delocal int one = 0
+                            else
+                              local int zero = 0
+                                push(zero,blog)
+                              delocal int zero = 0
+                            fi top(blog) = 1
+                          delocal int sum = path[i*v_n+k] + path[k*v_n+j]
+                          j += 1
+                    until j = v_n
+                  delocal int j = v_n
+                  i += 1
+            until i = v_n
+          delocal int i = v_n
+          k += 1
+    until k = v_n
+  delocal int k = v_n
+
+procedure main()
+  int path[16]   // 4x4 distance matrix
+  int v_n
+  int inf
+  stack dlog     // overwritten-distance log
+  stack blog     // per-triple relaxation-decision bits
+
+  v_n += 4
+  inf += 10000
+
+  // directed edges: 0->1:5  0->3:10  1->2:3  2->3:1
+  path[0*4+1] += 5
+  path[0*4+3] += 10
+  path[1*4+2] += 3
+  path[2*4+3] += 1
+  // all other off-diagonal cells are inf (diagonal stays 0)
+  path[0*4+2] += inf
+  path[1*4+0] += inf
+  path[1*4+3] += inf
+  path[2*4+0] += inf
+  path[2*4+1] += inf
+  path[3*4+0] += inf
+  path[3*4+1] += inf
+  path[3*4+2] += inf
+
+  call floyd_warshall(path,v_n,dlog,blog)
+  // expected row0={0,5,8,9} row1={inf,0,3,4} row2={inf,inf,0,1} row3={inf,inf,inf,0}

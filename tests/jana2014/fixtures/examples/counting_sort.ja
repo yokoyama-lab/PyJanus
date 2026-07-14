@@ -1,0 +1,64 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Counting Sort
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1.2.
+//   cf. Cormen et al., Introduction to Algorithms 3rd ed., p.195.
+//
+// Sorts input array A (n elements, keys in 0..k-1) into B, using a
+// count/offset array C of size k.  Written as a pure Janus procedure,
+// so it is reversible by construction (0-energy in the paper's model):
+//   forward : (A, B=0, C=0) -> (A, B sorted, C = start offsets)
+//   uncall  : restores B=0 and C=0 from (A, B, C).
+// A is preserved throughout; C is retained as the reversible log
+// (size k), matching Theorem 6.13 (Reversible Counting Sort).
+//////////////////////////////////////////////////////////////////////
+
+procedure csort(int a[], int n, int b[], int c[], int k)
+  // (1) histogram: c[v] = number of elements of a equal to v
+  local int i = 0
+    from  i = 0
+    loop  c[a[i]] += 1
+          i += 1
+    until i = n
+  delocal int i = n
+
+  // (2) inclusive prefix sums: c[v] = number of elements <= v
+  local int i = 1
+    from  i = 1
+    loop  c[i] += c[i-1]
+          i += 1
+    until i = k
+  delocal int i = k
+
+  // (3) place each element (scan right-to-left for stability):
+  //     decrement the running offset, then drop the element there.
+  local int j = n
+    from  j = n
+    loop  j -= 1
+          c[a[j]] -= 1
+          b[c[a[j]]] ^= a[j]
+    until j = 0
+  delocal int j = 0
+  // c[v] now holds the exclusive prefix sum (start offset of value v).
+
+procedure main()
+  int a[8]   // input
+  int b[8]   // sorted output
+  int c[6]   // counts / offsets (keys in 0..5)
+  int n
+  int k
+
+  n += 8
+  k += 6
+
+  a[0] += 2
+  a[1] += 5
+  a[2] += 3
+  a[3] += 0
+  a[4] += 2
+  a[5] += 3
+  a[6] += 0
+  a[7] += 3
+
+  call csort(a,n,b,c,k)
+  // expected b = {0, 0, 2, 2, 3, 3, 3, 5}

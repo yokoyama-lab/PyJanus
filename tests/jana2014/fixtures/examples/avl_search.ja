@@ -1,0 +1,62 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible AVL Tree -- Search
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3,
+//   Theorem 6.9 (reversible Search: Theta(lg n) time, O(1) space,
+//   0 energy).
+//
+// The tree is array-based: node i has key[i], left[i], right[i], with
+// index 0 meaning "null" (key[0] is a sentinel never equal to any key).
+// Search descends comparing x to each node, pushing the visited node
+// onto a stack `ns`.  Because the comparison never alters its operands,
+// the branch is reversible; once the answer index is copied out, the
+// descent is *uncalled* to erase the stack, leaving only `res`
+// (Bennett compute-copy-uncompute).  0 energy.
+//////////////////////////////////////////////////////////////////////
+
+// descend from `cur` (=root) to the matching node or to null, recording
+// the path on ns.  On exit cur = index of x (key match) or 0 (absent).
+procedure descend(int key[], int left[], int right[], int x, int cur, stack ns)
+  from  empty(ns)          // true only on first entry (stack starts empty)
+  loop  push(cur,ns)
+        if x < key[top(ns)] then
+          cur ^= left[top(ns)]
+        else
+          cur ^= right[top(ns)]
+        fi x < key[top(ns)]
+  until cur = 0 || key[cur] = x
+
+procedure avl_search(int key[], int left[], int right[], int root, int x, int res)
+  local int cur = root
+    local stack ns = nil
+      call descend(key,left,right,x,cur,ns)   // cur = found index or 0
+      res ^= cur                                // copy the answer out
+      uncall descend(key,left,right,x,cur,ns)   // erase path, cur -> root
+    delocal stack ns = nil
+  delocal int cur = root
+
+procedure main()
+  int key[8]
+  int left[8]
+  int right[8]
+  int root
+  int res5    // search result for x=5
+  int res8    // search result for x=8 (absent)
+
+  // sentinel for the null slot
+  key[0] -= 999
+
+  // balanced tree:        4
+  //                     /   \
+  //                    2     6
+  //                   / \   / \
+  //                  1   3 5   7
+  key[1]+=1  key[2]+=2  key[3]+=3  key[4]+=4
+  key[5]+=5  key[6]+=6  key[7]+=7
+  left[4]+=2  right[4]+=6
+  left[2]+=1  right[2]+=3
+  left[6]+=5  right[6]+=7
+  root += 4
+
+  call avl_search(key,left,right,root,5,res5)   // res5 = 5
+  call avl_search(key,left,right,root,8,res8)   // res8 = 0 (absent)
