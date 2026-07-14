@@ -1,0 +1,54 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Depth-First Search (adjacency matrix, recursive)
+// cf. Nunez de Villavicencio, Demaine et al., "Energy-Efficient
+//   Algorithms" (arXiv:1605.08448), Section 6.2 -- Frank argues BFS and
+//   DFS can both be done reversibly; this is the DFS counterpart of
+//   bfs.j.  A pure Janus procedure, hence reversible (0 energy).
+//
+// adj[u*V+v] = 1 for edge u->v.  DFS from a source records the preorder
+// visit sequence in order[] and marks visited[].  Each edge examination
+// logs one decision bit on `blog` (did we recurse into v here?), pushed
+// at the END of the branch so top(blog) is a valid reversible exit
+// assertion even though the branch mutates its own visited[] condition.
+//   outputs: visited[], order[] (DFS preorder), blog.
+//////////////////////////////////////////////////////////////////////
+
+procedure dfs(int adj[], int v_n, int u, int visited[], int order[], int cnt, stack blog)
+  visited[u] += 1
+  order[cnt] ^= u
+  cnt += 1
+  local int v = 0
+    from  v = 0
+    loop  if adj[u*v_n+v] = 1 && visited[v] = 0 then
+            call dfs(adj,v_n,v,visited,order,cnt,blog)
+            local int b = 1
+              push(b,blog)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,blog)
+            delocal int b = 0
+          fi top(blog) = 1
+          v += 1
+    until v = v_n
+  delocal int v = v_n
+
+procedure main()
+  int adj[25]     // 5x5 adjacency matrix
+  int v_n
+  int visited[5]
+  int order[5]    // preorder visit sequence
+  int cnt
+  stack blog      // per-edge recursion-decision bits
+
+  v_n += 5
+
+  // directed edges: 0->1 0->2 1->3 2->3 3->4
+  adj[0*5+1] += 1
+  adj[0*5+2] += 1
+  adj[1*5+3] += 1
+  adj[2*5+3] += 1
+  adj[3*5+4] += 1
+
+  call dfs(adj,v_n,0,visited,order,cnt,blog)
+  // expected order = {0, 1, 3, 4, 2}, visited = {1,1,1,1,1}
