@@ -1,0 +1,69 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Edit Distance (Levenshtein, dynamic programming)
+//
+// D[i][j] = minimum insert/delete/substitute operations to turn x[1..i]
+// into y[1..j].  Base: D[i][0]=i, D[0][j]=j.  Recurrence:
+//   D[i][j] = D[i-1][j-1]                              if x[i] = y[j]
+//           = 1 + min(D[i-1][j], D[i][j-1], D[i-1][j-1])  otherwise
+// As with lcs.j the full table is retained and every cell is written
+// once from neighbours only, so all branch conditions are stable and the
+// DP is reversible by construction -- no logging (0 energy).
+// D[m][n] is the edit distance.
+//////////////////////////////////////////////////////////////////////
+
+procedure edit_distance(int x[], int m, int y[], int n, int D[])
+  // base row D[0][j] = j  and column D[i][0] = i
+  local int j = 0
+    from  j = 0
+    loop  D[j] += j
+          j += 1
+    until j = n+1
+  delocal int j = n+1
+  local int i = 1
+    from  i = 1
+    loop  D[i*(n+1)] += i
+          i += 1
+    until i = m+1
+  delocal int i = m+1
+
+  // fill the interior
+  local int i = 1
+    from  i = 1
+    loop  local int j = 1
+            from  j = 1
+            loop  if x[i] = y[j] then
+                    D[i*(n+1)+j] += D[(i-1)*(n+1)+(j-1)]
+                  else
+                    // D[i][j] := min of the three neighbours ...
+                    if D[(i-1)*(n+1)+j] <= D[i*(n+1)+(j-1)] && D[(i-1)*(n+1)+j] <= D[(i-1)*(n+1)+(j-1)] then
+                      D[i*(n+1)+j] += D[(i-1)*(n+1)+j]
+                    else
+                      if D[i*(n+1)+(j-1)] <= D[(i-1)*(n+1)+(j-1)] then
+                        D[i*(n+1)+j] += D[i*(n+1)+(j-1)]
+                      else
+                        D[i*(n+1)+j] += D[(i-1)*(n+1)+(j-1)]
+                      fi D[i*(n+1)+(j-1)] <= D[(i-1)*(n+1)+(j-1)]
+                    fi D[(i-1)*(n+1)+j] <= D[i*(n+1)+(j-1)] && D[(i-1)*(n+1)+j] <= D[(i-1)*(n+1)+(j-1)]
+                    D[i*(n+1)+j] += 1          // ... plus one operation
+                  fi x[i] = y[j]
+                  j += 1
+            until j = n+1
+          delocal int j = n+1
+          i += 1
+    until i = m+1
+  delocal int i = m+1
+
+procedure main()
+  int x[8]     // x[0] unused; "kitten"  (k=1 i=2 t=3 e=4 n=5)
+  int y[8]     // y[0] unused; "sitting" (s=6 g=7)
+  int m
+  int n
+  int D[64]    // (m+1) x (n+1) = 7 x 8 (row stride n+1 = 8; 56 used of 64)
+
+  m += 6
+  n += 7
+  x[1]+=1 x[2]+=2 x[3]+=3 x[4]+=3 x[5]+=4 x[6]+=5              // k i t t e n
+  y[1]+=6 y[2]+=2 y[3]+=3 y[4]+=3 y[5]+=2 y[6]+=5 y[7]+=7      // s i t t i n g
+
+  call edit_distance(x,m,y,n,D)
+  // answer D[m*(n+1)+n] = D[6*8+7] = D[55] = 3  (kitten -> sitting)

@@ -1,0 +1,49 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Longest Common Subsequence (dynamic programming)
+//
+// Fills the classic LCS table L[i][j] = length of the LCS of x[1..i] and
+// y[1..j].  Row/column 0 are the (zero) base case.  Each cell is written
+// exactly once as a pure function of already-filled neighbours:
+//   L[i][j] = L[i-1][j-1] + 1              if x[i] = y[j]
+//           = max(L[i-1][j], L[i][j-1])    otherwise
+// The whole table is retained, so nothing is overwritten and every
+// branch condition reads only neighbours (never the cell being written).
+// Hence the DP is reversible BY CONSTRUCTION -- no logging needed
+// (0 energy).  L[m][n] holds the answer.
+//////////////////////////////////////////////////////////////////////
+
+procedure lcs(int x[], int m, int y[], int n, int L[])
+  local int i = 1
+    from  i = 1
+    loop  local int j = 1
+            from  j = 1
+            loop  if x[i] = y[j] then
+                    L[i*(n+1)+j] += L[(i-1)*(n+1)+(j-1)] + 1
+                  else
+                    if L[(i-1)*(n+1)+j] >= L[i*(n+1)+(j-1)] then
+                      L[i*(n+1)+j] += L[(i-1)*(n+1)+j]
+                    else
+                      L[i*(n+1)+j] += L[i*(n+1)+(j-1)]
+                    fi L[(i-1)*(n+1)+j] >= L[i*(n+1)+(j-1)]
+                  fi x[i] = y[j]
+                  j += 1
+            until j = n+1
+          delocal int j = n+1
+          i += 1
+    until i = m+1
+  delocal int i = m+1
+
+procedure main()
+  int x[8]     // x[0] unused; A B C B D A B  (A=1 B=2 C=3 D=4)
+  int y[6]     // y[0] unused; B D C A B
+  int m
+  int n
+  int L[48]    // (m+1) x (n+1) = 8 x 6 table, row-major stride n+1 = 6
+
+  m += 7
+  n += 5
+  x[1]+=1 x[2]+=2 x[3]+=3 x[4]+=2 x[5]+=4 x[6]+=1 x[7]+=2
+  y[1]+=2 y[2]+=4 y[3]+=3 y[4]+=1 y[5]+=2
+
+  call lcs(x,m,y,n,L)
+  // answer L[m*(n+1)+n] = L[7*6+5] = L[47] = 4  (e.g. "BCAB" / "BDAB")
