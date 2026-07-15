@@ -1,0 +1,167 @@
+/*
+ * Reversible binary (min-)heap -- verified-subset-compliant version.
+ * Realizes the reversible binary heap of "Energy-Efficient Algorithms"
+ * (arXiv:1605.08448), Theorems 6.7/6.8 (insert / extract-min reversibly,
+ * 0 energy).
+ *
+ * Adapted from S. V. Nohr, "Reversible Graph Algorithms", BSc thesis,
+ * Copenhagen University (2015).  This variant avoids constructs outside
+ * the verified (vjanus / RevExtract) and C-codegen subset: no
+ * multi-declaration locals, no array literals, no size(), no error(),
+ * and only constant array sizes.  Behaviour is identical to
+ * minheap_Nohr2015.j.
+ */
+
+procedure insert(int A[], int heapsize, int key, int garbage[], int garbagecounter)
+    heapsize += 1
+    call decreasekey(A, heapsize, key, garbage, garbagecounter)
+
+procedure decreasekey(int A[], int i, int key,
+                      int garbage[], int garbagecounter)
+    local int tmp = i
+    garbage[garbagecounter] += A[i] - key   // store the difference as the log
+    A[i] -= garbage[garbagecounter]
+
+    local int loopcond = 1
+    from loopcond = 1 && garbagecounter = 0 do
+        garbagecounter += 1
+        local int parent = 0
+        call parent(tmp, parent)
+        garbage[garbagecounter] += tmp
+
+        if tmp <= 1 || A[parent] <= A[tmp] then
+            loopcond -= 1
+        else
+            A[tmp] <=> A[parent]
+            tmp -= garbage[garbagecounter]
+            tmp += parent
+        fi loopcond = 0
+
+        uncall parent(garbage[garbagecounter], parent)
+        delocal int parent = 0
+    until loopcond = 0
+    delocal int loopcond = 0
+    delocal int tmp = garbage[garbagecounter]
+
+procedure minimum(int A[], int min)
+    min += A[1]
+
+procedure extractmin(int A[], int heapsize, int min,
+                     int heapgarbage[])
+    // Extract minimum element (root), park a sentinel, swap to the end.
+    min += A[1]
+    A[1] -= min
+    A[1] += 1000000        // "infinity" sentinel (kept within 32-bit int for C codegen parity)
+    A[1] <=> A[heapsize]
+    heapsize -= 1
+    local int garbagecounter = 0
+    call minheapify(A, heapsize, 1, heapgarbage, garbagecounter)
+    delocal int garbagecounter = 0
+
+procedure minheapify(int A[], int heapsize, int i,
+                     int heapgarbage[], int garbagecounter)
+    local int left = 0
+    local int right = 0
+    local int min = 0
+    call left(i, left)
+    call right(i, right)
+
+    // smallest among i and its two children
+    if left <= heapsize && A[left] < A[i] then
+        min += left
+        if right <= heapsize && A[right] < A[min] then
+            min -= left
+            min += right
+        fi right <= heapsize && A[right] < A[left]
+    else
+        min += i
+        if right <= heapsize && A[right] < A[min] then
+            min -= i
+            min += right
+        fi right <= heapsize && A[right] < A[i]
+    fi left <= heapsize && A[left] < A[i]
+
+    heapgarbage[garbagecounter] += min
+    garbagecounter += 1
+
+    if min != i then
+        A[i] <=> A[min]
+        call minheapify(A, heapsize, min, heapgarbage, garbagecounter)
+
+        if left = heapgarbage[garbagecounter-1] then
+            min -= left
+        else
+            min -= right
+        fi left = heapgarbage[garbagecounter-1]
+    fi min = 0
+
+    garbagecounter -= 1
+
+    if i = heapgarbage[garbagecounter] then
+        min -= i
+    fi i = heapgarbage[garbagecounter]
+
+    uncall right(i, right)
+    uncall left(i, left)
+    delocal int min = 0
+    delocal int right = 0
+    delocal int left = 0
+
+procedure parent(int i, int parent)
+    parent += i / 2
+
+procedure left(int i, int left)
+    left += 2 * i
+
+procedure right(int i, int right)
+    right += 2 * i + 1
+
+procedure main()
+    int A[8]              // A[0] unused; heap occupies A[1..7]
+    int heapsize
+    int heapgarbage[4]    // garbage for each extractmin, sized as in the original
+    int heapgarbage1[3]
+    int heapgarbage2[3]
+    int heapgarbage3[2]
+    int heapgarbage4[2]
+    int heapgarbage5[1]
+    int min1
+    int min2
+    int min3
+    int min4
+    int min5
+    int min6
+    int insertgarbage[4]  // garbage for each insert's decreasekey
+    int insertcounter
+    int insertgarbage1[4]
+    int insertcounter1
+    int insertgarbage2[4]
+    int insertcounter2
+    int insertgarbage3[4]
+    int insertcounter3
+    int insertgarbage4[4]
+    int insertcounter4
+
+    // initial min-heap {1,2,3,7,4,8,9} (index 0 unused)
+    heapsize += 7
+    A[1] += 1
+    A[2] += 2
+    A[3] += 3
+    A[4] += 7
+    A[5] += 4
+    A[6] += 8
+    A[7] += 9
+
+    call extractmin(A, heapsize, min1, heapgarbage)
+    call extractmin(A, heapsize, min2, heapgarbage1)
+    call extractmin(A, heapsize, min3, heapgarbage2)
+    call extractmin(A, heapsize, min4, heapgarbage3)
+    call extractmin(A, heapsize, min5, heapgarbage4)
+    call extractmin(A, heapsize, min6, heapgarbage5)
+
+    call insert(A, heapsize, min3, insertgarbage, insertcounter)
+    call insert(A, heapsize, min2, insertgarbage1, insertcounter1)
+    call insert(A, heapsize, min5, insertgarbage2, insertcounter2)
+    call insert(A, heapsize, min4, insertgarbage3, insertcounter3)
+    call insert(A, heapsize, min1, insertgarbage4, insertcounter4)
+    // extracts min1..min6 = 1,2,3,4,7,8 in order, then re-inserts
