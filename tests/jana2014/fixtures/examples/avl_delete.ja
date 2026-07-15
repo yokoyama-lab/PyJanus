@@ -177,14 +177,20 @@ procedure minkey(int key[], int left[], int node, int sk)
 procedure del_here(int key[], int left[], int right[], int ht[],
                    int node, int ret,
                    stack alog, stack hlog, stack rlog, stack dlog)
+  // NB: the two-children branch calls rebalance(node), which may ROTATE node
+  // and change left[node].  So the outer branch cannot use `fi left[node] = 0`
+  // as its exit assertion; we log a decision bit and test top(dlog) instead.
   if left[node] = 0 then
     ret ^= right[node]                 // 0 or 1 (right) child
+    local int b = 1
+      push(b,dlog)
+    delocal int b = 0
   else
     if right[node] = 0 then
       ret ^= left[node]                // 1 (left) child
-      local int b = 0
-        push(b,dlog)
-      delocal int b = 0
+      local int c = 0
+        push(c,dlog)
+      delocal int c = 0
     else
       local int sk = 0                 // two children: copy successor key up
         call minkey(key,left,right[node],sk)
@@ -195,11 +201,14 @@ procedure del_here(int key[], int left[], int right[], int ht[],
         delocal int subret = right[node]
         call rebalance(key,left,right,ht,node,ret,alog,hlog,rlog)
       delocal int sk = key[node]
-      local int b = 1
-        push(b,dlog)
-      delocal int b = 0
+      local int c = 1
+        push(c,dlog)
+      delocal int c = 0
     fi top(dlog) = 0
-  fi left[node] = 0
+    local int b = 0
+      push(b,dlog)
+    delocal int b = 0
+  fi top(dlog) = 1
 
 // delete key x from subtree `node` (assumed present); ret := new subtree root
 procedure del(int key[], int left[], int right[], int ht[],
