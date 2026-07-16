@@ -1,0 +1,34 @@
+// recursive factorial: factR is called exponential times
+procedure factR(int n, int res)
+  if n=0 then
+    res ^= 1
+  else
+    n -= 1
+    local int tmp = 0
+      call factR(n, tmp)
+      res ^= (n + 1) * tmp
+      uncall factR(n, tmp)
+    delocal int tmp = 0
+    n += 1
+  fi n=0
+
+// iterative factorial
+procedure factI(int n, int res)
+  res ^= 1
+  local int i = 0
+    local int tmp = 0
+      from  i = 0
+      loop  tmp <=> res
+            res ^= tmp * (n - i)
+            tmp ^= res / (n - i)
+            i += 1
+      until i = n
+    delocal int tmp = 0
+  delocal int i = n
+
+procedure main()
+  int n
+  int res
+
+  n += 5
+  call factR(n,res)

@@ -1,0 +1,109 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Convex Hull (Jarvis march / gift wrapping)
+//
+// Integer points (x[i], y[i]).  Start from the lowest point (min y,
+// then min x; a clean Bennett selection), then repeatedly wrap: the
+// next hull vertex is the point such that every other point lies
+// strictly on one side of the ray cur -> next (a Bennett fold using
+// integer cross products; x[], y[] are never mutated, so the fold's
+// uncall is sound).  The walk itself advances cur by logging the left-
+// behind vertex on `hseq` -- which doubles as the hull sequence.
+// Preconditions: n >= 3, points distinct and in GENERAL POSITION
+// (no 3 collinear; the fold uses strict cross-product comparisons).
+//   outputs: hull[i] = 1 iff point i is a hull vertex; hseq = hull
+//   walk; start = starting vertex index.
+//////////////////////////////////////////////////////////////////////
+
+// s := index of lowest point (min y, tie-break min x); s starts = n
+procedure low_sub(int x[], int y[], int n, int s, stack lg, stack bl)
+  local int j = 0
+    from  j = 0
+    loop  if s = n || y[j] < y[s] || (y[j] = y[s] && x[j] < x[s]) then
+            push(s,lg)
+            s += j
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          j += 1
+    until j = n
+  delocal int j = n
+
+procedure lowest(int x[], int y[], int n, int res)
+  local int s = n
+    local stack lg = nil
+      local stack bl = nil
+        call low_sub(x,y,n,s,lg,bl)
+        res ^= s
+        uncall low_sub(x,y,n,s,lg,bl)
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int s = n
+
+// cand := wrapping successor of cur; cand starts = n (sentinel)
+procedure next_sub(int x[], int y[], int n, int cur, int cand,
+                   stack lg, stack bl)
+  local int r = 0
+    from  r = 0
+    loop  if r != cur && (cand = n ||
+             (x[cand]-x[cur])*(y[r]-y[cur]) - (y[cand]-y[cur])*(x[r]-x[cur]) < 0) then
+            push(cand,lg)
+            cand += r
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          r += 1
+    until r = n
+  delocal int r = n
+
+procedure next_of(int x[], int y[], int n, int cur, int res)
+  local int cand = n
+    local stack lg = nil
+      local stack bl = nil
+        call next_sub(x,y,n,cur,cand,lg,bl)
+        res ^= cand
+        uncall next_sub(x,y,n,cur,cand,lg,bl)
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int cand = n
+
+procedure jarvis(int x[], int y[], int n, int hull[], int start, stack hseq)
+  call lowest(x,y,n,start)
+  local int cur = start
+    from  cur = start
+    do    local int nxt = 0
+            call next_of(x,y,n,cur,nxt)
+            hull[nxt] += 1                 // mark hull vertex (start marked last)
+            push(cur,hseq)                 // log the walk, cur -> 0
+            cur += nxt
+          delocal int nxt = cur
+    until cur = start
+  delocal int cur = start
+
+procedure main()
+  int x[6]
+  int y[6]
+  int n
+  int hull[6]
+  int start
+  stack hseq
+
+  n += 6
+  x[0] += 1   y[0] += 1
+  x[1] += 9   y[1] += 2
+  x[2] += 5   y[2] += 4    // interior point
+  x[3] += 8   y[3] += 9
+  x[4] += 2   y[4] += 7
+  x[5] += 4   y[5] += 2    // interior point (below the 0-1 chord? no: on lower area)
+
+  call jarvis(x,y,n,hull,start,hseq)
+  // hull vertices: 0,1,3,4 (points 2 and 5 interior) -> hull = {1,1,0,1,1,0}
