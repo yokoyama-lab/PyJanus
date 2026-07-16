@@ -1,0 +1,106 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Dijkstra (single-source shortest paths, O(V^2))
+//
+// Weighted adjacency matrix w[u*V+v] (0 = no edge, weights > 0).
+// V rounds; each round selects the unvisited vertex u with minimum
+// dist (a reversible fold, erased again by Bennett compute-copy-
+// uncompute in `select_min`), marks it visited, and relaxes its
+// neighbours.  Relaxation overwrites dist[v], so the old value is
+// pushed on `dlog` and one decision bit per neighbour goes on `blog`
+// (the branch mutates its own condition).  0 energy.
+// Unreached vertices keep dist = inf.
+//   outputs: dist[], visited[] (all 1), logs dlog/blog.
+//////////////////////////////////////////////////////////////////////
+
+// u := index of unvisited vertex with minimum dist (fold with logs)
+procedure minv_sub(int dist[], int visited[], int v_n, int u, stack lg, stack bl)
+  local int j = 0
+    from  j = 0
+    loop  if visited[j] = 0 && (u = v_n || dist[j] < dist[u]) then
+            push(u,lg)               // log previous candidate, u -> 0
+            u += j
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          j += 1
+    until j = v_n
+  delocal int j = v_n
+
+// clean selection: res := argmin (Bennett compute-copy-uncompute)
+procedure select_min(int dist[], int visited[], int v_n, int res)
+  local int u = v_n                  // v_n = "no candidate yet" sentinel
+    local stack lg = nil
+      local stack bl = nil
+        call minv_sub(dist,visited,v_n,u,lg,bl)
+        res ^= u
+        uncall minv_sub(dist,visited,v_n,u,lg,bl)
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int u = v_n
+
+procedure dijkstra(int w[], int v_n, int dist[], int visited[], int inf,
+                   stack dlog, stack blog)
+  local int round = 0
+    from  round = 0
+    loop  local int u = 0
+            call select_min(dist,visited,v_n,u)
+            visited[u] += 1
+            local int v = 0
+              from  v = 0
+              loop  if w[u*v_n+v] > 0 && visited[v] = 0
+                       && dist[u] + w[u*v_n+v] < dist[v] then
+                      local int nd = dist[u] + w[u*v_n+v]
+                        push(dist[v],dlog)        // log old dist, cell -> 0
+                        dist[v] += nd
+                      delocal int nd = dist[v]
+                      local int b = 1
+                        push(b,blog)
+                      delocal int b = 0
+                    else
+                      local int b = 0
+                        push(b,blog)
+                      delocal int b = 0
+                    fi top(blog) = 1
+                    v += 1
+              until v = v_n
+            delocal int v = v_n
+            push(u,dlog)                          // log selected vertex, u -> 0
+          delocal int u = 0
+          round += 1
+    until round = v_n
+  delocal int round = v_n
+
+procedure main()
+  int w[25]       // 5x5 weighted adjacency matrix
+  int v_n
+  int dist[5]
+  int visited[5]
+  int inf
+  stack dlog      // overwritten distances + selected vertices
+  stack blog      // relaxation decision bits
+
+  v_n += 5
+  inf += 100000
+
+  // edges: 0->1:10 0->3:5 1->2:1 3->1:3 3->2:9 3->4:2 4->2:6 2->4:4
+  w[0*5+1] += 10
+  w[0*5+3] += 5
+  w[1*5+2] += 1
+  w[3*5+1] += 3
+  w[3*5+2] += 9
+  w[3*5+4] += 2
+  w[4*5+2] += 6
+  w[2*5+4] += 4
+
+  dist[1] += inf
+  dist[2] += inf
+  dist[3] += inf
+  dist[4] += inf
+
+  call dijkstra(w,v_n,dist,visited,inf,dlog,blog)
+  // CLRS fig 24.6: dist = {0, 8, 9, 5, 7}
