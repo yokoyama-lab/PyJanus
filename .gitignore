@@ -23,3 +23,5 @@ AGENTS.md
 memory.instruction.md
 *.instruction.md
 playground-saves/
+# Claude Code local artifacts (settings.local.json, locks, logs) — never commit
+.claude/

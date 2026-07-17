@@ -89,6 +89,79 @@ not enough.
 | `RevJanus.v` | `store = var → Z` | `x op= e` (with `¬ occurs x e`), `x <=> y` | `janus_reversible` |
 | `RevToy.v` | `Z` (a counter) | `Inc`, `Dec` | `toy_reversible` |
 | `RevExt.v` | `loc → Z` (scalars + array cells + local cells) | array/scalar `l op= e`, `l1 <=> l2`, `local`/`delocal` enter/exit | `ext_reversible` |
+| `RevIO.v` | `(nat → Z) × list Z × list Z` (store + input + output streams) | `read`/`write` and their stream duals `unread`/`unwrite` | `io_reversible` |
+| `RevMul.v` | `Z` (a register) | `x *= k`, `x /= k` (relational; nonzero-factor guard, `/=` partial) | `mul_reversible` |
+| `RevMod.v` | `Z` held canonical in `[0, M)` | modular `x += k`, `x -= k` (wrapping, `mod M`) | `mod_reversible` |
+| `RevExtMod.v` | modular store `loc → Z` (scalars + array cells + local cells, each canonical in `[0, M)`) | modular `l op= e`, `l1 <=> l2`, `local`/`delocal` (values wrap `mod M`); expressions unbounded | `extmod_reversible` |
+| `RevSMod.v` | `Z` held canonical in the signed window `[-2^(b-1), 2^(b-1))` | signed-modular `x += k`, `x -= k` (the `-m bits` register) | `smod_reversible` |
+| `RevExtSMod.v` | signed-modular store `loc → Z` (scalars + array cells + local cells, each canonical in the signed window) | signed-modular `l op= e`, `l1 <=> l2`, `local`/`delocal`; **every expression result wraps too** (the `-m bits` mode) | `extsmod_reversible` |
+
+`RevIO.v` gives the `jana2014_in_out` I/O dialect a *verified* reversible
+semantics (read consumes the input, its inverse pushes it back; write emits to
+output, its inverse pops it) — the reversibility that `vjanus` can otherwise only
+refuse.  `RevMul.v` accounts for Janus's multiplicative updates `*=` / `/=`,
+which the *total* frame-core `aop` (`OAdd/OSub/OXor`) cannot host: as a
+`REV_PRIM` **relation** they fit exactly — `*=` is injective iff the factor is
+nonzero, and `/=` is the corresponding *partial* inverse (it relates a value to
+another only when the factor divides it).
+
+`RevMod.v` is the basis for Janus's **sized integer types** (`i8`/`i16`/`i32`/…,
+and the global `-m bits` mode): each register has a modulus `M = 2^bits`, so every
+update wraps.  Wrapping a plain `Z` cell is not reversible (it is injective only
+*within* one residue window), so — with the register held canonical in `[0, M)` —
+the modular updates `x += k` / `x -= k` are proved mutually inverse bijections.
+This is why `vjanus` (a pure `Z` machine) declines sized-int programs (exit 3):
+running them faithfully needs a modular core, and `RevMod.v` is its verified
+target.
+
+`RevExtMod.v` is that **modular core**, built the same way as `RevExt.v` (a
+`RevCore` instance with a store over scalars, array cells and local cells) but
+with every register held canonical in `[0, M)` and every assignment wrapping
+`mod M` — while expression intermediates stay unbounded, exactly matching
+PyJanus (a binary-op result is `UNBOUND`; only a store wraps).  The canonical
+guard `0 <= a l < M` baked into an update's `pstep` is what a `Z/M` cell type
+would enforce structurally; each update yields `_ mod M`, so it is preserved.
+`extmod_reversible` / `extmod_iff` come for free from the functor, giving
+reversibility of bounded-int array/local programs (the `i8` example wraps
+`250 += 10` to `4`, reversibly, in an array cell).
+
+`RevExtractMod.v` makes that core **runnable**: a fuel-bounded interpreter [run]
+for the modular language, proved sound (`run_sound : run fuel Γ s a = Some b →
+exec Γ s a b`, hence `run_injective`) and extracted to OCaml (`janus_modular.ml`,
+at `M = 256`).  The `Prim` step goes through a functional `pstep_fn` that refines
+the relation `pstep` — the modular update's canonicity guard `0 ≤ a l < M` becomes
+a runtime test.
+
+Janus's **global** `-m bits` mode is semantically distinct from the per-variable
+sized types above: it wraps *every* value — expression intermediates included —
+into the **signed** window `[-2^(b-1), 2^(b-1))` (PyJanus's `_normalize_int`
+falls through to the `mod_bits` branch on every binary-operator result, not just
+at assignment).  `RevSMod.v` verifies the signed wrap `norm` itself (lands in the
+window, is a ring map onto it, and its wrapping updates are mutually inverse
+bijections — checked against PyJanus's `-m 8` output directly: `100 += 50`
+wraps to `-106` in both).  `RevExtSMod.v` threads that wrap through `eval`
+itself (so `(100 + 50) - 90` wraps mid-computation to `60`, again checked against
+`-m 8`), giving `extsmod_reversible` for a genuinely `-m`-faithful store core.
+`RevExtractSMod.v` extracts its runnable, sound interpreter to OCaml
+(`janus_smod.ml`, at `bits = 8`) the same way as `RevExtractMod.v`.
+
+What remains to make `vjanus` *run* sized ints or `-m` is now only the glue:
+lowering jana2014 to the relevant core's `stmt`/`expr` and threading the modulus
+(per-variable for `i8`/…, or global for `-m bits`) — as `vjanus`'s `lower.ml` +
+`glue.ml` already do for the unbounded `RevFrame` core.
+
+`RevLowering.v` verifies the `vjanus` translation rules that do **not** map a
+source construct to a single core primitive (and so carry real proof
+obligations): the swap `x <=> y`, lowered to the XOR triple
+`x ^= y; y ^= x; x ^= y` — proved to compute the swap and to be its own inverse
+(and to collapse an *aliased* `a[i] <=> a[i]` to 0, which is why it is rejected);
+the stack `push`/`pop`, lowered to an XOR-swap of the top cell plus a counter
+bump — proved that `pop` undoes `push`; the clean local-array bracket
+`a[c] += 0 … a[c] -= 0`, proved to be the identity on the store; and injectivity
+of both struct-array cell addressing (`elem*n + off`) and the Cantor fold of
+multi-dimensional indices — no two distinct indices alias.  Whole-translator
+soundness (a Coq model of all of `lower.ml` proved to commute with the source
+semantics) remains future work — see `docs/vjanus-lowering-soundness.md`.
 
 All reversibility theorems are obtained purely as instances of the generic
 `exec_injective` — no per-language reversibility proof is repeated. The Janus

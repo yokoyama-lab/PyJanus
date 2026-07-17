@@ -21,8 +21,10 @@ and lval = { lname : string; sels : expr list; fields : string list; fsels : exp
 type arg = ALv of lval | AVal of expr
 
 (* local/delocal declaration head: name, whether a stack, struct type (if any),
-   initializer (None => 0; for a struct local the init is an l-value to copy) *)
-type decl = { dname : string; dis_stack : bool; dstruct : string option; dinit : expr option }
+   array dims ([] => scalar), initializer (None => 0; for a struct local the
+   init is an l-value to copy) *)
+type decl = { dname : string; dis_stack : bool; dstruct : string option;
+              ddims : int list; dinit : expr option }
 
 type stmt =
   | Skip
@@ -37,6 +39,7 @@ type stmt =
   | Uncall of string * arg list
   | Push of lval * string            (* push(x, s) *)
   | Pop of lval * string             (* pop(x, s) *)
+  | Io of string                     (* read/write (jana2014_in_out); keyword kept for the error *)
 
 type vinit = VE of expr | VA of vinit list
 
@@ -57,3 +60,4 @@ type program = { structs : structdef list; procs : proc list;
                  mvdecls : vdecl list; mstmts : stmt list }
 
 exception Error of string * int * int   (* message, line, column *)
+exception Unsupported of string         (* valid jana2014 vjanus cannot lower -> exit 3 *)

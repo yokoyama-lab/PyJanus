@@ -139,6 +139,27 @@ Example programs live under dialect-specific test fixtures:
 | `sqrt.ja` | Integer square root |
 | `run-length-enc.ja` | Run-length encoding |
 | `stack-operations.ja` | Stack push/pop operations |
+| `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
+| `reversible_ca_ring.ja` | Rule 90R on a cyclic ring (periodic boundary) |
+| `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
+| `gray_code_roundtrip.ja` | `call gray; uncall gray` = identity (encode/decode reversibility) |
+| `reversible_gates.ja` | Universal reversible logic gates: Toffoli (CCNOT) and Fredkin (CSWAP) |
+| `base_convert.ja` | Base conversion (Horner digit extraction), injective `(n,b) -> digits` |
+| `cantor_pair.ja` | Cantor pairing N x N -> N, injective `(x,y) -> z` |
+
+These are clean reversible simulations of injective maps built from the
+XOR-update operator `^=`, controlled swaps, and pure-expression digit extraction
+(no ancillae, no history). Each
+has a no-I/O twin under `tests/jana2014/fixtures/examples/` checked against
+PyJanus by **two independent Coq-extracted interpreters** — `vjanus` (the
+frame-stacked core, `coq/vjanus/`) and the flat-store `driverar` (`coq/harness/`)
+— and most also have an `// in:/out:`-annotated copy under
+`tests/jana2014_in_out/programs/` (`gray_code`, `toffoli_gate`, `base_convert`,
+`lehmer_code`, `cantor_pair`, the two CAs) run forward AND backward by the I/O
+harness.
+[`docs/reversible-pearls.md`](docs/reversible-pearls.md) catalogs these and
+future candidates drawn from Bird's *Pearls of Functional Algorithm Design* and
+JFP functional pearls (Burrows–Wheeler, arithmetic coding, permutation ranking, …).
 
 ## Tests
 

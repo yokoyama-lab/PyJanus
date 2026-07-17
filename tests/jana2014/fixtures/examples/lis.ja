@@ -1,0 +1,94 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Longest Increasing Subsequence (O(n^2) DP)
+//
+// L[i] = length of the longest strictly-increasing subsequence ending
+// at a[i]:  L[i] = 1 + max{ L[j] : j < i, a[j] < a[i] }  (or 1).
+// Each L[i] is written once; the inner maximum is computed by a
+// reversible fold into a temporary using an overwrite log + decision
+// bits, the result copied out, and the fold *uncalled* to erase the
+// log (Bennett compute-copy-uncompute, as in apsp.j).  The final
+// answer (max over all L[i]) is produced the same way into `res`.
+//////////////////////////////////////////////////////////////////////
+
+// m := max over j<i with a[j]<a[i] of L[j]  (m starts 0)
+procedure bestfold(int a[], int L[], int i, int m, stack lg, stack bl)
+  local int j = 0
+    from  j = 0
+    loop  if a[j] < a[i] && L[j] > m then
+            push(m,lg)               // log old max, m -> 0
+            m += L[j]
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          j += 1
+    until j = i
+  delocal int j = i
+
+// m := max over all i<n of L[i]
+procedure allfold(int L[], int n, int m, stack lg, stack bl)
+  local int i = 0
+    from  i = 0
+    loop  if L[i] > m then
+            push(m,lg)
+            m += L[i]
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          i += 1
+    until i = n
+  delocal int i = n
+
+procedure lis(int a[], int n, int L[], int res)
+  local int i = 0
+    from  i = 0
+    loop  local int m = 0
+            local stack lg = nil
+              local stack bl = nil
+                call bestfold(a,L,i,m,lg,bl)
+                L[i] += m + 1                     // write cell once
+                uncall bestfold(a,L,i,m,lg,bl)    // erase fold logs
+              delocal stack bl = nil
+            delocal stack lg = nil
+          delocal int m = 0
+          i += 1
+    until i = n
+  delocal int i = n
+  // res := max over L[]
+  local int m = 0
+    local stack lg = nil
+      local stack bl = nil
+        call allfold(L,n,m,lg,bl)
+        res ^= m
+        uncall allfold(L,n,m,lg,bl)
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int m = 0
+
+procedure main()
+  int a[8]
+  int n
+  int L[8]
+  int res
+
+  n += 8
+  a[0] += 10
+  a[1] += 22
+  a[2] += 9
+  a[3] += 33
+  a[4] += 21
+  a[5] += 50
+  a[6] += 41
+  a[7] += 60
+
+  call lis(a,n,L,res)
+  // LIS = 10,22,33,50,60 (or ...41,60) -> res = 5

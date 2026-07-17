@@ -1,0 +1,50 @@
+// Second-order reversible cellular automaton on a CYCLIC ring (Rule 90R).
+//
+// Same clean reversible update as reversible_ca_rule90.ja, but the lattice is a
+// ring of 5 cells with periodic boundaries: neighbours wrap with `% 5`, so the
+// left neighbour of cell i is (i+4)%5 and the right is (i+1)%5. The evolution
+// is translation-invariant; an impulse propagates around the ring and wraps.
+//
+//     new[i] = (cur[(i+4)%5] XOR cur[(i+1)%5]) XOR prev[i]
+//
+// XOR is self-inverse, so two steps run backward by replaying the same updates
+// in reverse — no ancillae, no history, no garbage. prev (a) starts at 0; the
+// run writes both final generations (cur'' then prev'), clearing every cell, so
+// it ends perfectly clean. Backward consumes the output stream in reverse and
+// reproduces the input in reverse.
+//
+// case: impulse
+// in: 1 0 0 0 0
+// out: 1 0 1 1 0 0 1 0 0 1
+// case: block
+// in: 1 1 1 0 0
+// out: 0 1 0 0 0 1 0 1 1 1
+// case: two_ends
+// in: 2 0 0 0 3
+// out: 2 3 1 2 3 3 2 0 3 2
+procedure step(int dst[], int src[])
+    iterate int i = 0 to 4
+        dst[i] ^= src[(i + 4) % 5]
+        dst[i] ^= src[(i + 1) % 5]
+    end
+
+procedure main()
+    int a[5]
+    int b[5]
+    read b[0]
+    read b[1]
+    read b[2]
+    read b[3]
+    read b[4]
+    call step(a, b)
+    call step(b, a)
+    write b[0]
+    write b[1]
+    write b[2]
+    write b[3]
+    write b[4]
+    write a[0]
+    write a[1]
+    write a[2]
+    write a[3]
+    write a[4]

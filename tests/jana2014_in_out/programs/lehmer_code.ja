@@ -1,0 +1,52 @@
+// Lehmer code (rank/unrank) — an in-place reversible bijection on permutations.
+//
+// perm_to_code rewrites a permutation x of {0..n-1} into its left-rank Lehmer
+// code in place: afterwards x[k] is the rank of the original x[k] among the
+// original x[0..k]. This is a bijection (n-tuple <-> n-tuple), so the forward
+// run "ranks" a permutation to its code and the backward run "unranks" the code
+// to the permutation -- no separate decoder, just `uncall` / reverse execution.
+// The if-fi's exit test `x[j] >= x[k]` is what keeps the decrement reversible.
+//
+// Reading the code as a factorial-base number (sum_k code[k]*k!) gives the
+// integer rank in [0,n!); the no-I/O twin tests/jana2014/fixtures/examples/
+// injective_lehmer.ja does that whole perm<->integer bijection and is checked
+// by both verified interpreters. See docs/reversible-pearls.md (PFAD ch.12).
+//
+// case: mixed       # [2,0,3,1] -> Lehmer [0,0,2,1]
+// in: 2 0 3 1
+// out: 0 0 2 1
+// case: ascending   # already sorted: each element is the largest so far
+// in: 0 1 2 3
+// out: 0 1 2 3
+// case: descending  # each element is the smallest so far -> all-zero code
+// in: 3 2 1 0
+// out: 0 0 0 0
+procedure perm_to_code(int x[], int n)
+    local int k = n
+        from k = n loop
+            k -= 1
+            local int j = 0
+                from j = 0 loop
+                    if x[j] > x[k] then
+                        x[j] -= 1
+                    fi x[j] >= x[k]
+                    j += 1
+                until j = k
+            delocal int j = k
+        until k = 0
+    delocal int k = 0
+
+procedure main()
+    int x[4]
+    int n
+    read x[0]
+    read x[1]
+    read x[2]
+    read x[3]
+    n += 4
+    call perm_to_code(x, n)
+    write x[0]
+    write x[1]
+    write x[2]
+    write x[3]
+    n -= 4

@@ -1,0 +1,49 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible 0/1 Knapsack (dynamic programming)
+//
+// K[i][w] = best value achievable with items 1..i and capacity w:
+//   K[i][w] = K[i-1][w]                                  if wt[i] > w
+//           = max(K[i-1][w], K[i-1][w-wt[i]] + val[i])   otherwise
+// The full (n+1) x (W+1) table is retained and every cell is written
+// exactly once from the PREVIOUS row only, so all branch conditions are
+// stable and the DP is reversible by construction -- no logging
+// (0 energy), as in lcs.j / edit_distance.j.  Answer: K[n][W].
+// Items are 1-indexed (wt[0], val[0] unused).
+//////////////////////////////////////////////////////////////////////
+
+procedure knapsack(int wt[], int val[], int n, int cap, int K[])
+  local int i = 1
+    from  i = 1
+    loop  local int w = 0
+            from  w = 0
+            loop  if wt[i] > w then
+                    K[i*(cap+1)+w] += K[(i-1)*(cap+1)+w]
+                  else
+                    if K[(i-1)*(cap+1)+(w-wt[i])] + val[i] > K[(i-1)*(cap+1)+w] then
+                      K[i*(cap+1)+w] += K[(i-1)*(cap+1)+(w-wt[i])] + val[i]
+                    else
+                      K[i*(cap+1)+w] += K[(i-1)*(cap+1)+w]
+                    fi K[(i-1)*(cap+1)+(w-wt[i])] + val[i] > K[(i-1)*(cap+1)+w]
+                  fi wt[i] > w
+                  w += 1
+            until w = cap+1
+          delocal int w = cap+1
+          i += 1
+    until i = n+1
+  delocal int i = n+1
+
+procedure main()
+  int wt[4]    // weights,  1-indexed
+  int val[4]   // values,   1-indexed
+  int n
+  int cap
+  int K[24]    // (n+1) x (cap+1) = 4 x 6
+
+  n += 3
+  cap += 5
+  wt[1] += 2  val[1] += 3
+  wt[2] += 3  val[2] += 4
+  wt[3] += 4  val[3] += 5
+
+  call knapsack(wt,val,n,cap,K)
+  // best = items {2,3}: weight 7 > 5, so items {1,2}: value 7 -> K[3*6+5] = 7

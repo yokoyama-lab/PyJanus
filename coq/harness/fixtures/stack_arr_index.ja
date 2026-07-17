@@ -1,0 +1,6 @@
+procedure main()
+    int in[3]
+    stack s
+    in[0] += 2
+    in[2] += 9
+    push(in[in[0]], s)

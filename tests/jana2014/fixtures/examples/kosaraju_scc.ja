@@ -1,0 +1,115 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Kosaraju SCC (strongly connected components)
+//
+// Two reversible DFS passes over adjacency matrices:
+//   pass 1: DFS on G recording finish (post-)order (as in toposort.j),
+//   pass 2: scan vertices in DECREASING finish order; each still-
+//           unlabelled vertex starts a new component, labelled by a
+//           reversible DFS on the TRANSPOSE graph adjt.
+// comp[v] = component id (1..ncomp); comp[v] = 0 doubles as the
+// "unvisited" test, so ids start at 1.  All visited-style branches log
+// one decision bit on `blog` (pushed at branch end, top() as the exit
+// assertion).  0 energy.
+//   outputs: comp[], ncomp, order[] (finish order), visited[], blog.
+//////////////////////////////////////////////////////////////////////
+
+procedure dfs1(int adj[], int v_n, int u, int visited[], int order[],
+               int cnt, stack blog)
+  visited[u] += 1
+  local int v = 0
+    from  v = 0
+    loop  if adj[u*v_n+v] = 1 && visited[v] = 0 then
+            call dfs1(adj,v_n,v,visited,order,cnt,blog)
+            local int b = 1
+              push(b,blog)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,blog)
+            delocal int b = 0
+          fi top(blog) = 1
+          v += 1
+    until v = v_n
+  delocal int v = v_n
+  order[cnt] ^= u
+  cnt += 1
+
+procedure dfs2(int adjt[], int v_n, int u, int comp[], int id, stack blog)
+  comp[u] ^= id
+  local int v = 0
+    from  v = 0
+    loop  if adjt[u*v_n+v] = 1 && comp[v] = 0 then
+            call dfs2(adjt,v_n,v,comp,id,blog)
+            local int b = 1
+              push(b,blog)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,blog)
+            delocal int b = 0
+          fi top(blog) = 1
+          v += 1
+    until v = v_n
+  delocal int v = v_n
+
+procedure kosaraju(int adj[], int adjt[], int v_n,
+                   int visited[], int order[], int comp[], int ncomp,
+                   stack blog)
+  // pass 1: finish order on G
+  local int cnt = 0
+    local int u = 0
+      from  u = 0
+      loop  if visited[u] = 0 then
+              call dfs1(adj,v_n,u,visited,order,cnt,blog)
+              local int b = 1
+                push(b,blog)
+              delocal int b = 0
+            else
+              local int b = 0
+                push(b,blog)
+              delocal int b = 0
+            fi top(blog) = 1
+            u += 1
+      until u = v_n
+    delocal int u = v_n
+  delocal int cnt = v_n
+  // pass 2: label components on the transpose, in reverse finish order
+  local int k = v_n
+    from  k = v_n
+    loop  k -= 1
+          if comp[order[k]] = 0 then
+            ncomp += 1
+            call dfs2(adjt,v_n,order[k],comp,ncomp,blog)
+            local int b = 1
+              push(b,blog)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,blog)
+            delocal int b = 0
+          fi top(blog) = 1
+    until k = 0
+  delocal int k = 0
+
+procedure main()
+  int adj[25]      // 5x5 adjacency matrix of G
+  int adjt[25]     // transpose G^T
+  int v_n
+  int visited[5]
+  int order[5]
+  int comp[5]
+  int ncomp
+  stack blog
+
+  v_n += 5
+
+  // G: 0->1 1->2 2->0 (cycle) ; 2->3 ; 3->4 4->3 (2-cycle)
+  adj[0*5+1] += 1  adjt[1*5+0] += 1
+  adj[1*5+2] += 1  adjt[2*5+1] += 1
+  adj[2*5+0] += 1  adjt[0*5+2] += 1
+  adj[2*5+3] += 1  adjt[3*5+2] += 1
+  adj[3*5+4] += 1  adjt[4*5+3] += 1
+  adj[4*5+3] += 1  adjt[3*5+4] += 1
+
+  call kosaraju(adj,adjt,v_n,visited,order,comp,ncomp,blog)
+  // SCCs: {0,1,2} and {3,4} -> ncomp = 2

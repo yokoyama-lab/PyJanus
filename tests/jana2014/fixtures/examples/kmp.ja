@@ -1,0 +1,115 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Knuth-Morris-Pratt (occurrence counting)
+//
+// The broken kmp.j/kmp1.j guarded their outer loops on the KMP prefix
+// pointer, which BACKTRACKS (j := f[j-1]) and so cannot serve as a
+// reversible loop assertion.  This version loops on the MONOTONE text/
+// pattern position i and makes the backtracking chain reversible by
+// logging it: each inner backtrack pushes the destroyed prefix length
+// on `gq`, and the number of backtracks per step is pushed afterwards
+// (so the inner loop's iteration count is recoverable).  Branches that
+// mutate their own conditions log one decision bit on `gb`.
+//   compf : failure function f[i] = length of the longest proper
+//           border of p[0..i]   (f[0] = 0)
+//   kmp_count : cnt = number of (possibly overlapping) occurrences of
+//           p[0..m-1] in t[0..n-1]
+// Preconditions: m >= 1, n >= 1.
+//////////////////////////////////////////////////////////////////////
+
+procedure compf(int p[], int m, int f[], stack gq, stack gb)
+  local int j = 0
+    local int i = 1
+      from  i = 1
+      loop  // backtrack: while j > 0 and p[i] != p[j]:  j := f[j-1]
+            local int c = 0
+              from  c = 0
+              loop  local int t = f[j-1]
+                      push(j,gq)          // log destroyed prefix length
+                      j += t
+                    delocal int t = j
+                    c += 1
+              until j = 0 || p[i] = p[j]
+              push(c,gq)                  // log backtrack count
+            delocal int c = 0
+            if p[i] = p[j] then
+              j += 1
+              local int b = 1
+                push(b,gb)
+              delocal int b = 0
+            else
+              local int b = 0
+                push(b,gb)
+              delocal int b = 0
+            fi top(gb) = 1
+            f[i] ^= j                     // written once
+            i += 1
+      until i = m
+    delocal int i = m
+    push(j,gq)                            // final prefix length -> log
+  delocal int j = 0
+
+procedure kmp_count(int p[], int t[], int m, int n, int f[], int cnt,
+                    stack gq, stack gb)
+  call compf(p,m,f,gq,gb)
+  local int j = 0
+    local int i = 0
+      from  i = 0
+      loop  // backtrack: while j > 0 and t[i] != p[j]:  j := f[j-1]
+            local int c = 0
+              from  c = 0
+              loop  local int u = f[j-1]
+                      push(j,gq)
+                      j += u
+                    delocal int u = j
+                    c += 1
+              until j = 0 || t[i] = p[j]
+              push(c,gq)
+            delocal int c = 0
+            if t[i] = p[j] then
+              j += 1
+              local int b = 1
+                push(b,gb)
+              delocal int b = 0
+            else
+              local int b = 0
+                push(b,gb)
+              delocal int b = 0
+            fi top(gb) = 1
+            if j = m then                 // full match
+              cnt += 1
+              j -= m
+              j += f[m-1]                 // continue with the border
+              local int b = 1
+                push(b,gb)
+              delocal int b = 0
+            else
+              local int b = 0
+                push(b,gb)
+              delocal int b = 0
+            fi top(gb) = 1
+            i += 1
+      until i = n
+    delocal int i = n
+    push(j,gq)
+  delocal int j = 0
+
+procedure main()
+  int p[3]
+  int t[10]
+  int f[3]
+  int m
+  int n
+  int cnt
+  stack gq   // destroyed prefix lengths + backtrack counts
+  stack gb   // branch decision bits
+
+  m += 3
+  n += 10
+
+  // p = a b a  (a=1, b=2);  t = a b a b a b a a b a
+  p[0] += 1  p[1] += 2  p[2] += 1
+  t[0] += 1  t[1] += 2  t[2] += 1  t[3] += 2  t[4] += 1
+  t[5] += 2  t[6] += 1  t[7] += 1  t[8] += 2  t[9] += 1
+
+  call kmp_count(p,t,m,n,f,cnt,gq,gb)
+  // occurrences of "aba" at 0,2,4,7 -> cnt = 4

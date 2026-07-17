@@ -1,0 +1,38 @@
+// Base conversion (Horner digit extraction) to binary — clean & reversible.
+//
+// Reads n and writes its 4 least-significant binary digits (LSB first), then
+// echoes n. The i-th bit is the pure expression (n / 2^i) % 2, accumulated with
+// `+=` (no reversible `/=` needed), so n is preserved; echoing it makes the run
+// reversible end to end (the digits alone fix n only for n < 16, and the cell
+// must be cleared anyway). Backward consumes the output stream in reverse and
+// reproduces the input. See docs/reversible-pearls.md; the no-I/O twin under
+// tests/jana2014/fixtures/examples/ is checked by both verified interpreters.
+//
+// case: thirteen    # 13 = 1101b -> bits 1 0 1 1 (LSB first)
+// in: 13
+// out: 1 0 1 1 13
+// case: ten          # 10 = 1010b
+// in: 10
+// out: 0 1 0 1 10
+// case: zero
+// in: 0
+// out: 0 0 0 0 0
+// case: fifteen      # 15 = 1111b
+// in: 15
+// out: 1 1 1 1 15
+procedure to_bits(int n, int d[])
+    d[0] += n % 2
+    d[1] += (n / 2) % 2
+    d[2] += (n / 4) % 2
+    d[3] += (n / 8) % 2
+
+procedure main()
+    int n
+    int d[4]
+    read n
+    call to_bits(n, d)
+    write d[0]
+    write d[1]
+    write d[2]
+    write d[3]
+    write n

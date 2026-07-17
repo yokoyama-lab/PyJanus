@@ -25,13 +25,11 @@ procedure xor_chain(int arr[], int n)
 
 procedure odd_even_swap(int arr[], int n)
     // Pairs (0,1), (2,3), ... ; if n is odd the last element stays put.
-    local int i = 0
-        from i = 0 do
-            arr[i] <=> arr[i + 1]
-            i += 2
-        loop
-        until i + 1 >= n
-    delocal int i = i
+    local int pairs = n / 2
+        iterate int i = 0 to pairs - 1
+            arr[i * 2] <=> arr[i * 2 + 1]
+        end
+    delocal int pairs = n / 2
 
 // One Feistel round inline (avoids a forward-reference issue when this
 // fixture is run standalone).

@@ -1,0 +1,96 @@
+// Inverse Burrows-Wheeler transform via the LF-mapping, as a clean reversible
+// I/O program. Reads the BWT last column L[0..4] and the primary index I, then
+// writes the reconstructed length-5 string s (sentinel 0 is the unique smallest
+// symbol, so the rotation permutation is a single 5-cycle) and echoes L, I.
+//
+// The BWT is a bijection  string <-> (L, I); Bird & Mu (JFP 2004) derive its
+// inverse calculationally, and its engine is the LF-mapping. Here the LF
+// reconstruction is written forwards, so `uncall inv_bwt` is the forward
+// Burrows-Wheeler transform. The ancillas (cnt, C, occ, T, path) are uncomputed
+// Bennett-style, so inv_bwt leaves only s with L, I preserved; echoing L and I
+// to the output makes the run reversible end to end (as in cantor_pair -- the
+// version that *consumes* L needs an in-place permutation; see the no-I/O twin
+// tests/jana2014/fixtures/examples/injective_bwt_inverse.ja, checked by the
+// verified flat-array core, and docs/reversible-pearls.md, PFAD ch.13).
+//
+// Backward consumes the output stream in reverse and reproduces the input.
+//
+// case: s31210       # s = [3,1,2,1,0], L = [1,2,3,1,0], I = 4
+// in: 1 2 3 1 0 4
+// out: 3 1 2 1 0 1 2 3 1 0 4
+// case: s23140       # s = [2,3,1,4,0], L = [4,3,0,2,1], I = 2
+// in: 4 3 0 2 1 2
+// out: 2 3 1 4 0 4 3 0 2 1 2
+// case: s14230       # s = [1,4,2,3,0], L = [3,0,4,2,1], I = 1
+// in: 3 0 4 2 1 1
+// out: 1 4 2 3 0 3 0 4 2 1 1
+procedure build_path(int L[], int I, int n, int A,
+                     int cnt[], int C[], int occ[], int T[], int path[])
+    local int i = 0
+        from i = 0 loop
+            cnt[L[i]] += 1
+            i += 1
+        until i = n
+    delocal int i = n
+
+    local int c = 1
+        from c = 1 loop
+            C[c] += C[c - 1] + cnt[c - 1]
+            c += 1
+        until c = A
+    delocal int c = A
+
+    local int i = 0
+        from i = 0 loop
+            T[i] += C[L[i]] + occ[L[i]]
+            occ[L[i]] += 1
+            i += 1
+        until i = n
+    delocal int i = n
+
+    path[0] += I
+    local int k = 0
+        from k = 0 loop
+            path[k + 1] += T[path[k]]
+            k += 1
+        until k = n - 1
+    delocal int k = n - 1
+
+procedure inv_bwt(int L[], int I, int n, int A,
+                  int cnt[], int C[], int occ[], int T[], int path[], int s[])
+    call build_path(L, I, n, A, cnt, C, occ, T, path)
+    local int k = 0
+        from k = 0 loop
+            s[n - 1 - k] += L[path[k]]
+            k += 1
+        until k = n
+    delocal int k = n
+    uncall build_path(L, I, n, A, cnt, C, occ, T, path)
+
+procedure main()
+    int L[5]
+    int I
+    int cnt[5]
+    int C[5]
+    int occ[5]
+    int T[5]
+    int path[5]
+    int s[5]
+    read L[0]
+    read L[1]
+    read L[2]
+    read L[3]
+    read L[4]
+    read I
+    call inv_bwt(L, I, 5, 5, cnt, C, occ, T, path, s)
+    write s[0]
+    write s[1]
+    write s[2]
+    write s[3]
+    write s[4]
+    write L[0]
+    write L[1]
+    write L[2]
+    write L[3]
+    write L[4]
+    write I

@@ -293,6 +293,7 @@ let () =
     let src = read_file path in
     let toks = Lexer.tokenize src in
     let prog = Parser.program toks in
+    Lower.check_program prog;
     let procs, main, layout = Lower.program prog in
     begin match !inverse with
     | Some json -> run_inverse procs main layout (parse_json json)
@@ -325,5 +326,9 @@ let () =
          print_struct_array f base name dims nfields offsets) layout.Lower.sarrays)
     end
   with
-  | Lower.Unsupported m -> Printf.eprintf "vjanus: unsupported: %s\n" m; exit 3
-  | Ast.Error (m, l, c) -> Printf.eprintf "vjanus: %s (line %d, col %d)\n" m l c; exit 3
+  | Lower.Unsupported m | Ast.Unsupported m ->
+      Printf.eprintf "vjanus: unsupported: %s\n" m; exit 3
+  | Ast.Error (m, l, c) ->
+      (if l > 0 then Printf.eprintf "vjanus: error: %s (line %d, col %d)\n" m l c
+       else Printf.eprintf "vjanus: error: %s\n" m);
+      exit 1

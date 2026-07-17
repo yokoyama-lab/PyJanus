@@ -1,0 +1,83 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Dynamic Array
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.2,
+//   Theorem 5.5 (reversible with constant time/space overhead, plus
+//   one extra bit per add/delete).
+//
+// A dynamic array keeps two attributes:
+//   length -- number of active elements,
+//   cap   -- currently allocated capacity (a power of two).
+// On add, if length = cap the capacity doubles; on delete, if
+// length = cap/4 the capacity halves.  Whether a resize happened
+// cannot be recovered from the final (length,cap) alone, so we log
+// one bit per add/delete on the stack `dbit`.  This makes every
+// operation reversible (0 energy).  Janus arrays are fixed-capacity,
+// so `cap` is the logical allocation over a fixed backing store.
+//
+//   add(e)   : append e at the end                (uses/produces 1 dbit)
+//   delete() : extract & return the last element  (uses/produces 1 dbit)
+//   query(i) : copy out data[i]                    (reversible read)
+//////////////////////////////////////////////////////////////////////
+
+// append e; double capacity first if the array is full
+procedure da_add(int data[], int length, int cap, stack dbit, int e)
+  if length = cap then
+    cap *= 2                   // reallocate: double the capacity
+    local int t = 1
+      push(t,dbit)               // log: a doubling happened
+    delocal int t = 0
+  else
+    local int t = 0
+      push(t,dbit)               // log: no resize
+    delocal int t = 0
+  fi top(dbit) = 1
+  data[length] ^= e              // store the (copied-in) element
+  length += 1
+
+// extract the last element into e (e must be 0 on entry); halve if sparse
+procedure da_delete(int data[], int length, int cap, stack dbit, int e)
+  length -= 1
+  local int t = e ^ data[length] // e <=> data[length]  (e was 0)
+    e ^= t
+    data[length] ^= t
+  delocal int t = e ^ data[length]
+  if length = cap / 4 && cap > 1 then
+    cap /= 2                     // deallocate the upper half
+    local int u = 1
+      push(u,dbit)               // log: a halving happened
+    delocal int u = 0
+  else
+    local int u = 0
+      push(u,dbit)               // log: no resize
+    delocal int u = 0
+  fi top(dbit) = 1
+
+// copy data[i] out into q (q must be 0 on entry)
+procedure da_query(int data[], int i, int q)
+  q ^= data[i]
+
+procedure main()
+  int data[16]   // backing store
+  int length     // active element count
+  int cap       // allocated capacity (power of two)
+  stack dbit     // resize log (1 bit per add/delete)
+  int e          // scratch element copied into the structure
+  int q          // query result
+  int x1         // element extracted by 1st delete
+  int x2         // element extracted by 2nd delete
+
+  cap += 1      // dynamic arrays start with capacity 1
+
+  // add 10,20,30,40,50 (reset the scratch cell around each copy-in)
+  e += 10  call da_add(data,length,cap,dbit,e)  e -= 10
+  e += 20  call da_add(data,length,cap,dbit,e)  e -= 20
+  e += 30  call da_add(data,length,cap,dbit,e)  e -= 30
+  e += 40  call da_add(data,length,cap,dbit,e)  e -= 40
+  e += 50  call da_add(data,length,cap,dbit,e)  e -= 50
+
+  call da_query(data,2,q)                   // q = data[2] = 30
+
+  call da_delete(data,length,cap,dbit,x1)  // x1 = 50
+  call da_delete(data,length,cap,dbit,x2)  // x2 = 40
+  // expected: data={10,20,30,0,...}, length=3, cap=8, q=30, x1=50, x2=40

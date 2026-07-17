@@ -22,6 +22,7 @@ RevInvert.v
 RevExtractP.v
 RevArr.v
 RevExtractAr.v
+RevLevel1.v
 RevExtractFrame.v
 RevPipeline.v
 RevPipelineArr.v
@@ -29,3 +30,12 @@ RevGolomb.v
 RevVarint.v
 RevZigzag.v
 RevDeltaN.v
+RevIO.v
+RevMul.v
+RevLowering.v
+RevMod.v
+RevExtMod.v
+RevExtractMod.v
+RevSMod.v
+RevExtSMod.v
+RevExtractSMod.v
