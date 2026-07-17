@@ -7,9 +7,12 @@ its initial value.  This exercises backward execution across the real programs
 (recursion, arrays, local/delocal, stacks, iterate) -- the part of `runtime.py`
 the unit tests touch least.
 
-A program that is genuinely *not* reversible is expected to fail this and is
-marked accordingly (e.g. `injective_iterate` uses `delocal i = i`, whose inverse
-`local i = i` reads an undeclared variable).
+A program that is genuinely *not* reversible would be expected to fail this and
+should be listed in NOT_REVERSIBLE below (the body+inverse run is then asserted
+to raise instead). That set is currently empty: every example in the corpus is
+reversible. (`injective_iterate.ja` used to be listed for its `delocal i = i`
+loop-counter idiom, but it was rewritten to an `iterate` form and is reversible
+now.)
 """
 from __future__ import annotations
 
@@ -28,8 +31,9 @@ from jana_py.validate import validate_program
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = sorted(glob.glob(str(ROOT / "tests" / "jana2014" / "fixtures" / "examples" / "*.ja")))
 
-# Programs that legitimately are not reversible (so forward;inverse != identity).
-NOT_REVERSIBLE = {"injective_iterate.ja"}  # delocal int i = i
+# Programs that legitimately are not reversible (body+inverse is asserted to
+# raise rather than be the identity). Currently none — every example round-trips.
+NOT_REVERSIBLE: set[str] = set()
 
 
 def _store(program: Program) -> dict:

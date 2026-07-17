@@ -1,0 +1,108 @@
+/*
+ * Level 10 (flagship): the inverse Burrows-Wheeler transform via the LF-mapping,
+ * as a reversible Janus procedure -- so its `uncall` is the forward BWT.
+ *
+ * The BWT is a bijection  string  <->  (last column L, primary index I).
+ * Bird & Mu (JFP 2004) derive the inverse calculationally; its engine is the
+ * LF-mapping (last-to-first). In a reversible language that derived inverse is
+ * not something we re-derive -- we write the LF reconstruction forwards and the
+ * encoder falls out as `uncall`.
+ *
+ * LF reconstruction of s from (L, I), with the sentinel 0 (a unique smallest
+ * symbol) guaranteeing the rotation permutation is a single n-cycle:
+ *
+ *   1. counts  cnt[c]      = occurrences of symbol c in L
+ *   2. cumul   C[c]        = #{ symbols in L that are < c }   (start of c in F)
+ *   3. LF map  T[i]        = C[L[i]] + rank_i,  rank_i = #{ j<i : L[j]=L[i] }
+ *   4. walk    path[0] = I, path[k+1] = T[path[k]]            (one n-cycle)
+ *   5. emit    s[n-1-k]    = L[path[k]]                       (s comes out reversed)
+ *
+ * Every step is `dst += pure-expr(other cells)` (the verified cores' += / -=),
+ * with nested indexing T[path[k]] / L[path[k]] doing the pointer-chase. The
+ * ancillas (cnt, C, occ, T, path) are uncomputed Bennett-style -- build_path
+ * fills them, the s copy reads through them, then `uncall build_path` drives
+ * them back to 0 -- so inv_bwt leaves ONLY s, with L, I preserved. Hence
+ * `uncall inv_bwt` clears s and hands L, I back: it recovers the BWT pair from
+ * the string, which is exactly the forward Burrows-Wheeler transform. See
+ * docs/reversible-pearls.md (PFAD ch.13 + Bird & Mu JFP 2004).
+ *
+ * Example: s = [3,1,2,1,0] has BWT L = [1,2,3,1,0], I = 4.
+ */
+
+// Fill the LF pointer-chase path[] from (L, I); pure ancilla, uncomputable.
+procedure build_path(int L[], int I, int n, int A,
+                     int cnt[], int C[], int occ[], int T[], int path[])
+    // 1. symbol counts
+    local int i = 0
+        from i = 0 loop
+            cnt[L[i]] += 1
+            i += 1
+        until i = n
+    delocal int i = n
+
+    // 2. cumulative counts: C[c] = C[c-1] + cnt[c-1], C[0] = 0
+    local int c = 1
+        from c = 1 loop
+            C[c] += C[c - 1] + cnt[c - 1]
+            c += 1
+        until c = A
+    delocal int c = A
+
+    // 3. LF map T[i] = C[L[i]] + rank of L[i] so far
+    local int i = 0
+        from i = 0 loop
+            T[i] += C[L[i]] + occ[L[i]]
+            occ[L[i]] += 1
+            i += 1
+        until i = n
+    delocal int i = n
+
+    // 4. follow the cycle from row I: path[k+1] = T[path[k]]
+    path[0] += I
+    local int k = 0
+        from k = 0 loop
+            path[k + 1] += T[path[k]]
+            k += 1
+        until k = n - 1
+    delocal int k = n - 1
+
+procedure inv_bwt(int L[], int I, int n, int A,
+                  int cnt[], int C[], int occ[], int T[], int path[], int s[])
+    call build_path(L, I, n, A, cnt, C, occ, T, path)
+
+    // 5. read s out of L along the path (s emerges reversed)
+    local int k = 0
+        from k = 0 loop
+            s[n - 1 - k] += L[path[k]]
+            k += 1
+        until k = n
+    delocal int k = n
+
+    // uncompute the ancillas: only s survives, L and I are preserved
+    uncall build_path(L, I, n, A, cnt, C, occ, T, path)
+
+procedure main()
+    int L[5] = {1, 2, 3, 1, 0}
+    int I
+    int n
+    int A
+    int cnt[4]
+    int C[4]
+    int occ[4]
+    int T[5]
+    int path[5]
+    int s[5]
+
+    I += 4
+    n += 5
+    A += 4
+
+    // Inverse BWT: reconstruct the string from (L, I).
+    call inv_bwt(L, I, n, A, cnt, C, occ, T, path, s)
+    printf("L:         %d %d %d %d %d   I=%d\n", L[0], L[1], L[2], L[3], L[4], I)
+    printf("decoded s: %d %d %d %d %d\n", s[0], s[1], s[2], s[3], s[4])
+
+    // uncall = forward BWT: recover (L, I), clearing s and every ancilla.
+    uncall inv_bwt(L, I, n, A, cnt, C, occ, T, path, s)
+    printf("restored:  L=%d%d%d%d%d I=%d s=%d%d%d%d%d\n",
+           L[0], L[1], L[2], L[3], L[4], I, s[0], s[1], s[2], s[3], s[4])

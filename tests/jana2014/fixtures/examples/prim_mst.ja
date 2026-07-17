@@ -1,0 +1,115 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Prim MST (minimum spanning tree, O(V^2))
+//
+// Undirected weighted graph as a symmetric adjacency matrix w[u*V+v]
+// (0 = no edge, weights > 0).  V rounds: select the non-tree vertex u
+// with minimum key (Bennett compute-copy-uncompute fold, as in
+// dijkstra.j), add it to the tree accumulating total += key[u], and
+// relax its neighbours' keys.  Key and parent overwrites are logged on
+// `dlog`; branches that mutate their own conditions log decision bits
+// on `blog`.  0 energy.
+// Preconditions: graph connected, key[] starts inf except key[0] = 0,
+// parent[] starts -1.
+//   outputs: total = MST weight, parent[] (MST edges), intree[], logs.
+//////////////////////////////////////////////////////////////////////
+
+// u := index of non-tree vertex with minimum key (fold with logs)
+procedure minv_sub(int key[], int intree[], int v_n, int u, stack lg, stack bl)
+  local int j = 0
+    from  j = 0
+    loop  if intree[j] = 0 && (u = v_n || key[j] < key[u]) then
+            push(u,lg)
+            u += j
+            local int b = 1
+              push(b,bl)
+            delocal int b = 0
+          else
+            local int b = 0
+              push(b,bl)
+            delocal int b = 0
+          fi top(bl) = 1
+          j += 1
+    until j = v_n
+  delocal int j = v_n
+
+procedure select_min(int key[], int intree[], int v_n, int res)
+  local int u = v_n
+    local stack lg = nil
+      local stack bl = nil
+        call minv_sub(key,intree,v_n,u,lg,bl)
+        res ^= u
+        uncall minv_sub(key,intree,v_n,u,lg,bl)
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int u = v_n
+
+procedure prim(int w[], int v_n, int key[], int parent[], int intree[],
+               int total, int inf, stack dlog, stack blog)
+  local int round = 0
+    from  round = 0
+    loop  local int u = 0
+            call select_min(key,intree,v_n,u)
+            intree[u] += 1
+            total += key[u]                 // MST edge weight (0 for the root)
+            local int v = 0
+              from  v = 0
+              loop  if w[u*v_n+v] > 0 && intree[v] = 0
+                       && w[u*v_n+v] < key[v] then
+                      local int nk = w[u*v_n+v]
+                        push(key[v],dlog)   // log old key, cell -> 0
+                        key[v] += nk
+                      delocal int nk = key[v]
+                      push(parent[v],dlog)  // log old parent, cell -> 0
+                      parent[v] += u
+                      local int b = 1
+                        push(b,blog)
+                      delocal int b = 0
+                    else
+                      local int b = 0
+                        push(b,blog)
+                      delocal int b = 0
+                    fi top(blog) = 1
+                    v += 1
+              until v = v_n
+            delocal int v = v_n
+            push(u,dlog)                    // log selected vertex, u -> 0
+          delocal int u = 0
+          round += 1
+    until round = v_n
+  delocal int round = v_n
+
+procedure main()
+  int w[25]        // 5x5 symmetric weighted adjacency matrix
+  int v_n
+  int key[5]
+  int parent[5]
+  int intree[5]
+  int total
+  int inf
+  stack dlog
+  stack blog
+
+  v_n += 5
+  inf += 100000
+
+  // undirected edges: 0-1:2 0-3:6 1-2:3 1-3:8 1-4:5 2-4:7 3-4:9
+  w[0*5+1] += 2  w[1*5+0] += 2
+  w[0*5+3] += 6  w[3*5+0] += 6
+  w[1*5+2] += 3  w[2*5+1] += 3
+  w[1*5+3] += 8  w[3*5+1] += 8
+  w[1*5+4] += 5  w[4*5+1] += 5
+  w[2*5+4] += 7  w[4*5+2] += 7
+  w[3*5+4] += 9  w[4*5+3] += 9
+
+  key[1] += inf
+  key[2] += inf
+  key[3] += inf
+  key[4] += inf
+  parent[0] -= 1
+  parent[1] -= 1
+  parent[2] -= 1
+  parent[3] -= 1
+  parent[4] -= 1
+
+  call prim(w,v_n,key,parent,intree,total,inf,dlog,blog)
+  // MST edges 0-1(2), 1-2(3), 1-4(5), 0-3(6) -> total = 16

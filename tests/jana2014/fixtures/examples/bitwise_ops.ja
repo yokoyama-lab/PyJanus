@@ -1,0 +1,18 @@
+// Bitwise operators in expressions: &, |, ^ (AND, OR, XOR).
+//
+// The verified cores (RevFrame.v's BAnd/BOr/BXor and RevArr.v's OAnd/OOr/OXor,
+// all denoting Z.land/lor/lxor) compute these directly, so both extracted
+// interpreters — vjanus (frame core) and driverar (flat core) — are diffed
+// against PyJanus on this program by the corpus tests. x=12 (1100), y=10 (1010):
+//   x & y = 8 (1000),  x | y = 14 (1110),  x ^ y = 6 (0110).
+procedure main()
+    int x
+    int y
+    int a
+    int o
+    int e
+    x += 12
+    y += 10
+    a += x & y
+    o += x | y
+    e += x ^ y

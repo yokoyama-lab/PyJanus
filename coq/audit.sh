@@ -25,6 +25,11 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevInverse RevCat RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
+Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Module ModFacts256 := RevMod.ModFacts RevMod.M256.
+Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
+Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
+Module ExtSModFacts8 := RevExtSMod.ExtSModFacts RevExtSMod.B8.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
@@ -70,6 +75,33 @@ Print Assumptions RevZigzag.zigzag_decode.
 Print Assumptions RevZigzag.zig_unzig.
 Print Assumptions RevDeltaN.deltaN_computes.
 Print Assumptions RevDeltaN.deltaN_reversible.
+(* reversible I/O (jana2014_in_out read/write), multiplicative update,
+   and the two nontrivial vjanus lowering encodings *)
+Print Assumptions RevIO.io_reversible.
+Print Assumptions RevIO.io_iff.
+Print Assumptions RevMul.mul_reversible.
+Print Assumptions RevLowering.xor3_swaps.
+Print Assumptions RevLowering.xor3_selfinverse.
+Print Assumptions RevLowering.xor3_alias_zero.
+Print Assumptions RevLowering.add_zero_noop.
+Print Assumptions RevLowering.pop_push.
+Print Assumptions RevLowering.push_clean.
+Print Assumptions RevLowering.addr_injective.
+Print Assumptions RevLowering.cantor2_injective.
+Print Assumptions RevLowering.tri_closed.
+Print Assumptions ModFacts256.mod_reversible.
+Print Assumptions RevMod.i8_wraps.
+Print Assumptions ExtModFacts256.extmod_reversible.
+Print Assumptions RevExtMod.i8_cell_wraps.
+Print Assumptions RevExtractMod.Run256.run_sound.
+Print Assumptions RevExtractMod.Run256.run_injective.
+Print Assumptions SModFacts8.smod_reversible.
+Print Assumptions RevSMod.s8_wraps.
+Print Assumptions ExtSModFacts8.extsmod_reversible.
+Print Assumptions RevExtSMod.i8_cell_swraps.
+Print Assumptions RevExtSMod.expr_wraps_mid_computation.
+Print Assumptions RevExtractSMod.Run8.run_sound.
+Print Assumptions RevExtractSMod.Run8.run_injective.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"

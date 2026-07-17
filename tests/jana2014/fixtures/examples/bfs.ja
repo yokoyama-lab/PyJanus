@@ -1,0 +1,71 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Breadth-First Search
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.2,
+//   Theorems 6.15/6.16.  Standard BFS costs Theta(wV+E) energy from
+//   comparisons, queue pointer churn, and clearing the visited list;
+//   the reversible version (Frank99) keeps everything and spends 0.
+//
+// Graph is an adjacency matrix adj[u*V+v] (1 if edge u->v).  BFS from
+// a source computes dist[] (BFS layer) and visited[], using an
+// array-backed FIFO queue (head/tail).  Each edge examination logs one
+// decision bit on `blog` (did we discover v here?), which is what makes
+// the visited-test reversible.  Nothing is destroyed => 0 energy.
+//   outputs: dist[], visited[], queue[] (visit order), blog.
+//////////////////////////////////////////////////////////////////////
+
+procedure bfs(int adj[], int v_n, int src,
+              int dist[], int visited[], int queue[], int head, int tail,
+              stack blog)
+  // enqueue the source
+  visited[src] += 1
+  queue[tail] ^= src
+  tail += 1
+
+  from  head = 0
+  loop  local int u = queue[head]         // dequeue (u stays in queue)
+          local int j = 0
+            from  j = 0
+            loop  if adj[u*v_n+j] = 1 && visited[j] = 0 then
+                    visited[j] += 1
+                    dist[j] ^= dist[u] + 1
+                    queue[tail] ^= j       // enqueue newly discovered node
+                    tail += 1
+                    local int b = 1
+                      push(b,blog)
+                    delocal int b = 0
+                  else
+                    local int b = 0
+                      push(b,blog)
+                    delocal int b = 0
+                  fi top(blog) = 1
+                  j += 1
+            until j = v_n
+          delocal int j = v_n
+        delocal int u = queue[head]
+        head += 1
+  until head = tail
+
+procedure main()
+  int adj[36]     // 6x6 adjacency matrix
+  int v_n         // number of vertices
+  int src
+  int dist[6]     // BFS distance from src
+  int visited[6]  // visited flags
+  int queue[6]    // FIFO queue (also the visit order)
+  int head
+  int tail
+  stack blog      // discovery-decision log
+
+  v_n += 6
+
+  // undirected edges: 0-1 0-2 1-3 2-3 3-4 4-5
+  adj[0*6+1] += 1  adj[1*6+0] += 1
+  adj[0*6+2] += 1  adj[2*6+0] += 1
+  adj[1*6+3] += 1  adj[3*6+1] += 1
+  adj[2*6+3] += 1  adj[3*6+2] += 1
+  adj[3*6+4] += 1  adj[4*6+3] += 1
+  adj[4*6+5] += 1  adj[5*6+4] += 1
+
+  call bfs(adj,v_n,src,dist,visited,queue,head,tail,blog)
+  // expected dist = {0,1,1,2,3,4}, queue (order) = {0,1,2,3,4,5}

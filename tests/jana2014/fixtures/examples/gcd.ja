@@ -1,0 +1,36 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible GCD (subtractive Euclid)
+//
+// Classic Euclidean gcd by repeated subtraction, made reversible by
+// logging one bit per step (which of a,b was the larger).  The bit also
+// serves as the reversible exit assertion for the branch (whose own
+// condition a>b it does not modify -- so a plain `fi a > b` would also
+// work here; the log is what lets `uncall` reconstruct the path).
+//   forward: (a,b) with a,b>0, a!=b  ->  (a=b=gcd(a,b), step log)
+//   uncall : restores the original (a,b) from (gcd, log).
+//////////////////////////////////////////////////////////////////////
+
+procedure gcd(int a, int b, stack log)
+  from  empty(log)              // true only on first entry
+  loop  if a > b then
+          a -= b
+          local int t = 1
+            push(t,log)
+          delocal int t = 0
+        else
+          b -= a
+          local int t = 0
+            push(t,log)
+          delocal int t = 0
+        fi top(log) = 1
+  until a = b
+
+procedure main()
+  int a
+  int b
+  stack log
+
+  a += 48
+  b += 36
+  call gcd(a,b,log)
+  // gcd(48,36) = 12  ->  a = b = 12

@@ -1,0 +1,18 @@
+// Reflected binary Gray code — no-I/O variant (verified-oracle twin of
+// tests/jana2014_in_out/programs/gray_code.ja).
+//
+// The Gray encoding g[i] = b[i] XOR b[i+1] is a clean reversible bijection on
+// bit vectors, done in place with one `^=` per bit; `uncall gray` decodes.
+// Input is baked into main and the encoded vector is left in the store, so
+// tests/jana2014/test_vjanus_corpus.py diffs the Coq-extracted `run` against
+// PyJanus on it. Here bits = 1010 (b3,b1 set) -> Gray 1111.
+procedure gray(int bits[])
+    iterate int i = 0 to 2
+        bits[i] ^= bits[i+1]
+    end
+
+procedure main()
+    int bits[4]
+    bits[3] += 1
+    bits[1] += 1
+    call gray(bits)

@@ -261,8 +261,12 @@ let rec expr st scp (e : Ast.expr) : J.expr =
      | ">=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BLt, l, r))
      | "<=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BLt, r, l))
      | "!=" -> J.Bin (J.BSub, J.Cst (z 1), J.Bin (J.BEq, l, r))
+     (* jana2014 requires boolean operands for && / || (PyJanus type-errors
+        otherwise), so l, r are 0/1: && = l*r, || = l + r - l*r (inclusion-
+        exclusion). The earlier || = l*l + r*r wrongly yields 2 when both hold. *)
      | "&&" -> J.Bin (J.BMul, l, r)
-     | "||" -> J.Bin (J.BAdd, J.Bin (J.BMul, l, l), J.Bin (J.BMul, r, r))
+     | "||" -> J.Bin (J.BSub, J.Bin (J.BAdd, l, r), J.Bin (J.BMul, l, r))
+     | "^" -> J.Bin (J.BXor, l, r) | "&" -> J.Bin (J.BAnd, l, r) | "|" -> J.Bin (J.BOr, l, r)
      | o -> raise (Unsupported ("operator " ^ o)))
 
 (* multi-dim indices fold to one via an injective Cantor pairing (as lower.ml) *)
@@ -330,26 +334,33 @@ let cantor_val = function
   | [] -> 0
   | x :: rest -> List.fold_left (fun acc j -> (acc + j) * (acc + j + 1) / 2 + j) x rest
 
-(* the constant signed step by which [nm] is incremented at top level of [stmts]
-   (`nm += c` -> +c, `nm -= c` -> -c); None if there is no such single step *)
-let rec find_step nm = function
-  | [] -> None
-  | Ast.Assign ({ lname; sels = []; fields = []; _ }, "+=", Ast.Num c) :: _ when lname = nm -> Some c
-  | Ast.Assign ({ lname; sels = []; fields = []; _ }, "-=", Ast.Num c) :: _ when lname = nm -> Some (- c)
-  | _ :: rest -> find_step nm rest
+(* Static check: reject self-referential local/delocal.
+   - `local i = f(i)`: i is not in scope at initialisation.
+   - `delocal i = f(i)`: the freed value references the dying cell; a sound
+     lowering would require keeping history or non-local uncomputation.
+   Both are rejected with Ast.Error (exit 1). *)
+let rec check_stmts stmts = List.iter check_stmt stmts
+and check_stmt = function
+  | Ast.Local (d1, body, d2) ->
+    let nm = d1.Ast.dname in
+    let e_init = match d1.Ast.dinit with Some e -> e | None -> Ast.Num 0 in
+    let e_delocal = match d2.Ast.dinit with Some e -> e | None -> Ast.Num 0 in
+    if reads_name e_init nm then
+      raise (Ast.Error (Printf.sprintf
+        "local '%s': initialiser must not read '%s' (variable not yet in scope)" nm nm, 0, 0));
+    if reads_name e_delocal nm then
+      raise (Ast.Error (Printf.sprintf
+        "delocal '%s': self-referential delocal is not allowed (expression must \
+         not read '%s')" nm nm, 0, 0));
+    check_stmts body
+  | Ast.If (_, t, f, _) -> check_stmts t; check_stmts f
+  | Ast.From (_, do_s, loop_s, _) -> check_stmts do_s; check_stmts loop_s
+  | Ast.Iterate (_, _, _, _, _, body) -> check_stmts body
+  | _ -> ()
 
-(* Recognise the counter idiom `from i=START do {…; i += STEP} loop … until COND`
-   (a single from-loop incrementing [nm] by a constant), returning (STEP, COND).
-   This is what a self-referential `delocal i = i` frees: knowing STEP and COND
-   lets us count [nm] back down to START with a clean reverse loop, so the local
-   is freed at the non-self-referential value START — no closed form needed. *)
-let counter_idiom nm (body : Ast.stmt list) : (int * Ast.expr) option =
-  match body with
-  | [Ast.From (_entry, do_s, loop_s, until)] ->
-    (match find_step nm do_s with
-     | Some step -> Some (step, until)
-     | None -> (match find_step nm loop_s with Some step -> Some (step, until) | None -> None))
-  | _ -> None
+let check_program (prog : Ast.program) =
+  List.iter (fun p -> check_stmts p.Ast.body) prog.Ast.procs;
+  check_stmts prog.Ast.mstmts
 
 let aop = function "+=" -> J.OAdd | "-=" -> J.OSub | "^=" -> J.OXor
   | o -> raise (Unsupported ("assign-op " ^ o))
@@ -372,6 +383,11 @@ let lv_read st scp (lv : Ast.lval) : J.expr = expr st scp (Lv lv)
 let rec stmt st scp (s : Ast.stmt) : J.stmt =
   match s with
   | Skip -> J.Skip
+  | Io kw ->
+    (* reversible read/write is the jana2014_in_out dialect; the verified frame
+       core is a pure store transformer with no I/O, so skip cleanly (exit 3)
+       rather than silently dropping the statement and diverging from PyJanus *)
+    raise (Unsupported ("I/O statement '" ^ kw ^ "' (jana2014_in_out; no I/O in the verified core)"))
   | Assign (lv, op, e) -> assign_lv st scp lv (aop op) (expr st scp e)
   | Swap (a, b) ->
     (* no Swap primitive in the frame core: a^=b; b^=a; a^=b (each reversible),
@@ -391,6 +407,29 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
     let incr = J.Asn (xref, J.OAdd, ep) in
     J.Seq (J.Enter (nat x, es),
            J.Seq (J.Loop (istart, J.Skip, J.Seq (seq st scp body, incr), istop), J.Exit (nat x, stop)))
+  | Local (d1, body, _) when d1.ddims <> [] ->
+    (* local array: one depth-frame RL slot serves as the array base (exactly as
+       a flat struct local does), cells addressed by ARd/AAsn(RL base, Cantor
+       idx) via ref_of finding the name in scp.locals.  A fresh frame slot holds
+       a clean (all-zero) array, and jana2014 requires the array be cleared
+       before delocal, so we bracket the body with a per-cell +0 / -0 that marks
+       the clean init/de-init reversibly (mirrors the struct-with-array-field
+       local).  Initialised local arrays aren't expressible (the grammar has no
+       aggregate expression after `=`), so dinit is always None here. *)
+    if d1.dinit <> None then raise (Unsupported "local array initializer");
+    let base = local_slot scp d1.dname in
+    let base_ref = J.RL (nat base) in
+    let body' = seq st scp body in
+    let rec enum = function
+      | [] -> [[]]
+      | d :: rest ->
+        List.concat_map (fun i -> List.map (fun t -> i :: t) (enum rest))
+          (List.init d (fun i -> i)) in
+    let cells = List.map cantor_val (enum d1.ddims) in
+    List.fold_left (fun acc cell ->
+        J.Seq (J.AAsn (base_ref, J.Cst (z cell), J.OAdd, J.Cst (z 0)),
+               J.Seq (acc, J.AAsn (base_ref, J.Cst (z cell), J.OSub, J.Cst (z 0)))))
+      body' cells
   | Local (d1, body, d2) when d1.dis_stack ->
     (* local stack: only the top counter is a scalar local to Enter/Exit; the
        backing array cells live in the same depth-d frame and are clean (0) on
@@ -442,43 +481,11 @@ let rec stmt st scp (s : Ast.stmt) : J.stmt =
                  J.Seq (acc, J.Exit (nat (base + off), field_src s2 f))))
         body' (struct_fields st sname)
     end
-  | Local (d1, body, d2)
-    when (let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
-          reads_name e1 d1.dname                          (* self-referential delocal *)
-          && not (reads_name (match d1.dinit with Some e -> e | None -> Num 0) d1.dname)
-          && counter_idiom d1.dname body <> None) ->
-    (* Loop-aware lowering of `local i=START; from i=START do {…; i += STEP} …
-       until COND; delocal i = i`.  Freeing a loop counter at its dynamic final
-       value is not statement-reversible directly (the delocal value references
-       the freed variable).  Instead, after the loop we count i back down to
-       START with a clean reverse loop — `from COND do {i -= STEP} until i=START`
-       — which touches nothing but i, then free it at START (a live, non-self-
-       referential value).  The reverse loop is an ordinary reversible from-loop;
-       its inverse counts i back up to the final value, so the whole composite is
-       reversible without any closed form for the loop bound. *)
-    let nm = d1.dname in
-    let step, until = match counter_idiom nm body with Some x -> x | None -> assert false in
-    let start = match d1.dinit with Some e -> e | None -> Num 0 in
-    let x = local_slot scp nm in
-    let xref = J.RL (nat x) in
-    let start_e = expr st scp start in
-    let main = seq st scp body in                         (* i: START -> final *)
-    let dec = J.Asn (xref, J.OSub, J.Cst (z step)) in     (* i -= STEP (signed) *)
-    let back = J.Loop (expr st scp until, dec, J.Skip,    (* i: final -> START *)
-                       J.Bin (J.BEq, J.Rd xref, start_e)) in
-    J.Seq (J.Enter (nat x, start_e),
-           J.Seq (main, J.Seq (back, J.Exit (nat x, start_e))))
   | Local (d1, body, d2) ->
     let e0 = match d1.dinit with Some e -> e | None -> Num 0 in
     let e1 = match d2.dinit with Some e -> e | None -> Num 0 in
-    (* A self-referential delocal that is NOT the recognised counter idiom
-       (above) stays outside the statement-reversible Enter/Exit model: freeing a
-       non-zero local reversibly would need either a history of the discarded
-       value (garbage that breaks store-matching) or uncomputing the loop
-       (non-local).  We reject it rather than encode it unsoundly — see
-       coq/vjanus/README.md.  PyJanus permits it because it only runs forward. *)
-    if reads_name e0 d1.dname || reads_name e1 d1.dname then
-      raise (Unsupported "self-referential local/delocal");
+    (* self-referential local/delocal is caught statically by check_program
+       (Ast.Error, exit 1) before lowering; reaching here means it is safe. *)
     let x = local_slot scp d1.dname in
     J.Seq (J.Enter (nat x, expr st scp e0),
            J.Seq (seq st scp body, J.Exit (nat x, expr st scp e1)))
@@ -627,6 +634,20 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
   let rec emit_init g item prefix = match item with
     | VA items -> List.iteri (fun k sub -> emit_init g sub (prefix @ [k])) items
     | VE e -> inits := J.AAsn (J.RG (nat g), J.Cst (z (cantor_val prefix)), J.OAdd, expr st mscp e) :: !inits in
+  (* struct value initializer `= {f0, f1, …}`: write each field of one struct
+     instance.  `w cell e` stores value `e` at the instance-relative cell index;
+     fields follow the layout `offs` (declaration order), and an array field
+     walks its nested aggregate with a Cantor-folded intra-field index — exactly
+     the addressing `field_access` uses (field_offset + Cantor(fsels)). *)
+  let emit_struct w offs item = match item with
+    | VA fitems when List.length fitems = List.length offs ->
+      List.iter2 (fun (_, off, _) fit ->
+        let rec go it prefix = match it with
+          | VA items -> List.iteri (fun k sub -> go sub (prefix @ [k])) items
+          | VE e -> w (off + cantor_val prefix) e
+        in go fit []) offs fitems
+    | VA _ -> raise (Unsupported "struct initializer arity mismatch")
+    | VE _ -> raise (Unsupported "scalar initializer on struct") in
   List.iter (fun (vd : Ast.vdecl) ->
     if vd.vis_stack then begin
       let (a, t) = global_stack st vd.vname in
@@ -648,19 +669,42 @@ let program (p : Ast.program) : J.stmt array * J.stmt * layout =
         let base = gslot st vd.vname in
         Hashtbl.replace st.gsarrays vd.vname (sname, base, size);
         sarrays := (vd.vname, base, vd.vdims, size, offsets) :: !sarrays;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct array initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it ->
+           (* outer aggregate indexes elements (Cantor-folded, like `index`),
+              cell = elem*size + field-cell; the leaf VA is one element's fields *)
+           let rec emit_elems prefix item =
+             if List.length prefix < List.length vd.vdims then
+               (match item with
+                | VA items -> List.iteri (fun k sub -> emit_elems (prefix @ [k]) sub) items
+                | VE _ -> raise (Unsupported "struct array initializer shape"))
+             else
+               let ebase = cantor_val prefix * size in
+               emit_struct
+                 (fun cell e -> inits := J.AAsn (J.RG (nat base), J.Cst (z (ebase + cell)), J.OAdd, expr st mscp e) :: !inits)
+                 offsets item
+           in emit_elems [] it)
       end else if struct_has_array_field st sname then begin
         (* scalar struct WITH array fields: one base array slot, GA-addressed *)
         let base = gslot st vd.vname in
         Hashtbl.replace st.gstructs_flat vd.vname (sname, base);
         flatstructs := (vd.vname, base, offsets) :: !flatstructs;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it -> emit_struct
+             (fun cell e -> inits := J.AAsn (J.RG (nat base), J.Cst (z cell), J.OAdd, expr st mscp e) :: !inits)
+             offsets it)
       end else begin
         (* pure scalar struct: consecutive scalar slots G(base .. base+size-1) *)
         let base = st.nglob in st.nglob <- st.nglob + size;
         Hashtbl.replace st.gstructs vd.vname (sname, base);
         structs := (vd.vname, base, List.map (fun (f, o, _) -> (f, o)) offsets) :: !structs;
-        (match vd.vinit with None -> () | Some _ -> raise (Unsupported "struct initializer (not yet)"))
+        (match vd.vinit with
+         | None -> ()
+         | Some it -> emit_struct
+             (fun cell e -> inits := J.Asn (J.RG (nat (base + cell)), J.OAdd, expr st mscp e) :: !inits)
+             offsets it)
       end
     end else begin
       let g = gslot st vd.vname in

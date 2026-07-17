@@ -1,0 +1,51 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Modular Exponentiation (square-and-multiply)
+//
+// Computes r = base^e mod m by scanning the W = 8 bits of e (monotone
+// loop).  Modular multiplication overwrites the accumulator, which is
+// irreversible, so the overwritten value is pushed on `g` each time
+// (overwrite log); the running power p is likewise logged as it is
+// squared.  p and pw are handed in as zero-initialised cells and remain
+// as (reversible) garbage outputs together with g.
+// Preconditions: m >= 2, 0 <= e < 2^8.
+//   forward: (r=0, p=0, pw=0) -> (r = base^e mod m, p,pw,g garbage)
+//   uncall : restores all zeros.
+//////////////////////////////////////////////////////////////////////
+
+procedure modexp(int base, int e, int m, int r, int p, int pw, stack g)
+  r += 1                          // r = 1
+  p += base % m                   // running power base^(2^i) mod m
+  pw += 1                         // 2^i
+  local int i = 0
+    from  i = 0
+    loop  if (e / pw) % 2 = 1 then
+            local int rn = (r * p) % m
+              push(r,g)           // log old accumulator, r -> 0
+              r += rn
+            delocal int rn = r
+          fi (e / pw) % 2 = 1
+          local int pn = (p * p) % m
+            push(p,g)             // log old power, p -> 0
+            p += pn
+          delocal int pn = p
+          pw *= 2
+          i += 1
+    until i = 8
+  delocal int i = 8
+  pw -= 256                       // pw = 2^8, return it to zero
+
+procedure main()
+  int base
+  int e
+  int m
+  int r      // result
+  int p      // garbage: final running power
+  int pw     // scratch (returned to zero)
+  stack g    // overwrite log
+
+  base += 7
+  e += 133
+  m += 31
+
+  call modexp(base,e,m,r,p,pw,g)
+  // 7^133 mod 31 = 19

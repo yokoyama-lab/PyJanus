@@ -1,0 +1,129 @@
+// qsort using minimum garbage with optimal garbage
+// Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.171
+
+procedure partition(int a[], int p, int r, int i, int ord[])
+  // print("partition")  show(a,p,r,i,ord)
+  i ^= p - 1
+  local int j = p
+  from  j = p
+  loop  // show(ord,a,i,p,r,j)
+        if a[j] <= a[r] then
+          i += 1
+          local int k = i
+            from  k = i
+            loop  local int t1 = a[k]  // a[k] <=> a[j]
+                    local int t2 = a[j]
+                      a[k] ^= t1 ^ t2
+                      a[j] ^= t1 ^ t2
+                    delocal int t2 = a[k]
+                  delocal int t1 = a[j]
+                  local int t1 = ord[k] // ord[k] <=> ord[j]
+                    local int t2 = ord[j]
+                      ord[k] ^= t1 ^ t2
+                      ord[j] ^= t1 ^ t2
+                    delocal int t2 = ord[k]
+                  delocal int t1 = ord[j]
+                  k += 1
+            until k = j
+          delocal int k = j  
+        fi (i >= p) && ((i = j) || (ord[i] > ord[j]))
+        j += 1
+  until j = r
+  delocal int j = r
+
+  local int k = i+1
+    from  k = i+1
+    loop  local int t1 = a[k]  // a[k] <=> a[r]
+            local int t2 = a[r]
+              a[k] ^= t1 ^ t2
+              a[r] ^= t1 ^ t2
+            delocal int t2 = a[k]
+          delocal int t1 = a[r]
+          local int t1 = ord[k]  // ord[k] <=> ord[r]
+            local int t2 = ord[r]
+              ord[k] ^= t1 ^ t2
+              ord[r] ^= t1 ^ t2
+            delocal int t2 = ord[k]
+          delocal int t1 = ord[r]
+          k += 1
+    until k = r
+  delocal int k = r
+  i += 1
+
+// xcopy to q the index of the maximum of ord[p..r]
+procedure max(int q, int ord[], int p, int r)
+  local stack gbg = nil
+    local int m = 0
+      call max_sub(m,ord,p,r,gbg)
+      // show(m,ord,p,r,gbg,q)
+      q ^= m
+      uncall max_sub(m,ord,p,r,gbg)
+    delocal int m = 0
+  delocal stack gbg = nil
+
+procedure max_sub(int m, int ord[], int p, int r, stack gbg)
+  m ^= p
+  local int i = p
+  from  i = p
+  loop  if ord[i] >= ord[m] then
+          push(m,gbg)
+          m ^= i
+          local int t = 1
+            push(t,gbg)
+          delocal int t = 0
+        else
+          local int t = -1
+            push(t,gbg)
+          delocal int t = 0
+        fi top(gbg) = 1
+        i += 1
+  until i = r + 1
+  delocal int i = r + 1
+
+procedure qsort(int a[], int p, int r, int ord[])
+  // print("qsort")  show(a,p,r)
+  if p < r then
+    local int q = 0
+      call partition(a,p,r,q,ord)
+      // print("after partition")
+      // show(p,q,r,a,ord)
+      q -= 1
+      call qsort(a,p,q,ord)
+      q += 2
+      call qsort(a,q,r,ord)
+      q -= 1
+      // print("####after partition")
+      // show(p,q,r,a,ord)
+      call max(q,ord,p,r)
+      // show(q)
+    delocal int q = 0
+  fi p < r
+
+procedure main()
+  int a[8]     // input array
+  int ord[8]   // order
+
+  // p.172
+  a[0] += 2
+  a[1] += 8
+  a[2] += 7
+  a[3] += 1
+  a[4] += 3
+  a[5] += 5
+  a[6] += 6
+  a[7] += 4
+
+  ord[0] += 0
+  ord[1] += 1
+  ord[2] += 2
+  ord[3] += 3
+  ord[4] += 4
+  ord[5] += 5
+  ord[6] += 6
+  ord[7] += 7
+
+  local int r = 7
+    local int p = 0
+      call qsort(a,p,r,ord)
+    delocal int p = 0
+  delocal int r = 7

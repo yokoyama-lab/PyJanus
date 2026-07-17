@@ -63,11 +63,16 @@ Qed.
 
 (* ************************************************************************* *)
 (** ** Reversible operators (as before). *)
-Inductive binop := OAdd | OSub | OMul | OEq | OLt | ODiv | OMod.
+Inductive binop := OAdd | OSub | OMul | OEq | OLt | ODiv | OMod | OXor | OAnd | OOr.
 Definition denote (o : binop) (a b : Z) : Z :=
   match o with OAdd => a + b | OSub => a - b | OMul => a * b
     | OEq => if Z.eqb a b then 1 else 0 | OLt => if Z.ltb a b then 1 else 0
-    | ODiv => Z.div a b | OMod => Z.modulo a b end.
+    | ODiv => Z.div a b | OMod => Z.modulo a b
+    | OXor => Z.lxor a b | OAnd => Z.land a b | OOr => Z.lor a b end.
+(* bitwise operators denote like PyJanus's & | ^ : 12 (1100), 10 (1010) *)
+Example denote_bitwise :
+  denote OAnd 12 10 = 8 /\ denote OOr 12 10 = 14 /\ denote OXor 12 10 = 6.
+Proof. repeat split; reflexivity. Qed.
 Inductive aop := AAdd | ASub | AXor.
 Definition adenote (o : aop) (a b : Z) : Z :=
   match o with AAdd => a + b | ASub => a - b | AXor => Z.lxor a b end.

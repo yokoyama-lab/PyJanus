@@ -29,19 +29,52 @@ let ident s = match (peek s).t with
   | KW x -> adv s; x   (* allow keyword-like field/proc names where the grammar does *)
   | _ -> err s "expected identifier"
 
+(* sized integer types (i8..u64): valid jana2014, but the verified Z core cannot
+   run their wrapping faithfully (that needs a modular core — coq/RevMod.v), so
+   they are rejected as unsupported (exit 3), not misparsed. *)
+let is_int_type_kw = function
+  | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" -> true
+  | _ -> false
+let unsupported_int_type k =
+  raise (Ast.Unsupported ("sized integer type " ^ k ^ " (needs a modular core)"))
+
 (* ----- expressions (precedence climbing) ----- *)
 
+(* Precedence climbing, mirroring jana_py/parser_jana2014.py's BIN_PRECEDENCE so
+   vjanus parses the same tree. Bitwise & | ^ sit between && and the comparisons
+   (PyJanus level 3); lower.ml lowers them to the verified core's BAnd/BOr/BXor
+   (Z.land/lor/lxor in RevFrame.v), so e.g. `dst[i] ^= a ^ b` runs directly. *)
+(* Levels mirror parser_jana2014.py's BIN_PRECEDENCE exactly, including the
+   shifts (between comparisons and +/-) and ** (tightest).  vjanus's lowering has
+   no core primitive for << >> **, so they parse here at the right precedence and
+   are rejected as unsupported (exit 3) instead of causing a parse error. *)
 let binop_level = function
   | "||" -> Some 1
   | "&&" -> Some 2
-  | "=" | "==" | "!=" | "#" | "<" | "<=" | ">" | ">=" -> Some 3
-  | "+" | "-" -> Some 4
-  | "*" | "/" | "%" -> Some 5
+  | "&" | "|" | "^" -> Some 3
+  | "=" | "==" | "!=" | "#" | "<" | "<=" | ">" | ">=" -> Some 4
+  | "<<" | ">>" -> Some 5
+  | "+" | "-" -> Some 6
+  | "*" | "/" | "%" -> Some 7
+  | "**" -> Some 8
   | _ -> None
 
 let norm_op = function "=" -> "==" | "#" -> "!=" | o -> o
 
-let rec expr s = expr_bin s 1
+(* Ternary `c ? t : e` sits above the binary operators (lowest precedence,
+   right-associative), mirroring parser_jana2014.py's parse_expression.  jana2014
+   requires the condition to be boolean (0/1) — PyJanus type-errors otherwise — so
+   it desugars to the pure arithmetic `c*t + (1-c)*e`, which the verified frame
+   core evaluates with BMul/BAdd/BSub (no conditional-expression primitive). *)
+let rec expr s =
+  let c = expr_bin s 1 in
+  if at_op s "?" then begin
+    adv s;
+    let t = expr s in
+    eat_op s ":";
+    let e = expr s in
+    Bin ("+", Bin ("*", c, t), Bin ("*", Bin ("-", Num 1, c), e))
+  end else c
 and expr_bin s minl =
   let left = ref (expr_unary s) in
   let continue = ref true in
@@ -64,7 +97,11 @@ and expr_unary s =
 and expr_atom s =
   match (peek s).t with
   | NUM n -> adv s; Num n
-  | OP "(" -> adv s; let e = expr s in eat_op s ")"; e
+  | OP "(" ->
+    (match (peek2 s).t with           (* `( iN ) e` is a cast to a sized int type *)
+     | KW k when is_int_type_kw k -> unsupported_int_type k
+     | _ -> ());
+    adv s; let e = expr s in eat_op s ")"; e
   | KW "true" -> adv s; Num 1
   | KW "false" -> adv s; Num 0
   | KW "nil" -> adv s; err s "nil is only valid as a stack initializer"
@@ -102,7 +139,11 @@ let rec stmt s =
   | KW "uncall" -> adv s; let n, a = call_target s in Uncall (n, a)
   | KW "push" -> adv s; eat_op s "("; let x = lval s in eat_op s ","; let st = ident s in eat_op s ")"; Push (x, st)
   | KW "pop" -> adv s; eat_op s "("; let x = lval s in eat_op s ","; let st = ident s in eat_op s ")"; Pop (x, st)
-  | (KW "printf" | KW "print" | KW "show" | KW "read" | KW "write" | KW "error") ->
+  (* read/write mutate the store, so silently dropping them would diverge from
+     PyJanus; keep the keyword and let lowering reject the I/O dialect (exit 3).
+     printf/print/show/error have no store effect, so they stay dropped. *)
+  | KW ("read" | "write" as kw) -> print_like s; Io kw
+  | (KW "printf" | KW "print" | KW "show" | KW "error") ->
       print_like s; Skip
   | ID _ -> assign_or_swap s
   | _ -> err s "expected statement"
@@ -116,8 +157,11 @@ and assign_or_swap s =
   let l = lval s in
   match (peek s).t with
   | OP "<=>" -> adv s; let r = lval s in Swap (l, r)
-  | OP ("+=" | "-=" | "^=" as o) -> adv s; let e = expr s in Assign (l, o, e)
-  | _ -> err s "expected '+=', '-=', '^=' or '<=>'"
+  (* `*=` / `/=` are accepted here so lowering can reject them as a clean
+     "unsupported" (exit 3) rather than a hard parse error (exit 1): the verified
+     frame core has no multiplicative update, only OAdd/OSub/OXor. *)
+  | OP ("+=" | "-=" | "^=" | "*=" | "/=" as o) -> adv s; let e = expr s in Assign (l, o, e)
+  | _ -> err s "expected '+=', '-=', '^=', '*=', '/=' or '<=>'"
 
 and if_stmt s =
   eat_kw s "if"; let entry = expr s in
@@ -153,6 +197,8 @@ and local_stmt s =
   Local (d1, body, d2)
 
 and decl s =
+  (match (peek s).t with            (* `local iN x` — sized int types unsupported *)
+   | KW k when is_int_type_kw k -> unsupported_int_type k | _ -> ());
   let dstruct =
     if at_kw s "struct" then (adv s; Some (ident s))            (* `struct Name x` *)
     else match (peek s).t with
@@ -162,10 +208,19 @@ and decl s =
                  else if at_kw s "stack" then (adv s; true)
                  else (ignore (opt_kw s "int"); ignore (opt_kw s "bool"); false) in
   let nm = ident s in
+  (* array dims: `local int tmp[3]` — parsed so the head is well-formed; lowering
+     rejects local arrays as unsupported (exit 3), not a parse error (exit 1) *)
+  let dims = ref [] in
+  while at_op s "[" do
+    adv s;
+    (match (peek s).t with NUM n -> adv s; dims := n :: !dims
+     | _ -> err s "array dimension must be a constant");
+    eat_op s "]"
+  done;
   let init = if opt_op s "=" then
       (if at_kw s "nil" then (adv s; None) else Some (expr s))
     else None in
-  { dname = nm; dis_stack = is_stack; dstruct; dinit = init }
+  { dname = nm; dis_stack = is_stack; dstruct; ddims = List.rev !dims; dinit = init }
 
 and call_target s =
   let n = ident s in
@@ -187,7 +242,7 @@ and arg s =
     let l = lval s in
     (match (peek s).t with
      | OP ("+" | "-" | "*" | "/" | "%" | "=" | "==" | "!=" | "#"
-          | "<" | "<=" | ">" | ">=" | "&&" | "||") ->
+          | "<" | "<=" | ">" | ">=" | "&&" | "||" | "&" | "|" | "^") ->
         s.p <- save; AVal (expr s)              (* it was the start of an expression *)
      | _ -> ALv l)
   | _ -> AVal (expr s)
@@ -219,6 +274,7 @@ let typ_kw s =
   match (peek s).t with
   | KW ("int" | "bool") -> adv s; `Int
   | KW "stack" -> adv s; `Stack
+  | KW k when is_int_type_kw k -> unsupported_int_type k
   | _ -> err s "expected a type"
 
 let rec dims_of s =
@@ -237,7 +293,8 @@ and vdecl s =
     adv s;
     let vn = ident s in
     let dims = dims_of s in
-    { vname = vn; vis_stack = false; vstruct = Some nm; vdims = dims; vinit = None }
+    let init = if opt_op s "=" then Some (vinit s) else None in
+    { vname = vn; vis_stack = false; vstruct = Some nm; vdims = dims; vinit = init }
   | _ ->
     let k = typ_kw s in
     let nm = ident s in
@@ -292,6 +349,7 @@ let procedure s =
     let vds = ref [] in
     while (match (peek s).t with
            | KW ("int" | "stack" | "bool") -> true
+           | KW k when is_int_type_kw k -> true   (* -> vdecl -> typ_kw rejects (exit 3) *)
            | ID nm when is_struct_name s nm -> true
            | _ -> false) do
       vds := vdecl s :: !vds

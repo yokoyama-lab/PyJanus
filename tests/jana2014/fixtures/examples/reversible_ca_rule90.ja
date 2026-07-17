@@ -1,0 +1,31 @@
+// Second-order reversible cellular automaton (Rule 90R) — no-I/O variant.
+//
+// The same clean reversible simulation as
+// tests/jana2014_in_out/programs/reversible_ca_rule90.ja, but with the input
+// baked into main (so it runs under plain jana2014) and the result left in the
+// store. This is what the verified vjanus interpreter checks against PyJanus:
+// tests/jana2014/test_vjanus_corpus.py diffs the final store of the
+// Coq-extracted `run` against PyJanus on this exact program.
+//
+// Update: new[i] = (cur[i-1] XOR cur[i+1]) XOR prev[i]. Written as two `^=`
+// statements (each individually reversible; their composition is the XOR of
+// both neighbours; equivalently `dst[i] ^= src[i-1] ^ src[i+1]`, which vjanus
+// also accepts). Real cells are indices 1..3; guard cells 0 and 4 stay 0
+// (zero boundary). `uncall step` inverts a step.
+procedure step(int dst[], int src[])
+    iterate int i = 1 to 3
+        dst[i] ^= src[i-1]
+        dst[i] ^= src[i+1]
+    end
+
+procedure main()
+    int a[5]
+    int b[5]
+    b[1] += 1
+    b[2] += 2
+    b[3] += 3
+    a[1] += 4
+    a[2] += 5
+    a[3] += 6
+    call step(a, b)
+    call step(b, a)

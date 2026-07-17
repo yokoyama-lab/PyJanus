@@ -1,0 +1,280 @@
+/////////////////////////////////////////////////
+// Er, M. C. (1985).
+// "Enumerating ordered trees lexicographically."
+// The Computer Journal 28(5).
+//
+// p.540 function Rank
+// p.541 procedure Unrank
+/////////////////////////////////////////////////
+
+// procedure fact(int n, int res)
+//   if n=0 then
+//     res ^= 1
+//   else
+//     local int tmp = 0
+//       n -= 1
+//       call fact(n, tmp)
+//       res ^= (n + 1) * tmp
+//       uncall fact(n, tmp)
+//       n += 1
+//     delocal int tmp = 0
+//   fi n=0
+
+// procedure perm(int n, int r, int res)
+//   if r=0 then
+//     res ^= 1
+//   else
+//     local int tmp = 0
+//       n -= 1
+//       r -= 1
+//       call perm(n, r, tmp)
+//       res ^= (n + 1) * tmp
+//       uncall perm(n, r, tmp)
+//       r += 1
+//       n += 1
+//     delocal int tmp = 0
+//   fi r=0
+
+// iterative factorial: res := n!
+procedure fact(int n, int res)
+  res ^= 1
+  local int i = 0
+    from  i = 0
+    loop  local int tmp = res
+            res ^= tmp ^ tmp * (n - i)
+          delocal int tmp = res / (n - i)
+          i += 1
+    until i = n
+  delocal int i = n
+
+// res = nPr
+procedure perm(int n, int r, int res)
+  res ^= 1
+  local int i = 0
+      from  i = 0
+      loop  local int tmp = res
+              res ^= tmp ^ tmp * (n - i)
+            delocal int tmp = res / (n - i)
+            i += 1
+      until i = r
+  delocal int i = r
+
+// res += nCr
+procedure comb(int n, int r, int res)
+  if r >= 0 then  // if r is negative, res=0
+    local int p = 0
+      local int f = 0
+        call perm(n, r, p)
+        call fact(r, f)
+        res += p / f
+        uncall fact(r, f)
+        uncall perm(n, r, p)
+      delocal int f = 0
+    delocal int p = 0
+  fi r >= 0
+
+// clean: b[] -> index
+procedure rank(int b[], int n, int index)
+  index ^= 1
+  local int cnt = n-1
+    local int i=1
+      from  i=1
+      loop  if b[i] = 1 then
+              local int posn = 2*n - (i+1)
+                local int c = 0
+                  call comb(posn, cnt, c)
+                  index += c
+                  uncall comb(posn, cnt, c)
+                  cnt -= 1
+                  call comb(posn, cnt, c)
+                  index -= c
+                  uncall comb(posn, cnt, c)
+                delocal int c = 0
+              delocal int posn = 2*n - (i+1)
+            fi b[i] = 1
+            i += 1
+      until i = 2*n - 2
+    delocal int i = 2*n - 2
+  delocal int cnt = 0
+
+procedure unrankCC(int b[], int n, int index) // clean: index -> b
+  local int cnt = n
+    local int i = 0
+    from  i = 0
+    loop  local int posn = 2*n - (i+1)
+            local int v = 0
+              call comb(posn, cnt, v)
+              cnt -= 1
+              uncall comb(posn, cnt, v)
+              cnt += 1
+              if index > v then
+                b[i] ^= 1
+                index -= v
+                uncall comb(posn, cnt, v)
+                cnt -= 1
+                call comb(posn, cnt, v)
+              else
+                uncall comb(posn, cnt, v)
+                cnt -= 1
+                call comb(posn, cnt, v)
+                cnt += 1
+              fi b[i] = 1
+            delocal int v = 0
+          delocal int posn = 2*n - (i+1)
+          i += 1
+    until i = 2*n - 1
+    delocal int i = 2*n -1
+  delocal int cnt = 0
+  index ^= 1
+
+// inverse of unrankCC
+procedure rankCC(int b[], int n, int index) // clean: b -> index
+  index ^= 1
+  local int cnt = 0
+    local int i = 2*n -1
+      from  i = 2*n - 1
+      loop  i -= 1
+            local int posn = 2*n - (i+1)
+              local int v = 0
+                if b[i] = 1 then
+                  uncall comb(posn, cnt, v)
+                  cnt += 1
+                  call comb(posn, cnt, v)
+                  index += v
+                  b[i] ^= 1
+                else
+                  cnt -= 1
+                  uncall comb(posn, cnt, v)
+                  cnt += 1
+                  call comb(posn, cnt, v)
+                fi index > v
+                cnt -= 1
+                call comb(posn, cnt, v)
+                cnt += 1
+                uncall comb(posn, cnt, v)
+              delocal int v = 0
+            delocal int posn = 2*n - (i+1)
+      until i = 0
+    delocal int i = 0
+  delocal int cnt = n
+
+procedure rankC(int b[], int n, int index) // clean version
+  call rank(b, n, index)
+  local int tmp = 0
+    uncall unrank(b, n, tmp)
+  delocal int tmp = index
+
+procedure unrankC(int b[], int n, int index) // clean version
+  local int tmp = index
+    call unrank(b, n, tmp)
+  delocal int tmp = 0
+  uncall rank(b, n, index)
+
+procedure xcopyArray(int c[], int b[], int n) // xor-copy from b to c (of length n)
+  local int i = 0
+    from  i = 0
+    do    c[i] ^= b[i]
+          i += 1
+    until i = 2*n - 1
+  delocal int i = 2*n - 1
+
+procedure swapArray(int c[], int b[], int n) // swap b and c (of length n)
+  local int i = 0
+    from  i = 0
+    do    local int tmp = b[i]
+            b[i] ^= tmp
+            c[i] ^= tmp
+          delocal int tmp = c[i]
+          i += 1
+    until i = 2*n - 1
+  delocal int i = 2*n - 1
+
+procedure main()
+  int n
+  int index
+  int b[8] // =2*n
+
+  /////////////////////////////
+  // testing unrank  index -> b
+  /////////////////////////////
+  // n += 4
+  // index ^= 5
+  // call unrank(b, n, index)
+
+  /////////////////
+  // testing rankC
+  /////////////////
+  // // b[0] += 1
+  // // b[1] += 1
+  // // b[2] += 1
+  // // b[3] += 1
+  // // b[4] += 0
+  // // b[5] += 0
+  // // b[6] += 0
+  // // b[7] += 0
+  // b[0] += 1
+  // b[1] += 0
+  // b[2] += 1
+  // b[3] += 1
+  // b[4] += 1
+  // b[5] += 0
+  // b[6] += 0
+  // b[7] += 0
+  // n += 4
+
+  // call rank(b, n, index)
+
+  /////////////////
+  // testing rankC
+  /////////////////
+  // // b[0] += 1
+  // // b[1] += 1
+  // // b[2] += 1
+  // // b[3] += 1
+  // // b[4] += 0
+  // // b[5] += 0
+  // // b[6] += 0
+  // // b[7] += 0
+  // b[0] += 1
+  // b[1] += 0
+  // b[2] += 1
+  // b[3] += 1
+  // b[4] += 1
+  // b[5] += 0
+  // b[6] += 0
+  // b[7] += 0
+  // n += 4
+
+  // call rankC(b, n, index)
+
+  //////////////////
+  // testing unrankC
+  //////////////////
+  // n +=4
+  // index ^= 5
+
+  // call unrankC(b, n, index)
+
+  /////////////////
+  // testing rankCC
+  /////////////////
+  // // b[0] += 1
+  // // b[1] += 1
+  // // b[2] += 1
+  // // b[3] += 1
+  // // b[4] += 0
+  // // b[5] += 0
+  // // b[6] += 0
+  // // b[7] += 0
+  b[0] += 1
+  b[1] += 0
+  b[2] += 1
+  b[3] += 1
+  b[4] += 1
+  b[5] += 0
+  b[6] += 0
+  b[7] += 0
+  n += 4
+
+  call rankCC(b, n, index)
+  call unrankCC(b, n, index)

@@ -1,0 +1,102 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible Bellman-Ford (single-source shortest paths)
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.3,
+//   Theorem 6.18 (Reversible Bellman-Ford: Theta(VE) time,
+//   Theta(VE) space, 0 energy).
+//
+// Edges are given as parallel arrays eu[],ev[],ew[].  We relax |V|-1
+// times.  The paper's recipe made reversible:
+//   * tempDist = dist[u] + w  is uncomputed (subtracted back) after use,
+//   * every overwrite of dist[v] and pred[v] is logged (old value pushed
+//     onto dlog/plog) so the relaxation can be undone,
+//   * one decision bit per edge examination (rlog) records whether a
+//     relaxation happened, which keeps the "if tempDist < dist[v]" branch
+//     reversible even though it mutates its own condition.
+// dist[u] < inf guards against relaxing through unreached vertices when
+// negative edges are present.  Nothing is destroyed => 0 energy.
+//   outputs: dist[], pred[], and the logs dlog/plog/rlog.
+//////////////////////////////////////////////////////////////////////
+
+procedure bellman_ford(int e_n, int eu[], int ev[], int ew[],
+                       int v_n, int dist[], int pred[], int inf,
+                       stack dlog, stack plog, stack rlog)
+  local int i = 0
+    from  i = 0
+    loop  local int e = 0
+            from  e = 0
+            loop  local int td = dist[eu[e]] + ew[e]        // tempDist
+                    if dist[eu[e]] < inf && td < dist[ev[e]] then
+                      // relax dist[ev[e]] := td, logging the old value
+                      local int od = 0
+                        od ^= dist[ev[e]]
+                        dist[ev[e]] ^= od
+                        push(od,dlog)
+                      delocal int od = 0
+                      dist[ev[e]] ^= td
+                      // relax pred[ev[e]] := eu[e], logging the old value
+                      local int op = 0
+                        op ^= pred[ev[e]]
+                        pred[ev[e]] ^= op
+                        push(op,plog)
+                      delocal int op = 0
+                      pred[ev[e]] ^= eu[e]
+                      local int one = 1
+                        push(one,rlog)
+                      delocal int one = 0
+                    else
+                      local int zero = 0
+                        push(zero,rlog)
+                      delocal int zero = 0
+                    fi top(rlog) = 1
+                  delocal int td = dist[eu[e]] + ew[e]
+                  e += 1
+            until e = e_n
+          delocal int e = e_n
+          i += 1
+    until i = v_n - 1
+  delocal int i = v_n - 1
+
+procedure main()
+  int e_n
+  int eu[10]      // edge sources
+  int ev[10]      // edge targets
+  int ew[10]      // edge weights
+  int v_n         // vertices
+  int dist[5]     // shortest distances from source 0
+  int pred[5]     // predecessors
+  int inf
+  stack dlog      // log of overwritten distances
+  stack plog      // log of overwritten predecessors
+  stack rlog      // per-edge relaxation-decision bits
+
+  v_n += 5
+  e_n += 10
+  inf += 10000
+
+  // CLRS fig 24.4 graph, vertices s,t,x,y,z = 0,1,2,3,4
+  eu[0]+=0 ev[0]+=1 ew[0]+=6
+  eu[1]+=0 ev[1]+=3 ew[1]+=7
+  eu[2]+=1 ev[2]+=2 ew[2]+=5
+  eu[3]+=1 ev[3]+=3 ew[3]+=8
+  eu[4]+=1 ev[4]+=4 ew[4]-=4
+  eu[5]+=2 ev[5]+=1 ew[5]-=2
+  eu[6]+=3 ev[6]+=2 ew[6]-=3
+  eu[7]+=3 ev[7]+=4 ew[7]+=9
+  eu[8]+=4 ev[8]+=0 ew[8]+=2
+  eu[9]+=4 ev[9]+=2 ew[9]+=7
+
+  // distances: source 0 stays 0, the rest start at inf
+  dist[1] += inf
+  dist[2] += inf
+  dist[3] += inf
+  dist[4] += inf
+  // predecessors start at null = -1
+  pred[0] -= 1
+  pred[1] -= 1
+  pred[2] -= 1
+  pred[3] -= 1
+  pred[4] -= 1
+
+  call bellman_ford(e_n,eu,ev,ew,v_n,dist,pred,inf,dlog,plog,rlog)
+  // expected dist = {0, 2, 4, 7, -2}, pred = {-1, 2, 3, 0, 1}

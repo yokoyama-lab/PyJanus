@@ -1,0 +1,188 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible AVL Tree -- Insert (with rotations)
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3,
+//   Theorem 6.11 (reversible Insert of a new key: Theta(lg n) time,
+//   preserving Theta(n) tree space, 0 energy).
+//
+// Array-based nodes: node i has key[i], left[i], right[i], ht[i], with
+// index 0 = null (ht[0] = 0).  `root` is the root index; `nfree` is the
+// next free slot (allocation = a reversible increment).  Insertion is
+// the standard recursive AVL algorithm; the paper's rotation log is
+// realized concretely by logging every overwrite:
+//   * alog -- old child/root pointers overwritten by links & rotations,
+//   * hlog -- old node heights overwritten by height updates,
+//   * rlog -- one rotation code per visited node
+//             (0 none, 1 LL, 2 RR, 3 LR, 4 RL),
+//             which also serves as the reversible exit assertion for the
+//             rebalancing branch (whose condition it mutates).
+// Every step is reversible => 0 energy.  `uncall insert` deletes the key
+// and restores the previous tree exactly.
+//////////////////////////////////////////////////////////////////////
+
+// arr[node] := val, logging the overwritten pointer
+procedure setchild(int arr[], int node, int val, stack alog)
+  local int old = 0
+    old ^= arr[node]
+    arr[node] ^= old
+    push(old,alog)
+  delocal int old = 0
+  arr[node] ^= val
+
+// root := val, logging the overwritten root pointer
+procedure setroot(int root, int val, stack alog)
+  local int old = 0
+    old ^= root
+    root ^= old
+    push(old,alog)
+  delocal int old = 0
+  root ^= val
+
+// out ^= max(ht[ia], ht[ib])   (out must be 0 on entry)
+procedure hmax(int ht[], int ia, int ib, int out)
+  if ht[ia] < ht[ib] then
+    out ^= ht[ib]
+  else
+    out ^= ht[ia]
+  fi ht[ia] < ht[ib]
+
+// ht[node] := 1 + max(ht[left[node]], ht[right[node]]); logs old on hlog
+procedure upht(int ht[], int left[], int right[], int node, stack hlog)
+  local int m = 0
+    call hmax(ht,left[node],right[node],m)
+    local int old = 0
+      old ^= ht[node]
+      ht[node] ^= old
+      push(old,hlog)
+    delocal int old = 0
+    ht[node] ^= m
+    ht[node] += 1
+  delocal int m = ht[node] - 1
+
+// right rotation at p; new subtree root -> ret
+procedure rot_right(int key[], int left[], int right[], int ht[],
+                    int p, int ret, stack alog, stack hlog)
+  local int l = left[p]
+    call setchild(left,p,right[l],alog)   // left[p]  := right[l]
+    call setchild(right,l,p,alog)         // right[l] := p
+    call upht(ht,left,right,p,hlog)
+    call upht(ht,left,right,l,hlog)
+    ret ^= l
+  delocal int l = ret
+
+// left rotation at p; new subtree root -> ret
+procedure rot_left(int key[], int left[], int right[], int ht[],
+                   int p, int ret, stack alog, stack hlog)
+  local int r = right[p]
+    call setchild(right,p,left[r],alog)   // right[p] := left[r]
+    call setchild(left,r,p,alog)          // left[r]  := p
+    call upht(ht,left,right,p,hlog)
+    call upht(ht,left,right,r,hlog)
+    ret ^= r
+  delocal int r = ret
+
+// update height of `node`, then rebalance; new subtree root -> ret
+procedure rebalance(int key[], int left[], int right[], int ht[],
+                    int node, int x, int ret,
+                    stack alog, stack hlog, stack rlog)
+  call upht(ht,left,right,node,hlog)
+  // choose the rotation code without mutating the tree, then log it
+  local int bf = ht[left[node]] - ht[right[node]]
+    local int code = 0
+      if bf > 1 then
+        if x < key[left[node]] then code += 1 else code += 3 fi x < key[left[node]]
+      else
+        if bf < -1 then
+          if x < key[right[node]] then code += 4 else code += 2 fi x < key[right[node]]
+        fi bf < -1
+      fi bf > 1
+      push(code,rlog)
+    delocal int code = 0
+  delocal int bf = ht[left[node]] - ht[right[node]]
+  // dispatch on the logged code (rlog is stable, so it is a valid assertion)
+  if top(rlog) = 1 then
+    call rot_right(key,left,right,ht,node,ret,alog,hlog)          // LL
+  else
+    if top(rlog) = 2 then
+      call rot_left(key,left,right,ht,node,ret,alog,hlog)         // RR
+    else
+      if top(rlog) = 3 then                                       // LR
+        local int sub = 0
+          call rot_left(key,left,right,ht,left[node],sub,alog,hlog)
+          call setchild(left,node,sub,alog)
+        delocal int sub = left[node]
+        call rot_right(key,left,right,ht,node,ret,alog,hlog)
+      else
+        if top(rlog) = 4 then                                     // RL
+          local int sub = 0
+            call rot_right(key,left,right,ht,right[node],sub,alog,hlog)
+            call setchild(right,node,sub,alog)
+          delocal int sub = right[node]
+          call rot_left(key,left,right,ht,node,ret,alog,hlog)
+        else
+          ret ^= node                                             // no rotation
+        fi top(rlog) = 4
+      fi top(rlog) = 3
+    fi top(rlog) = 2
+  fi top(rlog) = 1
+
+// recursive insert of x into subtree `node`; new subtree root -> ret
+procedure bins(int key[], int left[], int right[], int ht[],
+               int node, int x, int nfree, int ret,
+               stack alog, stack hlog, stack rlog)
+  if node = 0 then
+    ret ^= nfree            // allocate a fresh leaf
+    key[nfree] ^= x
+    ht[nfree] ^= 1
+    nfree += 1
+  else
+    if x < key[node] then
+      local int subret = 0
+        call bins(key,left,right,ht,left[node],x,nfree,subret,alog,hlog,rlog)
+        call setchild(left,node,subret,alog)
+      delocal int subret = left[node]
+    else
+      local int subret = 0
+        call bins(key,left,right,ht,right[node],x,nfree,subret,alog,hlog,rlog)
+        call setchild(right,node,subret,alog)
+      delocal int subret = right[node]
+    fi x < key[node]
+    call rebalance(key,left,right,ht,node,x,ret,alog,hlog,rlog)
+  fi node = 0
+
+// insert x into the tree, updating the root
+procedure insert(int key[], int left[], int right[], int ht[],
+                 int root, int x, int nfree,
+                 stack alog, stack hlog, stack rlog)
+  local int subret = 0
+    call bins(key,left,right,ht,root,x,nfree,subret,alog,hlog,rlog)
+    call setroot(root,subret,alog)
+  delocal int subret = root
+
+procedure main()
+  int key[8]
+  int left[8]
+  int right[8]
+  int ht[8]
+  int root
+  int nfree
+  stack alog     // overwritten-pointer log
+  stack hlog     // overwritten-height log
+  stack rlog     // per-node rotation codes
+
+  nfree += 1     // node indices start at 1 (0 = null)
+
+  // insert 1,2,3,4,5,6,7 in ascending order (forces repeated rotations)
+  call insert(key,left,right,ht,root,1,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,2,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,3,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,4,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,5,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,6,nfree,alog,hlog,rlog)
+  call insert(key,left,right,ht,root,7,nfree,alog,hlog,rlog)
+  // result is the balanced AVL tree, root = node 4 (key 4), height 3:
+  //          4
+  //        /   \
+  //       2     6
+  //      / \   / \
+  //     1   3 5   7

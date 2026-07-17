@@ -1,0 +1,63 @@
+// Reversible Lomuto partition (the heart of quicksort) as a clean reversible
+// I/O program. Reads a 5-element array, partitions a[0..4] around the pivot
+// a[4], then writes the partitioned array, the per-position decision bits
+// flags[0..3] (1 = the scanned element went left of the pivot), and p = the
+// pivot's final index (lo + p).
+//
+// A bare partition is not reversible -- it forgets which interleaving of
+// small/large elements the input had. Recording one decision bit per scanned
+// position makes it injective: the bits are exactly the history `uncall` needs
+// to scatter every element back. The inner `j > lo + p` guard is positional, so
+// it needs no history; it only suppresses the degenerate a[i] <=> a[i] self-swap
+// that Janus rejects as an alias. See the no-I/O twin
+// tests/jana2014/fixtures/examples/injective_partition.ja (checked by the
+// verified flat-array core) and docs/reversible-pearls.md.
+//
+// Backward consumes the output stream in reverse and reproduces the input.
+//
+// case: mixed        # pivot 4; smalls {3,1} -> pivot lands at index 2
+// in: 5 3 8 1 4
+// out: 3 1 4 5 8 0 1 0 1 2
+// case: ascending    # pivot is the max: every element is < pivot, nothing moves
+// in: 1 2 3 4 5
+// out: 1 2 3 4 5 1 1 1 1 4
+// case: descending   # pivot is the min: no element is smaller, one final swap
+// in: 5 4 3 2 1
+// out: 1 4 3 2 5 0 0 0 0 0
+procedure partition(int a[], int lo, int hi, int flags[], int p)
+    local int j = lo
+        from j = lo loop
+            if a[j] < a[hi] then
+                if j > lo + p then
+                    a[lo + p] <=> a[j]
+                fi j > lo + p
+                p += 1
+                flags[j - lo] += 1
+            fi flags[j - lo] = 1
+            j += 1
+        until j = hi
+    delocal int j = hi
+    if lo + p < hi then
+        a[lo + p] <=> a[hi]
+    fi lo + p < hi
+
+procedure main()
+    int a[5]
+    int flags[4]
+    int p
+    read a[0]
+    read a[1]
+    read a[2]
+    read a[3]
+    read a[4]
+    call partition(a, 0, 4, flags, p)
+    write a[0]
+    write a[1]
+    write a[2]
+    write a[3]
+    write a[4]
+    write flags[0]
+    write flags[1]
+    write flags[2]
+    write flags[3]
+    write p

@@ -1,0 +1,112 @@
+//////////////////////////////////////////////////////////////////////
+// Reversible All-Pairs Shortest Paths via (min,+) matrix multiplication
+// Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
+//   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.5,
+//   Theorem 6.22 (Reversible APSP by repeated squaring:
+//   O(V^3 lg V) time, O(V^2 lg V) space, 0 energy; cf. Frank99).
+//
+// (min,+) product:  C[i][j] = min_k ( A[i][k] + B[k][j] ).
+// Repeated squaring computes W, W^2, W^4, ... ; after ceil(lg(V-1))
+// squarings the matrix holds all shortest-path distances.
+//
+// All lg V intermediate matrices are stored consecutively in one flat
+// array M (base offset b = t*V*V), which is what gives O(V^2 lg V)
+// permanent space.  Each cell's minimum is computed by a reversible
+// SUBROUTINE (minfold) using a temporary O(V) log, the result copied
+// out, then the subroutine uncalled to erase that log (Bennett's
+// compute-copy-uncompute).  So no per-multiply garbage survives and the
+// whole computation is reversible with 0 energy.
+//////////////////////////////////////////////////////////////////////
+
+// m := min(m, min_k(M[ba+i*V+k] + M[bb+k*V+j])); logs updates on lg/bl
+procedure minfold(int m_arr[], int ba, int bb, int i, int j, int v_n,
+                  int m, stack lg, stack bl)
+  local int k = 0
+    from  k = 0
+    loop  local int sum = m_arr[ba+i*v_n+k] + m_arr[bb+k*v_n+j]
+            if sum < m then
+              local int om = 0
+                om ^= m
+                m ^= om
+                push(om,lg)
+              delocal int om = 0
+              m ^= sum
+              local int one = 1
+                push(one,bl)
+              delocal int one = 0
+            else
+              local int zero = 0
+                push(zero,bl)
+              delocal int zero = 0
+            fi top(bl) = 1
+          delocal int sum = m_arr[ba+i*v_n+k] + m_arr[bb+k*v_n+j]
+          k += 1
+    until k = v_n
+  delocal int k = v_n
+
+// write M[bc+i*V+j] := min_k(M[ba+i*V+k] + M[bb+k*V+j]), leaving no garbage
+procedure cell_min(int m_arr[], int ba, int bb, int bc,
+                   int i, int j, int v_n, int inf)
+  local int m = inf
+    local stack lg = nil
+      local stack bl = nil
+        call minfold(m_arr,ba,bb,i,j,v_n,m,lg,bl)   // m = the minimum
+        m_arr[bc+i*v_n+j] ^= m                        // copy out (dest was 0)
+        uncall minfold(m_arr,ba,bb,i,j,v_n,m,lg,bl)   // erase temp logs
+      delocal stack bl = nil
+    delocal stack lg = nil
+  delocal int m = inf
+
+// C(base bc) := A(base ba) (min,+) B(base bb).  C must be zero on entry.
+procedure minplus_mult(int m_arr[], int ba, int bb, int bc, int v_n, int inf)
+  local int i = 0
+    from  i = 0
+    loop  local int j = 0
+            from  j = 0
+            loop  call cell_min(m_arr,ba,bb,bc,i,j,v_n,inf)
+                  j += 1
+            until j = v_n
+          delocal int j = v_n
+          i += 1
+    until i = v_n
+  delocal int i = v_n
+
+// repeated squaring: M holds t_n+1 matrices; square each into the next
+procedure apsp(int m_arr[], int t_n, int v_n, int inf)
+  local int t = 0
+    from  t = 0
+    loop  local int base = t * v_n * v_n
+            call minplus_mult(m_arr,base,base,base + v_n*v_n,v_n,inf)
+          delocal int base = t * v_n * v_n
+          t += 1
+    until t = t_n
+  delocal int t = t_n
+
+procedure main()
+  int m_arr[48]  // 3 matrices of 4x4 (W, W^2, W^4)
+  int v_n
+  int t_n        // number of squarings = ceil(lg(V-1)) = 2 for V=4
+  int inf
+
+  v_n += 4
+  t_n += 2
+  inf += 10000
+
+  // base matrix W: directed edges 0->1:5 0->3:10 1->2:3 2->3:1
+  m_arr[0*4+1] += 5
+  m_arr[0*4+3] += 10
+  m_arr[1*4+2] += 3
+  m_arr[2*4+3] += 1
+  // off-diagonal non-edges are inf (diagonal stays 0)
+  m_arr[0*4+2] += inf
+  m_arr[1*4+0] += inf
+  m_arr[1*4+3] += inf
+  m_arr[2*4+0] += inf
+  m_arr[2*4+1] += inf
+  m_arr[3*4+0] += inf
+  m_arr[3*4+1] += inf
+  m_arr[3*4+2] += inf
+
+  call apsp(m_arr,t_n,v_n,inf)
+  // final matrix W^4 occupies m_arr[32..47]:
+  //   row0={0,5,8,9} row1={inf,0,3,4} row2={inf,inf,0,1} row3={inf,inf,inf,0}

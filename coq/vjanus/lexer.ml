@@ -22,11 +22,14 @@ let keywords =
     "local"; "delocal"; "call"; "uncall"; "external";
     "push"; "pop"; "skip"; "error";
     "printf"; "print"; "show"; "read"; "write";
-    "top"; "empty"; "size"; "nil"; "true"; "false" ]
+    "top"; "empty"; "size"; "nil"; "true"; "false";
+    (* sized integer types: recognised so vjanus can reject them cleanly
+       (exit 3) — faithful execution needs a modular core (see coq/RevMod.v) *)
+    "i8"; "i16"; "i32"; "i64"; "u8"; "u16"; "u32"; "u64" ]
 
 (* multi-char operators, longest first *)
 let ops3 = [ "<=>" ]
-let ops2 = [ "+="; "-="; "^="; "=="; "!="; "<="; ">="; "&&"; "||"; "<<"; ">>"; "**" ]
+let ops2 = [ "+="; "-="; "^="; "*="; "/="; "=="; "!="; "<="; ">="; "&&"; "||"; "<<"; ">>"; "**" ]
 let ops1 = [ "="; "<"; ">"; "+"; "-"; "*"; "/"; "%"; "^"; "&"; "|"; "!"; "#";
              ","; "."; ":"; "?"; "("; ")"; "["; "]"; "{"; "}"; ";" ]
 

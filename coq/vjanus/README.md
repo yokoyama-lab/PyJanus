@@ -57,10 +57,8 @@ multi-dim arrays, struct arrays and array fields are flattened row-major to matc
 PyJanus, and the seed accepts either flat or nested input.
 `tests/jana2014/test_vjanus_inverse.py` is the differential check (verified
 inverse vs PyJanus, over the whole corpus) — it matches on every program, with no
-skips.  (The self-referential `delocal` is invertible on both sides: vjanus via
-its loop-aware lowering, and PyJanus via a matching reverse-count desugaring in
-`jana_py/inverse.py`, added so it no longer inverts `delocal i=i` to an invalid
-`local i=i`.)
+skips.  Self-referential `delocal` is banned statically (exit 1) in vjanus, so
+the corpus contains no such programs.
 
 ## Compatibility & scope
 
@@ -70,30 +68,83 @@ whole corpus through both `vjanus` and PyJanus and asserts identical stores —
 every main scalar, array, stack and struct, forward and via in-program
 `call`/`uncall` (including nested struct-by-reference, the reverse of a
 stack-building procedure, and structs with array fields).  The whole corpus
-matches: **52 match, 0 skip**.
+matches, with no skips.
 
-### Self-referential `delocal` (the loop-counter idiom)
+### Feature coverage vs. base jana2014
 
-A self-referential `delocal i = i` frees a loop counter at its *dynamic* final
-value (e.g. `local i = 0; from i = 0 … until i+1 >= n; delocal i = i`).  Freeing
-a non-zero local is not statement-reversible in isolation — the delocal value
-references the variable being freed, so the inverse `Enter` would read it back as
-the dead (zero) cell.  `vjanus` handles the common **counter idiom** with a
-*loop-aware* lowering: when the body is a single `from`-loop that steps `i` by a
-constant `STEP`, after the loop it counts `i` back down to its start with a clean
-reverse loop — `from COND do { i -= STEP } until i = START` — which touches
-nothing but `i`, then frees it at `START` (a live, non-self-referential value).
-The reverse loop is an ordinary reversible `from`-loop; its inverse counts `i`
-back up to the final value, so the whole `local … loop … delocal i=i` composite
-is reversible **without any closed form for the loop bound**.  (Notably this
-makes `vjanus` *more* reversible than PyJanus here: PyJanus inverts `delocal i=i`
-to an invalid `local i=i` and so cannot `uncall` such a procedure at all.)
+Two axes where vjanus's front end meets `parser_jana2014.py`, checked by
+`tests/jana2014/test_vjanus_features.py`:
 
-A self-referential `delocal` that is *not* this counter idiom still exits 3
-("unsupported", a clean exit, not a crash): freeing an arbitrary non-zero local
-reversibly would need either a history of the discarded value (garbage that
-breaks store-matching) or non-local uncomputation, so it remains a principled
-boundary.
+| jana2014 construct | vjanus | note |
+|--------------------|--------|------|
+| `+= / -= / ^=`, `<=>` | ✅ run | the frame core's `OAdd/OSub/OXor` |
+| `*= / /=` | ⊘ exit 3 (skip) | no multiplicative update in the verified core (`RevFrame.v`); accepted syntactically so the corpus *skips*, not parse-errors |
+| `* / %` in expressions | ✅ run | `BMul/BDiv/BMod` |
+| ternary `c ? t : e` | ✅ run | condition is boolean (0/1) in jana2014, so desugared to the pure `c*t + (1-c)*e` |
+| struct value initializers `= {..}` | ✅ run | scalar struct, array-of-structs, and struct-with-array-fields |
+| local arrays `local int a[n]` | ✅ run | one depth-frame RL slot as the array base (like a flat struct local), cleared to 0 before delocal |
+| `read` / `write` (jana2014_in_out) | ⊘ exit 3 (skip) | the verified core is a pure store transformer with no I/O; rejected cleanly rather than silently dropped |
+| `<<` `>>` `**` | ⊘ exit 3 (skip) | valid jana2014, but no verified-core primitive; parsed at the right precedence, then rejected |
+| sized int types `i8`..`u64` (decls, params, locals, casts) | ⊘ exit 3 (skip) | wrapping needs a modular core; the `Z` core cannot run them faithfully (see `../RevMod.v`) |
+
+### Variable scope
+
+jana2014 has three variable classes, and each has a distinct scope:
+
+| class | introduced by | scope | frame ref |
+|-------|---------------|-------|-----------|
+| **global** | `procedure main()` declaration block | entire `main` body | `RG n` |
+| **formal** | procedure parameter list | entire procedure body | `RF i` (positional index), substituted to the caller's ref at each call site |
+| **local** | `local x = e` | `body` in `local x = e; body; delocal x = e'` | `RL d n` (frame depth `d`) |
+
+Two scoping rules enforced by `check_program` (static error, exit 1):
+
+1. **`local x = e` — `x` is NOT yet in scope at `e`.**  The initialiser `e`
+   runs before `x` is allocated.  `local i = i + 1` is rejected: there is no
+   `i` at that point.
+
+2. **`delocal x = e'` — `x` IS still in scope at `e'`, but self-reference is
+   forbidden.**  When `e'` reads `x`, the freed value references the dying
+   cell; the inverse `Enter` would try to read a dead (zero) cell instead.
+   Any self-referential delocal is a static error — see the section below.
+
+These rules are not enforced by PyJanus (which only runs forward), so a program
+that passes PyJanus may still be rejected by vjanus if it violates them.
+
+### Self-referential `delocal` — static error
+
+Any `delocal x = e` where `e` reads `x` is a **static error** (exit 1):
+`check_program` walks the AST before lowering and rejects it with a clear
+message.  The reason is fundamental: freeing a non-zero local reversibly requires
+the delocal expression to give the cell's current value without reading the cell
+itself — otherwise the inverse `Enter` would try to read a dead (zero) cell.
+
+The canonical rewrite for a loop counter is to keep the final value in a separate
+non-self-referential expression.  For example, instead of:
+
+```janus
+local int i = 0
+    from i = 0 do { body; i += 1 } until i = n
+delocal int i = i               // ERROR: reads i
+```
+
+use `iterate` or a helper variable whose delocal expression does not mention itself:
+
+```janus
+iterate int i = 0 to n - 1     // no local/delocal needed at all
+    body
+end
+```
+
+or, when `n / 2` iterations are needed:
+
+```janus
+local int pairs = n / 2         // delocal reads n, not pairs
+    iterate int i = 0 to pairs - 1
+        arr[i * 2] <=> arr[i * 2 + 1]
+    end
+delocal int pairs = n / 2
+```
 
 The lowering
 classifies each variable into the frame core's refs — a `main` global (`RG`), a
