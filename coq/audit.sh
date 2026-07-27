@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
-               RevDenote RevInverse RevCat RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -31,6 +31,7 @@ Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
 Module ExtSModFacts8 := RevExtSMod.ExtSModFacts RevExtSMod.B8.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
+Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
@@ -54,10 +55,35 @@ Print Assumptions RevFrame.run_sound.
 Print Assumptions DnS.adequacy.
 Print Assumptions DnS.full_abstraction.
 Print Assumptions DnS.denote_invert.
+(* denotational, closed: procedure meanings as a least fixed point *)
+Print Assumptions FxS.fix_adequacy.
+Print Assumptions FxS.Dfix_fixed.
+Print Assumptions FxS.Dfix_least.
+Print Assumptions FxS.exec_is_lfp.
+Print Assumptions FxS.denote_fix_reversible.
+Print Assumptions FxS.denote_fix_injective.
 (* inverse-monoid / dagger category *)
 Print Assumptions HS.image_inverse_law.
 Print Assumptions pinj_inverse_law.
 Print Assumptions rst_comp.
+(* PInj is traced over the coproduct; the Janus loop IS a trace *)
+Print Assumptions pinj_sumH.
+Print Assumptions convH_sumH.
+Print Assumptions pinj_traceH.
+Print Assumptions trace_conv.
+Print Assumptions trace_yanking.
+Print Assumptions trace_vanishing.
+Print Assumptions trace_natural_l.
+Print Assumptions loop_is_trace.
+Print Assumptions pinj_turn.
+Print Assumptions rev_loop_via_trace.
+(* Paolini-Piccolo-Roversi's parametric Janus as a REV_PRIM instance;
+   its list-store Janus needs no funext at all *)
+Print Assumptions JZ.ppr_reversible.
+Print Assumptions janus_list_reversible.
+Print Assumptions janus_list_iff.
+Print Assumptions ex_add_runs.
+Print Assumptions ex_add_inverts.
 (* Bennett reversibilization *)
 Print Assumptions bennett_correct.
 Print Assumptions bennett_pinj.

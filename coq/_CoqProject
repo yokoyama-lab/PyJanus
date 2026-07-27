@@ -12,8 +12,11 @@ RevNecessity.v
 RevSmallStep.v
 RevAlgebra.v
 RevDenote.v
+RevFix.v
 RevInverse.v
 RevCat.v
+RevTrace.v
+RevPPR.v
 RevBennett.v
 RevProc.v
 RevCoreP.v

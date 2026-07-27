@@ -333,6 +333,98 @@ big-step semantics:
 Combined with `exec_rev`/`exec_injective` (RevCore), reversibility transfers to
 the small-step semantics for free.
 
+## Closing the denotation: procedures as a least fixed point (`RevFix.v`)
+
+`RevDenote.v`'s denotation takes the procedure meanings as a *parameter*
+`D : pname -> rel` — it cannot recurse into the environment — and `adequacy` is
+therefore stated for `D := Dexec`, the *operational* meaning of each procedure.
+The denotational semantics still borrowed its recursion from `exec`.
+
+`RevFix.v` removes that borrowing, the way Paolini–Piccolo–Roversi's Matita
+development does (TYPES 2015, [doi:10.4230/LIPIcs.TYPES.2015.7](https://doi.org/10.4230/LIPIcs.TYPES.2015.7)),
+where a program means the Knaster–Tarski least fixed point of the environment
+functional in a CPO of `Pinj` morphisms. Here, relations under inclusion already
+form a complete lattice, so no domain theory is needed: with
+`step E p := denote E (Γ p)` and `approx` its Kleene chain from the empty
+environment, `Dfix p a b := exists n, approx n p a b` and
+
+- `Dfix_fixed` / `Dfix_least` — `Dfix` is the least (pre-)fixed point of `step`;
+- `fix_adequacy : denote Dfix s a b <-> exec Γ s a b` — adequacy for a
+  denotation with **no `exec` inside it**. The two inclusions are the
+  framework's counterparts of the Matita development's separate
+  `den_stm_correct` (every operational run is realized at a finite approximant —
+  the fuel there is the *index* here) and `den_stm_complete`;
+- `exec_is_lfp` — hence `exec Γ` itself *is* that least fixed point;
+- `denote_fix_reversible` / `denote_fix_injective` — reversibility of recursive
+  procedures **purely denotationally**: each approximant is a partial injection
+  and the chain is increasing, so its union is one. (`denote_reversible` needed
+  `forall p, reversible (D p)` as a hypothesis, previously dischargeable only
+  via `exec_injective`.) This is what the Matita model gets from the CPO
+  structure of `Pinj`.
+
+`fix_diverges` checks the fixed point is genuinely the *least* one: a procedure
+whose body is a call to itself denotes the empty relation.
+
+## The loop is a categorical trace (`RevTrace.v`)
+
+`RevCat.v` makes \textsf{PInj} a dagger *restriction* category — enough to say
+"`invert` is the partial inverse", nothing about **iteration**. Paolini et al.'s
+model goes further: their `Pinj` is symmetric monoidal for both product and
+coproduct, distributive, and **traced** over the coproduct, and the Janus loop is
+interpreted as `trace (loop_fun …)`.
+
+`RevTrace.v` supplies that layer: the coproduct `sumH` with its injections,
+functoriality and dagger compatibility (`convH_sumH`); the trace
+
+```
+traceH R  =  R₁₁ ∪ (R₁₂ ; fb* ; R₂₁)        (the execution formula)
+```
+
+of `R : hrel (A+U) (B+U)`; and `pinj_traceH` — **the trace of a partial injection
+is a partial injection**, so \textsf{PInj} really is traced. `trace_conv` shows
+the trace commutes with the dagger (a run read backwards is a run of the
+converse); `trace_yanking`, `trace_vanishing` and `trace_natural_l` are the
+yanking, vanishing-I and left-naturality axioms.
+
+The payoff is `loop_is_trace`: `from g1 do R₁ loop R₂ until g2` is exactly
+`traceH turn`, where the left summand of `turn` is the outside of the loop and
+the right summand is the **feedback wire** carrying the state at the top of the
+body. `pinj_turn` then makes the role of Janus's assertions precise: a
+*continuing* turn lands where `g1` is false while an *entry* lands where `g1` is
+true, so the wire can never be entered twice — that exclusivity is what makes
+`turn` a partial injection. Hence `rev_loop_via_trace` re-derives
+`RevAlgebra.rev_loop` as an instance of the trace closure instead of a bespoke
+reversal argument.
+
+Not covered: vanishing-II and superposing, which need the coproduct's
+associativity/symmetry coherence.
+
+## Their parametric Janus is one of our instances (`RevPPR.v`)
+
+Paolini et al. abstract Janus over two records (`params`, `sem_params`) whose
+only semantic obligation is
+
+```
+reverse_eval_rev : evaluate_rev r a b = Some c -> evaluate_rev (rev r) c b = Some a
+```
+
+`RevPPR.v` transcribes both records as the module type `PPR_PARAMS` and *derives*
+the three `REV_PRIM` laws from them: `pinv_invol` from the operator involution,
+`pstep_det` from functionality of evaluation, and `pstep_rev` from
+`reverse_eval_rop` plus the non-occurrence side condition (their
+`ev_expr_irrelevant_from_non_present_variable`, here `evalE_upd`). So **their
+language is an instance of this framework** and inherits `exec_injective` for
+free (`ppr_reversible`).
+
+Two of their design choices come along, both new here:
+
+- **the store is a `list const` indexed by variable position**, not a function
+  `var -> Z` — so `janus_list_reversible` is **axiom-free**, where
+  `RevJanus.janus_reversible` needs `functional_extensionality`;
+- **operator evaluation is partial** (`option`-valued): the bundled `JanusZ`
+  instance gives `/` and `%` no value at 0, matching the interpreter, where
+  `Janus.v`'s `eval` is total.
+
 ## Further results (claims-to-theorem map)
 
 Built on top of the framework; `audit.sh` checks every one of these (with the
@@ -346,8 +438,18 @@ core results) on each build.
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
 | Full abstraction | `full_abstraction` | `RevDenote.v` | none |
 | Inverter = relational converse, denotationally | `denote_invert` | `RevDenote.v` | none |
+| Procedure meanings as a least fixed point (Knaster–Tarski) | `Dfix_fixed`, `Dfix_least` | `RevFix.v` | none |
+| Adequacy of the *closed* denotation | `fix_adequacy` | `RevFix.v` | none |
+| `exec` **is** the lfp of the denotational functional | `exec_is_lfp` | `RevFix.v` | none |
+| Reversibility proved purely denotationally | `denote_fix_reversible` | `RevFix.v` | none |
 | Inverse-monoid / dagger structure | `inv_law1` | `RevInverse.v` | none |
 | Multi-object dagger restriction category (PInj) | `pinj_inverse_law` | `RevCat.v` | none |
+| PInj has coproducts, compatible with the dagger | `pinj_sumH`, `convH_sumH` | `RevTrace.v` | none |
+| **PInj is traced** over the coproduct | `pinj_traceH` | `RevTrace.v` | none |
+| Trace axioms: yanking, vanishing-I, left naturality | `trace_yanking`, `trace_vanishing`, `trace_natural_l` | `RevTrace.v` | none |
+| **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
+| Paolini et al.'s parametric Janus is a `REV_PRIM` | `ppr_reversible` | `RevPPR.v` | none |
+| Janus over a **list** store — reversible, axiom-free | `janus_list_reversible` | `RevPPR.v` | **none** |
 | Bennett reversibilization (compute–copy–uncompute) | `bennett_correct` | `RevBennett.v` | none |
 
 The stack machine and the cellular automaton share **no state space and no
