@@ -191,10 +191,25 @@ and iterate_stmt s =
   Iterate (v, start, step, endd, false, body)
 
 and local_stmt s =
-  eat_kw s "local"; let d1 = decl s in
+  (* `local d1, d2, ... S delocal e1, e2, ...` — several declarators nest, the
+     first being the outermost, entries paired with exits positionally (same
+     desugaring as PyJanus's parse_local_stmt). *)
+  eat_kw s "local";
+  let enters = ref [decl s] in
+  while opt_op s "," do enters := decl s :: !enters done;
+  let enters = List.rev !enters in
   let body = stmts s ["delocal"] in
-  eat_kw s "delocal"; let d2 = decl s in
-  Local (d1, body, d2)
+  eat_kw s "delocal";
+  let exits = ref [decl s] in
+  while List.length !exits < List.length enters do
+    eat_op s ","; exits := decl s :: !exits
+  done;
+  let exits = List.rev !exits in
+  let rec nest ds es = match ds, es with
+    | [d], [e] -> Local (d, body, e)
+    | d :: ds', e :: es' -> Local (d, [nest ds' es'], e)
+    | _ -> err s "local/delocal declarator count mismatch" in
+  nest enters exits
 
 and decl s =
   (match (peek s).t with            (* `local iN x` — sized int types unsupported *)
