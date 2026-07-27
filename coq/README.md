@@ -103,7 +103,11 @@ refuse.  `RevMul.v` accounts for Janus's multiplicative updates `*=` / `/=`,
 which the *total* frame-core `aop` (`OAdd/OSub/OXor`) cannot host: as a
 `REV_PRIM` **relation** they fit exactly — `*=` is injective iff the factor is
 nonzero, and `/=` is the corresponding *partial* inverse (it relates a value to
-another only when the factor divides it).
+another only when the factor divides it).  `RevFrame.v` now carries the same two
+guards concretely, as a boolean `aok` folded into the assignment rules'
+`wf_asn`/`wf_aasn` side condition, so `vjanus` **runs** multiplicative updates
+instead of refusing them (`app_ainv` needs the guard, `aok_ainv` shows the guard
+survives inversion).
 
 `RevMod.v` is the basis for Janus's **sized integer types** (`i8`/`i16`/`i32`/…,
 and the global `-m bits` mode): each register has a modulus `M = 2^bits`, so every
@@ -249,15 +253,16 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   model aliases them). By-reference calls resolve each actual to an absolute
   name at the caller's depth and run the body one frame deeper; formals are
   positional (`RF i`). Same headline results as the rest
-  (`exec_rev`/`exec_iff`/`exec_det`/`exec_injective`, `run_sound`), and the same
+  (`exec_rev`/`exec_iff`/`exec_det`/`exec_injective`, `run_sound` **and
+  `run_complete`**), and the same
   index-precise `reads_cell` array discipline as `RevArr`.
 - `RevExtractFrame.v` — the verified computable interpreter for `RevFrame`,
   extracts both `run` and `invert` to `janus_frame.ml`; it backs the standalone
   **`vjanus`** interpreter (`coq/vjanus/`, own jana2014 lexer/parser +
-  frame-aware lowering), which matches PyJanus on the whole corpus (48 pass /
-  0 skip — the self-referential `delocal` counter idiom is handled by a
-  loop-aware lowering) with no Python at runtime,
-  including arrays, stacks and structs (all lowered to frame slots). `vjanus
+  frame-aware lowering), which matches PyJanus on the **whole** jana2014 example
+  corpus with no skips and no Python at runtime — including arrays, stacks,
+  structs (all lowered to frame slots), multi-declarator `local`, and the
+  multiplicative updates `*=` / `/=`. `vjanus
   -inverse` additionally runs the verified `invert` (final store → initial
   store), output-compatible with PyJanus `--inverse` and differentially tested
   against it (`tests/jana2014/test_vjanus_inverse.py`). See `coq/vjanus/README.md`.
@@ -443,6 +448,9 @@ core results) on each build.
 | Stack-machine instance (state = `list Z`) | `stack_reversible` | `RevStack.v` | none |
 | 2nd-order cellular-automaton instance | `ca_reversible` | `RevCA.v` | funext |
 | Executable invert correctness (extracted `run`) | `run_invert_iff` | `RevInvert.v` | funext |
+| Frame core: the fuel interpreter is **complete** | `RevFrame.run_complete` | `RevFrame.v` | funext |
+| Hence a refusal is informative (`None` at every fuel ⟹ no run) | `RevFrame.run_none_no_exec` | `RevFrame.v` | funext |
+| Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
 | Full abstraction | `full_abstraction` | `RevDenote.v` | none |
 | Inverter = relational converse, denotationally | `denote_invert` | `RevDenote.v` | none |

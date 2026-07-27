@@ -100,17 +100,53 @@ Definition acell (d : nat) (r : ref) (i : Z) : loc :=
 (* (array membership is index-precise via [reads]/[eval] below, mirroring
    RevArr's [reads_cell] — so [A[i] op= A[j]] is admissible exactly when i<>j.) *)
 
-(* invertible assignment operators (each [Asn]/[AAsn] must be undoable) *)
-Inductive aop := OAdd | OSub | OXor.
+(* invertible assignment operators (each [Asn]/[AAsn] must be undoable).
+
+   [OAdd]/[OSub]/[OXor] are invertible for *every* right operand.  The
+   multiplicative pair is not: [x *= e] is injective only when [e <> 0], and
+   [x /= e] additionally needs [e] to divide [x] exactly.  So the operator's
+   admissibility is a *guard* [aok] carried by the assignment rules (through
+   [wf_asn]/[wf_aasn], which already carry the aliasing side condition), leaving
+   [app] itself total -- this is how the frame core hosts the multiplicative
+   updates that [RevMul.v] verifies abstractly as partial relations. *)
+Inductive aop := OAdd | OSub | OXor | OMul | ODiv.
 Definition app (o : aop) (a b : Z) : Z :=
-  match o with OAdd => a + b | OSub => a - b | OXor => Z.lxor a b end.
+  match o with OAdd => a + b | OSub => a - b | OXor => Z.lxor a b
+    | OMul => a * b | ODiv => a / b end.
 Definition ainv (o : aop) : aop :=
-  match o with OAdd => OSub | OSub => OAdd | OXor => OXor end.
+  match o with OAdd => OSub | OSub => OAdd | OXor => OXor
+    | OMul => ODiv | ODiv => OMul end.
+
+(* when is [a op= b] admissible?  (PyJanus's runtime guards, exactly: a zero
+   factor for [*=], and a zero or non-dividing factor for [/=], are errors) *)
+Definition aok (o : aop) (a b : Z) : bool :=
+  match o with
+  | OMul => negb (Z.eqb b 0)
+  | ODiv => negb (Z.eqb b 0) && Z.eqb (Z.modulo a b) 0
+  | _ => true
+  end.
+
 (* the key local law: applying the inverse op over the result, with the same
    right operand, restores the left operand (XOR is its own inverse). *)
-Lemma app_ainv : forall o a b, app (ainv o) (app o a b) b = a.
-Proof. destruct o; intros a b; simpl; try lia.
-  rewrite Z.lxor_assoc, Z.lxor_nilpotent, Z.lxor_0_r; reflexivity. Qed.
+Lemma app_ainv : forall o a b, aok o a b = true -> app (ainv o) (app o a b) b = a.
+Proof.
+  destruct o; intros a b H; simpl in *; try lia.
+  - rewrite Z.lxor_assoc, Z.lxor_nilpotent, Z.lxor_0_r; reflexivity.
+  - apply negb_true_iff, Z.eqb_neq in H. now apply Z.div_mul.
+  - apply andb_true_iff in H as [Hb Hm].
+    apply negb_true_iff, Z.eqb_neq in Hb. apply Z.eqb_eq in Hm.
+    rewrite Z.mul_comm; symmetry; now apply Z.div_exact.
+Qed.
+
+(* and the guard survives inversion, so the inverted statement is admissible *)
+Lemma aok_ainv : forall o a b, aok o a b = true -> aok (ainv o) (app o a b) b = true.
+Proof.
+  destruct o; intros a b H; simpl in *; try reflexivity.
+  - apply negb_true_iff, Z.eqb_neq in H.
+    apply andb_true_iff; split; [ now apply negb_true_iff, Z.eqb_neq | ].
+    apply Z.eqb_eq; now apply Z.mod_mul.
+  - now apply andb_true_iff in H as [Hb _].
+Qed.
 
 (* total binary operators for expressions (read-only; no inverse needed), at
    parity with RevArr's [binop]/[denote] so a frame program computes identically *)
@@ -185,12 +221,14 @@ Proof.
   - apply orb_false_iff in H as [H1 H2]; rewrite (IH1 H1), (IH2 H2); reflexivity.
 Qed.
 
-Definition wf_asn (d : nat) (s : store) (r : ref) (e : expr) : bool :=
-  negb (reads d s (loc_of_ref d r) e).
+Definition wf_asn (d : nat) (s : store) (r : ref) (o : aop) (e : expr) : bool :=
+  negb (reads d s (loc_of_ref d r) e)
+  && aok o (s (loc_of_ref d r)) (eval d s e).
 
 (* undoing an assignment: when [e] does not read the target, applying the inverse
    operator over the post-store returns the original store. *)
 Lemma asn_inv_store : forall d r o e s, reads d s (loc_of_ref d r) e = false ->
+  aok o (s (loc_of_ref d r)) (eval d s e) = true ->
   update (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)))
          (loc_of_ref d r)
          (app (ainv o)
@@ -198,10 +236,10 @@ Lemma asn_inv_store : forall d r o e s, reads d s (loc_of_ref d r) e = false ->
               (eval d (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) e))
   = s.
 Proof.
-  intros d r o e s H. set (l := loc_of_ref d r) in *.
+  intros d r o e s H Hok. set (l := loc_of_ref d r) in *.
   rewrite update_eq, (eval_ncell d l (app o (s l) (eval d s e)) s e H).
   replace (app (ainv o) (app o (s l) (eval d s e)) (eval d s e)) with (s l)
-    by (symmetry; apply app_ainv).
+    by (symmetry; apply app_ainv, Hok).
   rewrite update_shadow, update_same; reflexivity.
 Qed.
 
@@ -209,12 +247,15 @@ Qed.
    neither e nor the index idx (index-precise, so distinct cells of the same
    array are fine).  Stability of this condition under the write is recovered by
    [reads_cell_stable] (needed in [aasn_rev]). *)
-Definition wf_aasn (d : nat) (s : store) (r : ref) (idx e : expr) : bool :=
-  negb (reads d s (acell d r (eval d s idx)) e) && negb (reads d s (acell d r (eval d s idx)) idx).
+Definition wf_aasn (d : nat) (s : store) (r : ref) (idx : expr) (o : aop) (e : expr) : bool :=
+  negb (reads d s (acell d r (eval d s idx)) e)
+  && negb (reads d s (acell d r (eval d s idx)) idx)
+  && aok o (s (acell d r (eval d s idx))) (eval d s e).
 
 Lemma aasn_inv_store : forall d s r idx o e,
   reads d s (acell d r (eval d s idx)) e = false ->
   reads d s (acell d r (eval d s idx)) idx = false ->
+  aok o (s (acell d r (eval d s idx))) (eval d s e) = true ->
   update (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
     (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx))
     (app (ainv o)
@@ -223,12 +264,12 @@ Lemma aasn_inv_store : forall d s r idx o e,
       (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) e))
   = s.
 Proof.
-  intros d s r idx o e He Hi.
+  intros d s r idx o e He Hi Hok.
   set (c := acell d r (eval d s idx)) in *.
   set (v0 := app o (s c) (eval d s e)).
   assert (Hc : acell d r (eval d (update s c v0) idx) = c) by (unfold c; f_equal; apply eval_ncell; exact Hi).
   rewrite Hc, update_eq, (eval_ncell d c v0 s e He).
-  replace (app (ainv o) v0 (eval d s e)) with (s c) by (unfold v0; symmetry; apply app_ainv).
+  replace (app (ainv o) v0 (eval d s e)) with (s c) by (unfold v0; symmetry; apply app_ainv, Hok).
   rewrite update_shadow, update_same; reflexivity.
 Qed.
 
@@ -295,9 +336,9 @@ Definition rargs (d : nat) (args : list ref) : list nm := map (resolve d) args.
 
 Inductive exec : nat -> stmt -> store -> store -> Prop :=
 | E_Skip : forall d s, exec d Skip s s
-| E_Asn  : forall d r o e s, wf_asn d s r e = true ->
+| E_Asn  : forall d r o e s, wf_asn d s r o e = true ->
     exec d (Asn r o e) s (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)))
-| E_AAsn : forall d r idx o e s, wf_aasn d s r idx e = true ->
+| E_AAsn : forall d r idx o e s, wf_aasn d s r idx o e = true ->
     exec d (AAsn r idx o e) s
       (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
 | E_Seq  : forall d s1 s2 a m b, exec d s1 a m -> exec d s2 m b -> exec d (Seq s1 s2) a b
@@ -354,23 +395,28 @@ Proof. intros d e1 s1 s2 e2 a m b H; induction H; intros Hs1 Hex.
 (* ---------- reversibility ---------- *)
 
 (* per-statement reversibility, factored out so exec_rev's bullets stay robust. *)
-Lemma asn_rev : forall d r o e s, wf_asn d s r e = true ->
+Lemma asn_rev : forall d r o e s, wf_asn d s r o e = true ->
   exec d (Asn r (ainv o) e) (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) s.
 Proof.
-  intros d r o e s W. unfold wf_asn in W; apply negb_true_iff in W.
+  intros d r o e s W. unfold wf_asn in W; apply andb_true_iff in W as [W Hok];
+    apply negb_true_iff in W.
   cut (exec d (Asn r (ainv o) e) (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)))
         (update (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) (loc_of_ref d r)
           (app (ainv o) (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)) (loc_of_ref d r))
             (eval d (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) e)))).
-  - intro Hc; rewrite (asn_inv_store d r o e s W) in Hc; exact Hc.
-  - apply E_Asn; unfold wf_asn; apply negb_true_iff; apply reads_cell_stable; exact W.
+  - intro Hc; rewrite (asn_inv_store d r o e s W Hok) in Hc; exact Hc.
+  - apply E_Asn; unfold wf_asn; apply andb_true_iff; split.
+    + apply negb_true_iff; apply reads_cell_stable; exact W.
+    + rewrite update_eq, (eval_ncell d (loc_of_ref d r) _ s e W).
+      apply aok_ainv, Hok.
 Qed.
 
-Lemma aasn_rev : forall d r idx o e s, wf_aasn d s r idx e = true ->
+Lemma aasn_rev : forall d r idx o e s, wf_aasn d s r idx o e = true ->
   exec d (AAsn r idx (ainv o) e)
     (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) s.
 Proof.
-  intros d r idx o e s W. unfold wf_aasn in W; apply andb_true_iff in W as [He Hi];
+  intros d r idx o e s W. unfold wf_aasn in W;
+    apply andb_true_iff in W as [W Hok]; apply andb_true_iff in W as [He Hi];
     apply negb_true_iff in He; apply negb_true_iff in Hi.
   cut (exec d (AAsn r idx (ainv o) e)
         (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
@@ -380,12 +426,15 @@ Proof.
             (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))
               (acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)))
             (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) e)))).
-  - intro Hc; rewrite (aasn_inv_store d s r idx o e He Hi) in Hc; exact Hc.
+  - intro Hc; rewrite (aasn_inv_store d s r idx o e He Hi Hok) in Hc; exact Hc.
   - apply E_AAsn; unfold wf_aasn.
     assert (Hcell : acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)
                   = acell d r (eval d s idx)) by (f_equal; apply eval_ncell; exact Hi).
-    rewrite Hcell; apply andb_true_iff; split; apply negb_true_iff;
-      apply reads_cell_stable; assumption.
+    rewrite Hcell; apply andb_true_iff; split.
+    + apply andb_true_iff; split; apply negb_true_iff;
+        apply reads_cell_stable; assumption.
+    + rewrite update_eq, (eval_ncell d (acell d r (eval d s idx)) _ s e He).
+      apply aok_ainv, Hok.
 Qed.
 
 Lemma enter_rev : forall d x e s, s (L d x) = 0 -> reads d s (L d x) e = false ->
@@ -489,10 +538,10 @@ Fixpoint run (f d : nat) (s : stmt) (st : store) {struct f} : option store :=
   | S f =>
     match s with
     | Skip => Some st
-    | Asn r o e => if wf_asn d st r e
+    | Asn r o e => if wf_asn d st r o e
                    then Some (update st (loc_of_ref d r) (app o (st (loc_of_ref d r)) (eval d st e)))
                    else None
-    | AAsn r idx o e => if wf_aasn d st r idx e
+    | AAsn r idx o e => if wf_aasn d st r idx o e
                         then Some (update st (acell d r (eval d st idx)) (app o (st (acell d r (eval d st idx))) (eval d st e)))
                         else None
     | Seq a b => match run f d a st with Some m => run f d b m | None => None end
@@ -535,8 +584,8 @@ Proof.
   - destruct IH as [IHr IHl]. split.
     + intros d s st st' H; destruct s; simpl in H.
       * inversion H; subst; apply E_Skip.
-      * destruct (wf_asn d st r e) eqn:W; [|discriminate]. inversion H; subst. now apply E_Asn.
-      * destruct (wf_aasn d st r idx e) eqn:W; [|discriminate]. inversion H; subst. now apply E_AAsn.
+      * destruct (wf_asn d st r o e) eqn:W; [|discriminate]. inversion H; subst. now apply E_Asn.
+      * destruct (wf_aasn d st r idx o e) eqn:W; [|discriminate]. inversion H; subst. now apply E_AAsn.
       * destruct (run f d s1 st) as [m|] eqn:R1; [|discriminate].
         eapply E_Seq; [apply IHr; exact R1 | apply IHr; exact H].
       * destruct (negb (Z.eqb (eval d st e1) 0)) eqn:G1.
@@ -571,6 +620,120 @@ Qed.
 
 Theorem run_sound : forall f d s st st', run f d s st = Some st' -> exec d s st st'.
 Proof. intro f; apply (proj1 (run_sound_mut f)). Qed.
+
+(* ---------- completeness of the fuel interpreter ----------
+
+   [run_sound] says the interpreter never invents a run.  The converse — it
+   never *misses* one — is what makes a `None` informative: [vjanus] refusing a
+   program is then a statement about the program, not about the fuel.  Every
+   derivable [exec] is realised at some finite fuel. *)
+
+(* more fuel never loses a run *)
+Lemma run_mono_mut : forall f g, (f <= g)%nat ->
+  (forall d s st b, run f d s st = Some b -> run g d s st = Some b) /\
+  (forall d e1 s1 s2 e2 st b,
+     runloop f d e1 s1 s2 e2 st = Some b -> runloop g d e1 s1 s2 e2 st = Some b).
+Proof.
+  induction f as [|f IH]; intros g Hle.
+  - split; intros; simpl in *; discriminate.
+  - destruct g as [|g]; [lia|].
+    destruct (IH g ltac:(lia)) as [IHr IHl].
+    split.
+    + intros d s st b H; destruct s; simpl in H |- *; try exact H.
+      * (* Seq *)
+        destruct (run f d s1 st) as [m|] eqn:E1; [|discriminate].
+        apply IHr in E1; rewrite E1; apply IHr; exact H.
+      * (* If *)
+        destruct (negb (Z.eqb (eval d st e1) 0)).
+        -- destruct (run f d s1 st) as [b1|] eqn:E1; [|discriminate].
+           apply IHr in E1; rewrite E1; exact H.
+        -- destruct (run f d s2 st) as [b2|] eqn:E2; [|discriminate].
+           apply IHr in E2; rewrite E2; exact H.
+      * (* Loop *)
+        destruct (negb (Z.eqb (eval d st e1) 0)); [ apply IHl; exact H | discriminate ].
+      * (* Call *)   apply IHr; exact H.
+      * (* Uncall *) apply IHr; exact H.
+    + intros d e1 s1 s2 e2 st b H; simpl in H |- *.
+      destruct (run f d s1 st) as [a1|] eqn:E1; [|discriminate].
+      apply IHr in E1; rewrite E1.
+      destruct (negb (Z.eqb (eval d a1 e2) 0)); [exact H|].
+      destruct (run f d s2 a1) as [a2|] eqn:E2; [|discriminate].
+      apply IHr in E2; rewrite E2.
+      destruct (negb (Z.eqb (eval d a2 e1) 0)); [discriminate|].
+      apply IHl; exact H.
+Qed.
+
+Lemma run_le : forall f g d s st b,
+  (f <= g)%nat -> run f d s st = Some b -> run g d s st = Some b.
+Proof. intros f g d s st b Hle; apply (proj1 (run_mono_mut f g Hle)). Qed.
+
+Lemma runloop_le : forall f g d e1 s1 s2 e2 st b,
+  (f <= g)%nat -> runloop f d e1 s1 s2 e2 st = Some b -> runloop g d e1 s1 s2 e2 st = Some b.
+Proof. intros f g d e1 s1 s2 e2 st b Hle; apply (proj2 (run_mono_mut f g Hle)). Qed.
+
+Lemma nzb_true : forall z : Z, z <> 0 -> negb (Z.eqb z 0) = true.
+Proof. intros z H; apply negb_true_iff, Z.eqb_neq; exact H. Qed.
+Lemma nzb_false : forall z : Z, z = 0 -> negb (Z.eqb z 0) = false.
+Proof. intros z H; subst; reflexivity. Qed.
+
+(* discharge the boolean guards of [run] from the premises of [exec] *)
+Ltac guards := repeat match goal with
+  | H : ?z <> 0 |- context[negb (Z.eqb ?z 0)] => rewrite (nzb_true z H)
+  | H : ?z = 0  |- context[negb (Z.eqb ?z 0)] => rewrite (nzb_false z H)
+  | H : ?x = ?y |- context[Z.eqb ?x ?y] => rewrite (proj2 (Z.eqb_eq x y) H)
+  | H : reads ?d ?s ?l ?e = false |- context[reads ?d ?s ?l ?e] => rewrite H
+  | W : wf_asn ?d ?s ?r ?o ?e = true |- context[wf_asn ?d ?s ?r ?o ?e] => rewrite W
+  | W : wf_aasn ?d ?s ?r ?i ?o ?e = true |- context[wf_aasn ?d ?s ?r ?i ?o ?e] => rewrite W
+  end.
+
+Theorem run_complete : forall d s a b, exec d s a b -> exists f, run f d s a = Some b.
+Proof.
+  intros d s a b H.
+  induction H using exec_mut with
+    (P0 := fun d e1 s1 s2 e2 a b (_ : lp d e1 s1 s2 e2 a b) =>
+      exists f, runloop f d e1 s1 s2 e2 a = Some b).
+  - (* E_Skip *)  exists 1%nat; reflexivity.
+  - (* E_Asn *)   exists 1%nat; simpl; guards; reflexivity.
+  - (* E_AAsn *)  exists 1%nat; simpl; guards; reflexivity.
+  - (* E_Seq *)
+    destruct IHexec1 as [f1 H1]; destruct IHexec2 as [f2 H2].
+    exists (S (Nat.max f1 f2)); simpl.
+    rewrite (run_le f1 (Nat.max f1 f2) _ _ _ _ ltac:(lia) H1).
+    apply (run_le f2 (Nat.max f1 f2) _ _ _ _ ltac:(lia) H2).
+  - (* E_IfT *)
+    destruct IHexec as [f1 H1]; exists (S f1); simpl.
+    guards; rewrite H1; guards; reflexivity.
+  - (* E_IfF *)
+    destruct IHexec as [f1 H1]; exists (S f1); simpl.
+    guards; rewrite H1; guards; reflexivity.
+  - (* E_Loop *)
+    destruct IHexec as [f1 H1]; exists (S f1); simpl.
+    guards; exact H1.
+  - (* E_Enter *) exists 1%nat; simpl; guards; reflexivity.
+  - (* E_Exit *)  exists 1%nat; simpl; guards; reflexivity.
+  - (* E_Call *)   destruct IHexec as [f1 H1]; exists (S f1); simpl; exact H1.
+  - (* E_Uncall *) destruct IHexec as [f1 H1]; exists (S f1); simpl; exact H1.
+  - (* L_one *)
+    destruct IHexec as [f1 H1]; exists (S f1); simpl.
+    rewrite H1; guards; reflexivity.
+  - (* L_more *)
+    destruct IHexec1 as [f1 H1]; destruct IHexec2 as [f2 H2]; destruct IHexec3 as [f3 H3].
+    set (m := Nat.max f1 (Nat.max f2 f3)).
+    exists (S m); simpl.
+    rewrite (run_le f1 m _ _ _ _ ltac:(unfold m; lia) H1); guards.
+    rewrite (run_le f2 m _ _ _ _ ltac:(unfold m; lia) H2); guards.
+    apply (runloop_le f3 m _ _ _ _ _ _ _ ltac:(unfold m; lia) H3).
+Qed.
+
+(* Hence a refusal is informative: [run] returning [None] at *every* fuel means
+   the program genuinely has no run from that store. *)
+Corollary run_none_no_exec : forall d s a,
+  (forall f, run f d s a = None) -> forall b, ~ exec d s a b.
+Proof.
+  intros d s a Hnone b Hex.
+  destruct (run_complete d s a b Hex) as [f Hf].
+  rewrite Hnone in Hf; discriminate.
+Qed.
 
 End Sem.
 

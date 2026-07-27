@@ -362,7 +362,12 @@ let check_program (prog : Ast.program) =
   List.iter (fun p -> check_stmts p.Ast.body) prog.Ast.procs;
   check_stmts prog.Ast.mstmts
 
+(* The multiplicative pair is admissible only under a guard (a nonzero factor
+   for `*=`, and exact divisibility for `/=`); the verified core carries that
+   guard in `aok`, threaded through `wf_asn`/`wf_aasn`, so an inadmissible
+   update simply has no step -- exactly PyJanus's runtime error. *)
 let aop = function "+=" -> J.OAdd | "-=" -> J.OSub | "^=" -> J.OXor
+  | "*=" -> J.OMul | "/=" -> J.ODiv
   | o -> raise (Unsupported ("assign-op " ^ o))
 
 (* emit `lv op= rhs` as a scalar Asn, an array-cell AAsn, or a struct-field
