@@ -34,7 +34,6 @@ def cli(args, ja):
 
 
 ARR_RE = re.compile(r"^(\w+)(?:\[\d+\])+\s*=\s*(\{.*\})\s*$")     # possibly nested
-STRUCT_ARR_RE = re.compile(r"^(\w+)\[\d+\]\s*=\s*(\{\{.*\}\})\s*$")  # struct array: {{f = v, …}, …}
 STK_RE = re.compile(r"^(\w+)\s*=\s*<(.*)\]\s*$")                  # stack: <top, …, bottom]
 NIL_RE = re.compile(r"^(\w+)\s*=\s*nil\s*$")                      # empty stack
 SCA_RE = re.compile(r"^(\w+)\s*=\s*(-?\d+)\s*$")
@@ -46,14 +45,14 @@ def parse_store(res):
     scal, arr, stk = {}, {}, {}
     for line in res.stdout.splitlines():
         line = line.strip()
-        m = STRUCT_ARR_RE.match(line)                        # struct array: {{f = v, …}, …}
-        if m:
-            entries = re.findall(r"\{([^{}]*)\}", m.group(2))
-            arr[m.group(1)] = [[int(kv.split("=")[1]) for kv in e.split(",")] for e in entries]
-            continue
         m = ARR_RE.match(line)
         if m:
-            arr[m.group(1)] = ast.literal_eval(m.group(2).replace("{", "[").replace("}", "]"))
+            # `{…}` is Python list syntax once the braces are swapped; struct
+            # values additionally carry `field = ` labels (at any nesting depth,
+            # e.g. `{{v = {1, 2, 3}, sum = 4}, …}`), which drop out — a field
+            # becomes its ordinal, matching the translator's addressing.
+            body = re.sub(r"\b\w+\s*=\s*", "", m.group(2))
+            arr[m.group(1)] = ast.literal_eval(body.replace("{", "[").replace("}", "]"))
             continue
         m = STK_RE.match(line)
         if m:
@@ -107,6 +106,7 @@ class T:
         self.stacks = set()                                  # (scope, name) that are stacks
         self.arrlen = {}                                     # (scope, name) -> length, for size()
         self.struct_fields = {}                              # structName -> [field names, in order]
+        self.struct_decls = {}                               # structName -> [field decls, in order]
         self.field_ord = {}                                  # field name -> ordinal (across structs)
 
     def stack_ids(self, sc, name):                           # a stack = array + top counter
@@ -216,6 +216,57 @@ class T:
             acc = sm * (sm + 1) // 2 + j
         return acc
 
+    def struct_cells(self, sname):
+        """The flat cell indices of one struct value: a scalar field contributes
+        its ordinal, an array field one cell per element, folded exactly like the
+        selector list `[.f, i, j]` in `_index`."""
+        cells = []
+        for i, fd in enumerate(self.struct_decls.get(sname, [])):
+            dims = fd.get("dimensions") or []
+            if not dims:
+                cells.append(self.cantor_val([i]))
+                continue
+            if not all("value" in d for d in dims):
+                raise Unsupported("struct field with a non-constant dimension")
+            tuples = [[]]
+            for d in dims:
+                tuples = [t + [k] for t in tuples for k in range(int(d["value"]))]
+            cells.extend(self.cantor_val([i] + t) for t in tuples)
+        return cells
+
+    def local_struct(self, sc, s, ed, xd):
+        """`local struct T e = a … delocal struct T e = a`.
+
+        The flat model has no Enter/Exit for a whole struct, so the block is
+        bracketed with a per-cell `e.cell += a.cell` … `e.cell -= a.cell` pair —
+        the same encoding vjanus uses for a flat struct slot.  `e`'s cells start
+        at 0 and are restored to 0, so repeated entries reuse the same slots."""
+        sname = ed["typ"].get("name") or xd["typ"].get("name")
+        if sname not in self.struct_decls:
+            raise Unsupported("local of an unknown struct type")
+        src_in, src_out = ed.get("init_expr"), xd.get("init_expr")
+        if src_in is None or src_out is None:
+            raise Unsupported("local struct without an initializer")
+        for e in (src_in, src_out):
+            lv = e.get("lval")
+            if not lv or lv.get("selectors"):
+                raise Unsupported("local struct initialized from a non-variable")
+        aname = src_in["lval"]["ident"]["name"]
+        if aname != src_out["lval"]["ident"]["name"]:
+            raise Unsupported("local/delocal struct sources differ")
+        ename = ed["ident"]["name"]
+        if aname == ename:
+            raise Unsupported("self-referential local struct")
+        g_e, g_a = self.gid(sc, ename), self.gid(sc, aname)
+        cells = self.struct_cells(sname)
+        def bracket(op):
+            out = "(skip)"
+            for k in reversed(cells):
+                out = f"(seq (asgn (la {g_e} (c {k})) {op} (ar {g_a} (c {k}))) {out})"
+            return out
+        return (f"(seq {bracket('add')} "
+                f"(seq {self.seq(sc, s['body'])} {bracket('sub')}))")
+
     def _index(self, sc, sel):
         # array-index selectors carry an "expr"; a struct field selector `.f`
         # carries an "ident" and is lowered to its ordinal (so `d[i].f` folds like
@@ -269,6 +320,8 @@ class T:
                     L *= int(d["value"])
                 self.arrlen[(sc, ed["ident"]["name"])] = L   # for size(A)
                 return self.seq(sc, s["body"])
+            if ed["typ"].get("kind") == "struct" or xd["typ"].get("kind") == "struct":
+                return self.local_struct(sc, s, ed, xd)
             xname = ed["ident"]["name"]
             # dead-cell Exit needs the exit expr independent of x (known final value);
             # `delocal x = x`-style self-references need a whole-block argument.
@@ -373,6 +426,8 @@ def translate(ja):
     # a field `.f` to its ordinal; this agrees with pyjanus -s's struct dump.
     p.struct_fields = {sd["ident"]["name"]: [fd["ident"]["name"] for fd in sd["fields"]]
                        for sd in (ast.get("struct_defs") or [])}
+    p.struct_decls = {sd["ident"]["name"]: sd["fields"]
+                      for sd in (ast.get("struct_defs") or [])}
     for fields in p.struct_fields.values():
         for i, fn in enumerate(fields):
             p.field_ord.setdefault(fn, i)
@@ -464,6 +519,11 @@ def translate(ja):
         if dims:
             dlist = [int(d["value"]) for d in dims]
             if vd["typ"]["kind"] == "struct":                # struct array -> extra field dim
+                # only rectangular: a field that is itself an array makes the
+                # cell shape ragged (`g[i].v[j]` folds three indices, not two),
+                # which the flat (name, dims) reporting below cannot express.
+                if any(fd.get("dimensions") for fd in p.struct_decls.get(vd["typ"]["name"], [])):
+                    raise Unsupported("array of structs with an array-typed field")
                 dlist.append(len(p.struct_fields[vd["typ"]["name"]]))
             arrays.append((nm, g, dlist))
             if ie is not None:                               # int A[..] = {..} (possibly nested)
