@@ -151,12 +151,20 @@ initial store). Other `.v` files are instances/extensions (denotational
 semantics, dagger-category structure, Bennett embedding, an extracted fuel
 interpreter).
 
-- Build: `cd coq && rocq makefile -f _CoqProject -o Makefile && make`. Use the
-  `rocq` on PATH (linuxbrew 9.1.1 — the toolchain the committed `.vo` files were
-  built with); mixing the opam 9.1.0 `rocq` yields "inconsistent assumptions".
+- Build: `cd coq && rocq makefile -f _CoqProject -o Makefile && make` (whole dev
+  ≈ 6 s). `.vo` files are build products (gitignored), so build with whatever
+  single `rocq` is on PATH — currently opam 9.1.1; a `.vo` left over from a
+  *different* install fails with "inconsistent assumptions over library
+  Corelib.Init.Prelude", fixed by `make clean && make`. If `make` asks for a
+  `rocqworker` under a path that no longer exists, the stale dep file is to
+  blame: `rm -f coq/.Makefile.d` and regenerate the Makefile.
 - `coq/audit.sh` builds the dev and asserts every headline theorem depends on at
   most `functional_extensionality` — no extra axioms, no `Admitted`. CI runs it
   (`.github/workflows/coq.yml`).
+- How this development compares to the other machine-checked Janus (Paolini,
+  Piccolo & Roversi's Matita formalization, TYPES 2015) — and which of its
+  results are still worth importing — is tracked in
+  `docs/janus-formalizations.md`.
 
 ### Differential testing (`coq/harness/`)
 
