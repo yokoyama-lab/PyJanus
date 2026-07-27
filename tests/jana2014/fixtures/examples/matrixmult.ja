@@ -62,7 +62,7 @@ procedure mult (int x, int y)
   delocal int t = x / y
 
 
-procedure matrix_mult(int A[][], int B[][], int m)
+procedure matrix_mult(int A[][], int B[][], int n)
   call crout(B, n)
   call multLD(A, B, n)
   call multU(A, B, n)

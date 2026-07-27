@@ -26,6 +26,21 @@ python3 -m jana_py.cli --std jana2014 -c tests/jana2014/fixtures/examples/fib.ja
 
 No external dependencies are required — only Python 3.10+.
 
+### C++ back-end
+
+`-c` translates a whole program — procedures, `uncall` (as a generated inverse
+function), locals, arrays of any rank, structs, and stacks. Every one of the 97
+example programs is compiled with `g++` and run against the interpreter on each
+test run (`tests/jana2014/test_codegen_corpus.py`), and the contract is checked
+both ways: **whatever the generator emits must compile, and it must agree with
+the interpreter**. A construct the back-end cannot translate is refused by the
+generator rather than emitted as broken code.
+
+Because C++ resolves every name, the back-end also catches mistakes the
+interpreter cannot see — a call to a procedure that does not exist, or a body
+using an undeclared variable, in code no run ever reaches. The first of those is
+now rejected by `validate.py` up front.
+
 ## Web Playground
 
 A browser playground (edit a program, pick the dialect/direction/mode, supply

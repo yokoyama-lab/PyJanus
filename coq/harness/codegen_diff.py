@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 from jana_py.parser_jana2014 import parse_program
 from jana_py.validate import validate_program
 from jana_py.runtime import Runtime
+from jana_py import c_codegen
 from jana_py.c_codegen import format_program
 
 
@@ -26,6 +27,74 @@ def interp(program):
     rt = Runtime(program)
     rt.run()
     return {k: copy.deepcopy(c.value) for k, c in rt._root_frame.vars.items()}
+
+
+class _Ragged(Exception):
+    """A declaration whose leaf cells cannot be enumerated statically."""
+
+
+def _dims_of(decl):
+    out = []
+    for d in (decl.dimensions or []):
+        if d is None or not hasattr(d, "value"):
+            raise _Ragged("array with a non-constant dimension")
+        out.append(int(d.value))
+    return out
+
+
+def _leaves(vdecls, sdefs, esc):
+    """Enumerate every scalar cell of main's store.
+
+    Returns (label, C++ expression, accessor path).  The C++ side goes through
+    `esc`, the code generator's identifier escaper, so a variable or field whose
+    Janus name is a C++ keyword is still addressable; the path walks the
+    interpreter's value under the *Janus* names (list index for `[i]`, dict key
+    for `.f`).  Covers scalars, arrays of any rank, structs, arrays of structs
+    and struct array fields -- the comparison is not limited to 1-D int arrays."""
+    out = []
+
+    def cells(cpre, path, typ, dims):
+        idxs = [[]]
+        for n in dims:
+            idxs = [t + [k] for t in idxs for k in range(n)]
+        for t in idxs:
+            sub = "".join(f"[{k}]" for k in t)
+            c = cpre + sub
+            # The interpreter stores a multi-dimensional array as one flat
+            # row-major list, so a whole index group is a single step.
+            flat = 0
+            for k, n in zip(t, dims):
+                flat = flat * n + k
+            q = path + ([flat] if dims else [])
+            if typ.kind == "struct":
+                fields = sdefs.get(typ.name)
+                if fields is None:
+                    raise _Ragged(f"unknown struct type {typ.name}")
+                for f in fields:
+                    cells(f"{c}.{esc(f.ident.name)}", q + [f.ident.name], f.typ, _dims_of(f))
+            else:
+                out.append((c, c, q))
+
+    for vd in vdecls:
+        if vd.typ.kind == "stack":
+            continue
+        cells(esc(vd.ident.name), [vd.ident.name], vd.typ, _dims_of(vd))
+    return out
+
+
+def _dig(value, path):
+    """Read the interpreter's store along a leaf path; missing cells read 0."""
+    cur = value
+    for step in path:
+        if isinstance(step, int):
+            if not isinstance(cur, list) or step >= len(cur):
+                return 0
+            cur = cur[step]
+        else:
+            if not isinstance(cur, dict) or step not in cur:
+                return 0
+            cur = cur[step]
+    return 0 if cur is None else cur
 
 
 def check(ja: str):
@@ -38,26 +107,22 @@ def check(ja: str):
         return ("SKIP", f"interp: {type(e).__name__}")
 
     stacks = [vd.ident.name for vd in program.main.vdecls if vd.typ.kind == "stack"]
-    scal = [vd.ident.name for vd in program.main.vdecls
-            if not vd.dimensions and vd.typ.kind != "stack"]
-    arrs = {vd.ident.name: [int(d.value) for d in vd.dimensions]
-            for vd in program.main.vdecls if vd.dimensions}
-    # only 1-D arrays are straightforward to print
-    arrs1 = {n: d[0] for n, d in arrs.items() if len(d) == 1}
-    if any(len(d) != 1 for d in arrs.values()):
-        return ("SKIP", "multi-dim array (cannot flatten print)")
+    sdefs = {sd.ident.name: sd.fields for sd in program.struct_defs}
 
     try:
-        cpp = format_program(None, program)
+        cpp = format_program(None, program)          # also fixes the escaper's map
     except Exception as e:
         return ("CGERR", f"{type(e).__name__}: {e}")
+    try:
+        leaves = _leaves(program.main.vdecls, sdefs, c_codegen._esc)
+    except _Ragged as e:
+        return ("SKIP", str(e))
 
     # Lead with a newline: a `show(...)` left over in the program may print
     # without a trailing newline, which would merge with the first marker line.
     prints = 'std::cout << "\\n";'
-    prints += "".join(f'std::cout << "@{n}=" << {n} << "\\n";' for n in scal)
-    prints += "".join(f'std::cout << "@{n}[{i}]=" << {n}[{i}] << "\\n";'
-                      for n, d in arrs1.items() for i in range(d))
+    prints += "".join(f'std::cout << "@{lab}=" << {cexpr} << "\\n";'
+                      for lab, cexpr, _ in leaves)
     prints += "".join(f'std::cout << "@@{n}=";for(auto _v:{n})std::cout<<_v<<",";std::cout<<"\\n";'
                       for n in stacks)
     cpp2 = cpp.replace("return 1;", prints + "return 0;")
@@ -80,15 +145,10 @@ def check(ja: str):
             got[k] = int(v)
 
     diffs = []
-    for n in scal:
-        if got.get(n) != int(store.get(n, 0)):
-            diffs.append(f"{n}: cpp={got.get(n)} interp={store.get(n,0)}")
-    for n, d in arrs1.items():
-        cells = store.get(n, [])
-        for i in range(d):
-            ev = int(cells[i]) if i < len(cells) else 0
-            if got.get(f"{n}[{i}]") != ev:
-                diffs.append(f"{n}[{i}]: cpp={got.get(f'{n}[{i}]')} interp={ev}")
+    for lab, _, path in leaves:
+        ev = int(_dig(store, path))
+        if got.get(lab) != ev:
+            diffs.append(f"{lab}: cpp={got.get(lab)} interp={ev}")
     for n in stacks:
         # the C++ vector is bottom..top (push_back); the interpreter lists top..bottom.
         cpp_stack = list(reversed(got_stacks.get(n, [])))

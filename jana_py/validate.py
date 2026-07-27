@@ -25,6 +25,7 @@ def validate_program(program: Program, require_main: bool = True) -> None:
   if program.main is None and require_main:
     filename = program.procs[0].procname.pos.filename if program.procs else ""
     raise JanaError(SourcePos(filename, 0, 0), "No main procedure has been defined")
+  known_procs = {proc.procname.name for proc in program.procs}
   seen: dict[str, Proc] = {}
   for proc in program.procs:
     if proc.procname.name in seen:
@@ -36,7 +37,7 @@ def validate_program(program: Program, require_main: bool = True) -> None:
     if len(param_names) != len(set(param_names)):
       raise JanaError(proc.procname.pos, f"Procedure `{proc.procname.name}' has duplicate arguments")
     _validate_unique_bindings(param_names, proc.body, known_structs)
-    _validate_stmt_calls(proc.body)
+    _validate_stmt_calls(proc.body, known_procs)
   if program.main is not None:
     for vdecl in program.main.vdecls:
       _validate_decl_type(vdecl, known_structs)
@@ -51,7 +52,7 @@ def validate_program(program: Program, require_main: bool = True) -> None:
         seen_names.add(vdecl.ident.name)
       assert dup_vdecl is not None
       raise JanaError(dup_vdecl.ident.pos, f"Variable name `{dup_vdecl.ident.name}' is already bound")
-    _validate_stmt_calls(program.main.stmts)
+    _validate_stmt_calls(program.main.stmts, known_procs)
 
 
 def _validate_struct_defs(struct_defs: list[StructDef]) -> None:
@@ -96,17 +97,24 @@ def _validate_unique_bindings(bound: list[str], stmts: list, known_structs: set[
       _validate_unique_bindings(bound + [name], stmt.body, known_structs)
 
 
-def _validate_stmt_calls(stmts: list) -> None:
+def _validate_stmt_calls(stmts: list, known_procs: set[str] | None = None) -> None:
   for stmt in stmts:
-    if isinstance(stmt, (CallStmt, UncallStmt)) and stmt.ident.name == "main":
-      raise JanaError(stmt.pos, "It is not allowed to call the `main' procedure", [f"In statement:\n    {format_stmt(stmt, 0)}"], True)
+    if isinstance(stmt, (CallStmt, UncallStmt)):
+      if stmt.ident.name == "main":
+        raise JanaError(stmt.pos, "It is not allowed to call the `main' procedure", [f"In statement:\n    {format_stmt(stmt, 0)}"], True)
+      # A call to a procedure that does not exist is only noticed at run time --
+      # and never at all if the caller is unreachable.  The C++ back-end cannot
+      # translate it, so reject it here instead: what validates must compile.
+      if known_procs is not None and not stmt.external and stmt.ident.name not in known_procs:
+        raise JanaError(stmt.ident.pos, f"Procedure `{stmt.ident.name}' is not defined",
+                        [f"In statement:\n    {format_stmt(stmt, 0)}"], True)
     if isinstance(stmt, IfStmt):
-      _validate_stmt_calls(stmt.if_part)
-      _validate_stmt_calls(stmt.else_part)
+      _validate_stmt_calls(stmt.if_part, known_procs)
+      _validate_stmt_calls(stmt.else_part, known_procs)
     elif isinstance(stmt, FromStmt):
-      _validate_stmt_calls(stmt.do_part)
-      _validate_stmt_calls(stmt.loop_part)
+      _validate_stmt_calls(stmt.do_part, known_procs)
+      _validate_stmt_calls(stmt.loop_part, known_procs)
     elif isinstance(stmt, IterateStmt):
-      _validate_stmt_calls(stmt.body)
+      _validate_stmt_calls(stmt.body, known_procs)
     elif isinstance(stmt, LocalStmt):
-      _validate_stmt_calls(stmt.body)
+      _validate_stmt_calls(stmt.body, known_procs)
