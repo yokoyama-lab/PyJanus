@@ -160,10 +160,13 @@ matitac concrjanus.ma     # OK
 
 ## 4. 残っている差分（優先度順）
 
-### (A) 抽出インタプリタの完全性を横展開
-`run_complete`（`exec` から燃料の存在）は `RevExtract.v` の `run` にのみある。
-`RevExtractAr` / `RevExtractFrame` / `RevExtractMod` / `RevExtractSMod` は
-`run_sound` のみ。`vjanus` が「動くはずのプログラムを取りこぼさない」保証になる。
+### (A) 抽出インタプリタの完全性を横展開（**frame コアは 2026-07-28 完了**）
+`run_complete`（`exec` から燃料の存在）は `RevExtract.v` の `run` にしか無かった。
+**`vjanus` を支える frame コアに `RevFrame.run_complete` を追加**（燃料単調性
+`run_le`/`runloop_le` 経由）。系として `run_none_no_exec`＝「全ての燃料で `None`
+なら実行は存在しない」が出るので、**vjanus の拒否がプログラムについての言明になった**
+（燃料不足かどうかの曖昧さが消えた）。
+残り: `RevExtractAr` / `RevExtractMod` / `RevExtractSMod` は `run_sound` のみ。
 
 ### (B) 積・分配・trace 公理の残り — 「traced monoidal」と書くなら必須
 vanishing-II・superposing・右自然性・dinaturality と、それらが乗る積の対称モノイダル

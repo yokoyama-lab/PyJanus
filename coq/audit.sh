@@ -52,6 +52,10 @@ Print Assumptions RevExtractAr.run_sound.
 Print Assumptions RevFrame.exec_injective.
 Print Assumptions RevFrame.exec_iff.
 Print Assumptions RevFrame.run_sound.
+Print Assumptions RevFrame.run_complete.
+Print Assumptions RevFrame.run_none_no_exec.
+Print Assumptions RevFrame.app_ainv.
+Print Assumptions RevFrame.aok_ainv.
 (* denotational: adequacy + full abstraction + inverter = converse *)
 Print Assumptions DnS.adequacy.
 Print Assumptions DnS.full_abstraction.

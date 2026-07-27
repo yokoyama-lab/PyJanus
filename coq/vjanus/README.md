@@ -78,7 +78,7 @@ Two axes where vjanus's front end meets `parser_jana2014.py`, checked by
 | jana2014 construct | vjanus | note |
 |--------------------|--------|------|
 | `+= / -= / ^=`, `<=>` | ✅ run | the frame core's `OAdd/OSub/OXor` |
-| `*= / /=` | ⊘ exit 3 (skip) | no multiplicative update in the verified core (`RevFrame.v`); accepted syntactically so the corpus *skips*, not parse-errors |
+| `*= / /=` | ✓ | verified in `RevFrame.v`: the core's assignment carries an admissibility guard `aok` (nonzero factor for `*=`, exact divisibility for `/=`) through `wf_asn`/`wf_aasn`, so an inadmissible update has no step |
 | `* / %` in expressions | ✅ run | `BMul/BDiv/BMod` |
 | ternary `c ? t : e` | ✅ run | condition is boolean (0/1) in jana2014, so desugared to the pure `c*t + (1-c)*e` |
 | struct value initializers `= {..}` | ✅ run | scalar struct, array-of-structs, and struct-with-array-fields |

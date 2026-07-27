@@ -123,21 +123,57 @@ def test_sized_int_types_are_unsupported_not_error(src: str) -> None:
     )
 
 
+@pytest.mark.parametrize("op,start,expected", [("*=", "3", "15"), ("/=", "15", "3")])
+def test_multiplicative_update_runs(op: str, start: str, expected: str) -> None:
+    """`*=` and `/=` run on the verified frame core.
+
+    They used to be refused (exit 3) because the core's assignment operator was
+    a *total* function, which cannot host them: `x *= e` is injective only for
+    `e <> 0`, and `x /= e` also needs `e` to divide `x`.  The core now carries
+    that admissibility as the guard `aok`, threaded through `wf_asn`/`wf_aasn`,
+    so an inadmissible update simply has no step."""
+    src = (
+        "procedure main()\n"
+        "    int x\n"
+        f"    x += {start}\n"
+        f"    x {op} 5\n"
+    )
+    result = _run_vjanus(src)
+    assert result.returncode == 0, (
+        f"Expected a successful run, got {result.returncode}.\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert f"x = {expected}" in result.stdout, result.stdout
+
+
 @pytest.mark.parametrize("op", ["*=", "/="])
-def test_multiplicative_update_is_unsupported_not_error(op: str) -> None:
+def test_multiplicative_update_guard_is_enforced(op: str) -> None:
+    """A zero factor is inadmissible for both, and the core refuses the run
+    rather than producing a non-injective step."""
+    src = (
+        "procedure main()\n"
+        "    int x\n"
+        "    int z\n"
+        "    x += 3\n"
+        f"    x {op} z\n"
+    )
+    result = _run_vjanus(src)
+    assert result.returncode != 0, (
+        f"Expected a refusal for a zero factor, got 0.\nstdout: {result.stdout!r}"
+    )
+
+
+def test_non_dividing_factor_is_refused() -> None:
+    """`/=` additionally needs exact divisibility -- 3 /= 2 has no step."""
     src = (
         "procedure main()\n"
         "    int x\n"
         "    x += 3\n"
-        f"    x {op} 5\n"
+        "    x /= 2\n"
     )
     result = _run_vjanus(src)
-    assert result.returncode == 3, (
-        f"Expected exit 3 (unsupported), got {result.returncode}.\n"
-        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
-    )
-    assert "assign-op" in result.stderr and op in result.stderr, (
-        f"Expected 'unsupported: assign-op {op}' message: {result.stderr!r}"
+    assert result.returncode != 0, (
+        f"Expected a refusal for a non-dividing factor.\nstdout: {result.stdout!r}"
     )
 
 
