@@ -88,8 +88,36 @@ CPO 上）で閉じている。`RevFix.v` は同じことを、**関係の包含
   状態に着地する」という排他性こそが `turn` を部分単射にしている、ということ。
   よって `rev_loop_via_trace` は `RevAlgebra.rev_loop` を trace 閉包の一例として再導出する。
 
-未了: vanishing-II と superposing（余積の結合・対称の coherence が要る）、積の
-モノイダル構造と分配性。
+**主張の射程（重要）**: これは「**PInj は traced monoidal category である**」を
+示したものでは**ない**。それにはモノイダル構造そのものと公理一式（vanishing-II,
+superposing, 右自然性, dinaturality）が要り、いずれも余積の結合・対称の coherence
+（先方の `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma`）に乗る。ここで
+証明したのは「trace 演算が PInj 上で well-defined、dagger と可換、上記3公理を満たす」
+までで、`loop_is_trace` には十分だが**圏論の定理として引用するには足りない**。
+
+### `coq/RevCtrl.v` — 制御構造は PInj の構造そのもの（2026-07-28）
+
+先方の `if` は専用構成子ではなく
+`test e1 ; δ ; ((q1 × id) + (q2 × id)) ; δ⁻¹ ; (test e2)†` という**合成**である
+（`rel_interpretation.ma`）。`test : state → state × (1+1)` は判定ビットを捨てず
+新しいスロットへ XOR で書き出す可逆射（`ru … XOR …`）＝ PyJanus stdlib の
+**ancilla flag** パターン。つまり**Janus の出口表明は入口テストの dagger**である。
+
+`RevTrace.v` で `sumH` が入ったので、`× (1+1)` と δ を経由せず合成を直接取った:
+
+- `testH g : hrel A (A + A)`（`g a` が真なら `inl a`、偽なら `inr a`）と `pinj_testH`
+- `test_dagger`: `testH g` の dagger は2つの直和成分を併合し、`inl b` を受理するのは
+  ちょうど `g b` が真のとき — これが出口表明
+- **`if_is_test_sum`**: `ifR g1 R S g2 = testH g1 ; (R + S) ; (testH g2)†`
+- `rev_if_via_cat`: よって `rev_if` は `pinj_sumH`/`pinj_compH`/`pinj_convH` の**系**
+  （場合分けが消える）
+- `Struct` モジュールで対応表が完成: `Skip`=`idH` / `Seq`=`compH` /
+  `If`=`test;(+);test†` / `Loop`=`traceH` / `Uncall`=dagger。
+  `denote_reversible_structural` は PInj の閉包性だけから全プログラムの可逆性を再証明する
+  （構成子固有の補題を1つも使わない）。
+
+先方との差: 判定ビットを独立した対象として出していない（積と δ を作れば厳密な
+factoring になる）。ファイル末尾に明記。
 
 ### `coq/RevPPR.v` — 先方の言語は我々の枠組みの一インスタンス（2026-07-28）
 
@@ -137,10 +165,21 @@ matitac concrjanus.ma     # OK
 `RevExtractAr` / `RevExtractFrame` / `RevExtractMod` / `RevExtractSMod` は
 `run_sound` のみ。`vjanus` が「動くはずのプログラムを取りこぼさない」保証になる。
 
-### (B) trace 構造の残り
-vanishing-II と superposing（余積の結合・対称の coherence）、積の対称モノイダル
-構造と分配性 `δ`。先方は `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma`
-で持っている。`loop_is_trace` が済んだので優先度は下がった。
+### (B) 積・分配・trace 公理の残り — 「traced monoidal」と書くなら必須
+vanishing-II・superposing・右自然性・dinaturality と、それらが乗る積の対称モノイダル
+構造・分配 `δ`。先方は `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma` で
+持っている。**新しい事実は増えず、既に書いた主張の裏取りになる**性質の作業なので、
+論文に "PInj is a distributive traced symmetric monoidal category" と書く予定が
+あるかどうかで要否が決まる。予定が無ければ現在の（弱めた）文言のままでよい。
+見積り: 400行超、`heq` 上の setoid 推論と `A+(B+C)` vs `(A+B)+C` の扱いで面倒。
+
+### (C) `Pfn`（部分関数の圏）と `Pinj ↪ Pfn`
+先方の `pinj.ma` は `good_rel_category` / `good_rel_prod` / `good_rel_sum` /
+`good_rel_trace` を「関係の性質に対する述語」として立て、`is_functional_rel`（Pfn）と
+`is_injective_rel`（Pinj）の両方に同じ構成を適用している。これを入れると
+contribution ⑤（`RevPipeline` / `RevGolomb` / `RevVarint` / `RevZigzag`）が
+「仕様 `f` は Pfn の射で、左逆の存在が Pinj へ factor させる」と圏論層に接続できる。
+新定理というより整理。
 
 ## 5. 参照
 - ミラー: `yokoyama-lab/janus-matita-paolini`（private, `janus/` が展開済みアーカイブ）
