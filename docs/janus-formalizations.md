@@ -103,7 +103,34 @@ CPO 上）で閉じている。`RevFix.v` は同じことを、**関係の包含
   （`RevJanus.janus_reversible` は funext を要する）。
 - 演算が `option` 値。同梱の `JanusZ` は `/` `%` が 0 で値を持たない（実装に忠実）。
 
-## 3. 残っている差分（優先度順）
+## 3. 先方成果物のビルド確認（2026-07-28・完了）
+
+ミラーの README は「テキスト検査のみ、Matita は動かしていない」と明記していたが、
+**26ファイル全部がビルドできることを確認した**。手順:
+
+```bash
+# 本機の opam switch `matita`（Matita 0.99.5）
+export PATH=/home/a/.local/share/opam/matita/bin:$PATH
+cd <mirror>/janus
+printf 'baseuri=cic:/matita/janus\nlibrary=false\n' > root   # 唯一の追加ファイル
+matitac compl_thm.ma      # OK  74m21s（コールド。24ファイル＝この依存閉包）
+matitac correctness.ma    # OK（閉包外の残り2本）
+matitac concrjanus.ma     # OK
+```
+
+- `.ma` ソースは**一切改変不要**（`git status` はミラーで clean、追加は `root` のみ）。
+  再インポート時の diff はきれいなまま。
+- コンパイル済みオブジェクトは `~/.matita/matita/janus/*.ng` に 26/26 揃う。
+- `compl_thm.ma` の依存閉包は 24 ファイル。**`correctness.ma` と `concrjanus.ma` は
+  閉包外**なので、完全性だけ確認して満足しないこと（correctness＝操作的⊆表示的は
+  別に走らせる必要がある）。
+
+**ただし公理の話は強くならない**: Matita に `Print Assumptions` は無いので、
+`utils.ma` の矛盾公理 `IMPOSSIBLE`（daemon）が他ファイルから使われていないという
+観察は依然テキスト検索どまり。ビルド成功が保証するのは「証明スクリプトが完結して
+型検査を通る」ことまでで、`audit.sh` に相当するものは先方には存在しない。
+
+## 4. 残っている差分（優先度順）
 
 ### (A) 抽出インタプリタの完全性を横展開
 `run_complete`（`exec` から燃料の存在）は `RevExtract.v` の `run` にのみある。
@@ -115,14 +142,7 @@ vanishing-II と superposing（余積の結合・対称の coherence）、積の
 構造と分配性 `δ`。先方は `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma`
 で持っている。`loop_is_trace` が済んだので優先度は下がった。
 
-### (C) ミラー側: Matita 成果物を実際にビルドする
-ミラーの README は「テキスト検査のみ、Matita は動かしていない」と明記している。
-本機の opam switch `matita`（Matita 0.99.5, `matitac` あり）に
-`root`（`baseuri=cic:/matita/janus`）を置いて `matitac compl_thm.ma` を走らせたところ、
-**10分以上かかり本セッションでは完了を確認できなかった**（エラーは出ていない）。
-通れば公理に関する観察（`IMPOSSIBLE` daemon が未使用であること）の確度が上がる。
-
-## 4. 参照
+## 5. 参照
 - ミラー: `yokoyama-lab/janus-matita-paolini`（private, `janus/` が展開済みアーカイブ）
 - 本リポジトリ: `coq/README.md`（定理→ファイル対応表）、`coq/audit.sh`（公理監査）
 - 関連: `docs/vjanus-lowering-soundness.md`（未証明の翻訳健全性）
