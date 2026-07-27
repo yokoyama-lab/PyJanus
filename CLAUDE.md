@@ -178,3 +178,11 @@ The verified development is the oracle for the Python implementation:
   output (compile at `-O0`, run, compare stores). This is what caught the
   codegen wrong-output bugs; it is folded into pytest. When touching `runtime.py`
   or `c_codegen.py`, run these to catch divergence.
+  The contract is two-sided and **a compile failure is a test failure, not a
+  skip**: what the generator emits must compile *and* must agree with the
+  interpreter. A construct the back-end cannot translate must raise out of
+  `format_program` (reported `CGERR`, skipped) rather than be emitted as broken
+  C++. All 97 examples pass, including structs, rank-*n* arrays and keyword-named
+  identifiers. Because C++ resolves every name, this test is also the static
+  checker the interpreter lacks — it caught a call to an undefined procedure and
+  a body using an undeclared variable, both in unreachable code.

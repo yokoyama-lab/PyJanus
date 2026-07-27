@@ -158,17 +158,24 @@ procedure rankCC(int b[], int n, int index) // clean: b -> index
     delocal int i = 0
   delocal int cnt = n
 
-procedure rankC(int b[], int n, int index) // clean version
-  call rank(b, n, index)
-  local int tmp = 0
-    uncall unrank(b, n, tmp)
-  delocal int tmp = index
-
-procedure unrankC(int b[], int n, int index) // clean version
-  local int tmp = index
-    call unrank(b, n, tmp)
-  delocal int tmp = 0
-  uncall rank(b, n, index)
+// The compute-copy-uncompute pair below is written against a *raw* `unrank`
+// (the inverse of `rank`), which this file never defines -- only the clean
+// `unrankCC` exists.  Both procedures were unreachable, so neither the
+// interpreter nor any test ever noticed; the C++ back-end did, because C++
+// resolves every call.  Kept as a comment rather than deleted: the intended
+// shape is the record, the missing `unrank` is the gap.
+//
+// procedure rankC(int b[], int n, int index) // clean version
+//   call rank(b, n, index)
+//   local int tmp = 0
+//     uncall unrank(b, n, tmp)
+//   delocal int tmp = index
+//
+// procedure unrankC(int b[], int n, int index) // clean version
+//   local int tmp = index
+//     call unrank(b, n, tmp)
+//   delocal int tmp = 0
+//   uncall rank(b, n, index)
 
 procedure xcopyArray(int c[], int b[], int n) // xor-copy from b to c (of length n)
   local int i = 0
