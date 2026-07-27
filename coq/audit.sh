@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
-               RevDenote RevFix RevInverse RevCat RevTrace RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -32,6 +32,7 @@ Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
 Module ExtSModFacts8 := RevExtSMod.ExtSModFacts RevExtSMod.B8.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module FxS := RevFix.DenoteFix RevStack.StackPrim.
+Module StS := RevCtrl.Struct RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
@@ -77,6 +78,14 @@ Print Assumptions trace_natural_l.
 Print Assumptions loop_is_trace.
 Print Assumptions pinj_turn.
 Print Assumptions rev_loop_via_trace.
+(* the control constructors ARE PInj structure: exit assertion = dagger of the test *)
+Print Assumptions pinj_testH.
+Print Assumptions test_dagger.
+Print Assumptions if_is_test_sum.
+Print Assumptions rev_if_via_cat.
+Print Assumptions StS.denote_If.
+Print Assumptions StS.denote_Loop.
+Print Assumptions StS.denote_reversible_structural.
 (* Paolini-Piccolo-Roversi's parametric Janus as a REV_PRIM instance;
    its list-store Janus needs no funext at all *)
 Print Assumptions JZ.ppr_reversible.

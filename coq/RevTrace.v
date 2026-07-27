@@ -20,8 +20,8 @@
         it lands in the right summand feed the value back through [U]:
         [traceH R = R11 ∪ (R12 ; fb* ; R21)], the "execution formula";
       - [pinj_traceH] — **the trace of a partial injection is a partial
-        injection** (their [good_rel_trace_inj]), so \textsf{PInj} really is
-        traced;
+        injection** (their [good_rel_trace_inj]), so the operator is closed on
+        \textsf{PInj};
       - [trace_conv] — the trace commutes with the dagger (a run read backwards
         is a run of the converse), [trace_yanking] and [trace_vanishing]
         (the yanking and vanishing-I axioms), and [trace_natural_l]
@@ -38,8 +38,14 @@
     bespoke reversal argument) is re-derived as an *instance of the trace*:
     [rev_loop_via_trace].  The development is axiom-free.
 
-    Not covered: the vanishing-II and superposing axioms, which need the
-    associativity/symmetry coherence of the coproduct monoidal structure. *)
+    Scope of the claim: this does *not* establish "\textsf{PInj} is a traced
+    monoidal category".  That needs the monoidal structure itself and the full
+    axiom set — vanishing-II, superposing, right naturality, dinaturality — all
+    of which rest on the associativity/symmetry coherence of the coproduct
+    (their [rel_prod.ma] / [rel_distr.ma] / [monoidal_category.ma]).  What is
+    proved here is that the trace operator is well defined on \textsf{PInj},
+    commutes with the dagger, and satisfies the three axioms above: enough for
+    [loop_is_trace], not enough to cite the categorical theorem. *)
 
 From Stdlib Require Import Bool Arith.
 Require Import RevCore RevAlgebra RevDenote RevCat.

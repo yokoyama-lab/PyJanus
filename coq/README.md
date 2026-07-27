@@ -381,10 +381,18 @@ traceH R  =  R₁₁ ∪ (R₁₂ ; fb* ; R₂₁)        (the execution formula
 ```
 
 of `R : hrel (A+U) (B+U)`; and `pinj_traceH` — **the trace of a partial injection
-is a partial injection**, so \textsf{PInj} really is traced. `trace_conv` shows
-the trace commutes with the dagger (a run read backwards is a run of the
-converse); `trace_yanking`, `trace_vanishing` and `trace_natural_l` are the
-yanking, vanishing-I and left-naturality axioms.
+is a partial injection** (their `good_rel_trace_inj`), so the operator is closed
+on \textsf{PInj}. `trace_conv` shows the trace commutes with the dagger (a run
+read backwards is a run of the converse); `trace_yanking`, `trace_vanishing` and
+`trace_natural_l` are the yanking, vanishing-I and left-naturality axioms.
+
+> **Scope of the claim.** This is *not* yet "\textsf{PInj} is a traced monoidal
+> category": that needs the monoidal structure itself plus the full axiom set
+> (vanishing-II, superposing, right naturality, dinaturality). What is proved
+> here is that the trace operator is well defined on \textsf{PInj}, commutes with
+> the dagger, and satisfies the three axioms above — enough for `loop_is_trace`,
+> not enough to cite the categorical theorem. Closing the gap means porting
+> their `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma`.
 
 The payoff is `loop_is_trace`: `from g1 do R₁ loop R₂ until g2` is exactly
 `traceH turn`, where the left summand of `turn` is the outside of the loop and
@@ -445,9 +453,11 @@ core results) on each build.
 | Inverse-monoid / dagger structure | `inv_law1` | `RevInverse.v` | none |
 | Multi-object dagger restriction category (PInj) | `pinj_inverse_law` | `RevCat.v` | none |
 | PInj has coproducts, compatible with the dagger | `pinj_sumH`, `convH_sumH` | `RevTrace.v` | none |
-| **PInj is traced** over the coproduct | `pinj_traceH` | `RevTrace.v` | none |
-| Trace axioms: yanking, vanishing-I, left naturality | `trace_yanking`, `trace_vanishing`, `trace_natural_l` | `RevTrace.v` | none |
+| The coproduct trace **preserves partial injections** | `pinj_traceH` | `RevTrace.v` | none |
+| Trace axioms: yanking, vanishing-I, left naturality (not the full set — see below) | `trace_yanking`, `trace_vanishing`, `trace_natural_l` | `RevTrace.v` | none |
 | **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
+| **The exit assertion is the dagger of the entry test** | `if_is_test_sum` | `RevCtrl.v` | none |
+| Reversibility from PInj structure alone | `denote_reversible_structural` | `RevCtrl.v` | none |
 | Paolini et al.'s parametric Janus is a `REV_PRIM` | `ppr_reversible` | `RevPPR.v` | none |
 | Janus over a **list** store — reversible, axiom-free | `janus_list_reversible` | `RevPPR.v` | **none** |
 | Bennett reversibilization (compute–copy–uncompute) | `bennett_correct` | `RevBennett.v` | none |
