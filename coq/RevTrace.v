@@ -38,14 +38,11 @@
     bespoke reversal argument) is re-derived as an *instance of the trace*:
     [rev_loop_via_trace].  The development is axiom-free.
 
-    Scope of the claim: this does *not* establish "\textsf{PInj} is a traced
-    monoidal category".  That needs the monoidal structure itself and the full
-    axiom set — vanishing-II, superposing, right naturality, dinaturality — all
-    of which rest on the associativity/symmetry coherence of the coproduct
-    (their [rel_prod.ma] / [rel_distr.ma] / [monoidal_category.ma]).  What is
-    proved here is that the trace operator is well defined on \textsf{PInj},
-    commutes with the dagger, and satisfies the three axioms above: enough for
-    [loop_is_trace], not enough to cite the categorical theorem. *)
+    Scope of the claim: the monoidal structure these axioms are stated relative
+    to is in [RevSMC.v], and the further axioms in [RevTraced.v].  Vanishing-II
+    and dinaturality are still open, so the unqualified phrase "distributive
+    traced symmetric monoidal category" is one step away; the note at the end of
+    [RevTraced.v] says exactly what is left and why those two are harder. *)
 
 From Stdlib Require Import Bool Arith.
 Require Import RevCore RevAlgebra RevDenote RevCat.

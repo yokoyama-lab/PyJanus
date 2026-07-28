@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
-               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevCtrl RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -104,6 +104,8 @@ Print Assumptions swapP_natural.
 Print Assumptions pinj_distrH.
 Print Assumptions iso_distrH.
 Print Assumptions distrH_natural.
+Print Assumptions trace_natural_r.
+Print Assumptions trace_superposing.
 (* the control constructors ARE PInj structure: exit assertion = dagger of the test *)
 Print Assumptions pinj_testH.
 Print Assumptions test_dagger.

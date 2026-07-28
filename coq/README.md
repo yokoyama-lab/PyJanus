@@ -395,13 +395,15 @@ on \textsf{PInj}. `trace_conv` shows the trace commutes with the dagger (a run
 read backwards is a run of the converse); `trace_yanking`, `trace_vanishing` and
 `trace_natural_l` are the yanking, vanishing-I and left-naturality axioms.
 
-> **Scope of the claim.** This is *not* yet "\textsf{PInj} is a traced monoidal
-> category": that needs the monoidal structure itself plus the full axiom set
-> (vanishing-II, superposing, right naturality, dinaturality). What is proved
-> here is that the trace operator is well defined on \textsf{PInj}, commutes with
-> the dagger, and satisfies the three axioms above — enough for `loop_is_trace`,
-> not enough to cite the categorical theorem. Closing the gap means porting
-> their `rel_prod.ma` / `rel_distr.ma` / `monoidal_category.ma`.
+> **Scope of the claim.** The monoidal structure this is stated relative to is
+> in `RevSMC.v`, and the axioms beyond the three here are in `RevTraced.v`. As
+> of now what is machine-checked is: \textsf{PInj} is symmetric monoidal for the
+> coproduct *and* for the product, distributive, and carries a trace operator
+> closed on it, commuting with the dagger, satisfying yanking, vanishing-I,
+> naturality in **both** arguments, and superposing. **Vanishing-II and
+> dinaturality are not yet proved**, so the unqualified phrase "distributive
+> traced symmetric monoidal category" is still one step away — see the note at
+> the end of `RevTraced.v`.
 
 The payoff is `loop_is_trace`: `from g1 do R₁ loop R₂ until g2` is exactly
 `traceH turn`, where the left summand of `turn` is the outside of the loop and
@@ -477,6 +479,10 @@ core results) on each build.
 | Inverse-monoid / dagger structure | `inv_law1` | `RevInverse.v` | none |
 | Multi-object dagger restriction category (PInj) | `pinj_inverse_law` | `RevCat.v` | none |
 | PInj has coproducts, compatible with the dagger | `pinj_sumH`, `convH_sumH` | `RevTrace.v` | none |
+| **PInj is symmetric monoidal for `+`** (iso, natural, pentagon/triangle/hexagon) | `iso_assocS`, `assocS_natural`, `sumS_pentagon`, `sumS_triangle`, `sumS_hexagon` | `RevSMC.v` | none |
+| **...and for `×`** | `iso_assocP`, `assocP_natural`, `prodP_pentagon`, `prodP_triangle`, `prodP_hexagon` | `RevSMC.v` | none |
+| **...and distributive** | `iso_distrH`, `distrH_natural` | `RevSMC.v` | none |
+| Trace naturality in the output; superposing | `trace_natural_r`, `trace_superposing` | `RevTraced.v` | none |
 | The coproduct trace **preserves partial injections** | `pinj_traceH` | `RevTrace.v` | none |
 | Trace axioms: yanking, vanishing-I, left naturality (not the full set — see below) | `trace_yanking`, `trace_vanishing`, `trace_natural_l` | `RevTrace.v` | none |
 | **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
