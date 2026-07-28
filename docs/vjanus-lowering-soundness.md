@@ -179,9 +179,36 @@ today, as in most verified pipelines).
    `reads_lower` is the other bridge: the core's runtime aliasing test on a
    lowered expression is exactly the source's occurrence check.
 
-   Still open for full soundness on this fragment: the *other* direction — a core
-   run whose source has no run. That needs the source semantics shown total on
-   the well-formed fragment, or the core's `None` related back.
+   **Both directions are now proved on this fragment.** `lower_stmt_complete`
+   is the converse — a core run implies a source run — and `lower_stmt_iff`
+   bundles them:
+
+   ```
+   lower_stmt_complete : wfs s = true ->
+       exec Γ 0 (lower_stmt s) (enc g) t -> exists h, t = enc h /\ sexec s g h
+   lower_stmt_iff      : wfs s = true ->
+       (sexec s g h <-> exec Γ 0 (lower_stmt s) (enc g) (enc h))
+   ```
+
+   The converse is what rules out vjanus *accepting* a program the reference
+   semantics rejects, and getting it to go through is precisely what exposed the
+   two lowering bugs above:
+
+   - a zero divisor is recovered from `RevFrame.safe` — which the core carries
+     only because of the first fix; before it, `BDiv` was total and the core
+     simply ran where the source errored;
+   - the boolean restriction on `&&`/`||`/`!` is **not recoverable at all**,
+     because the lowering erases it (`&&` becomes `BMul`). It has to be a
+     hypothesis, `wfs s` — and that is exactly the check `lower.ml` now performs
+     statically, which is the second fix.
+
+   So the hypothesis of the theorem and the check in the translator are the same
+   condition, which is the useful outcome: the proof says what the translator
+   must verify, and the translator verifies it.
+
+   `seval_defined` is the bridge in the other direction: the core's safety guard
+   is the source's definedness, so an expression the core will evaluate is one
+   the source gives a value to.
 
 4. The remaining forms (arrays, structs, stacks, `local`/`delocal`,
    `call`/`uncall`) need the ref-classification model — `RG`/`RF`/`RL`, the

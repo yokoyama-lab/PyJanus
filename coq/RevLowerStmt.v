@@ -281,9 +281,7 @@ Qed.
     Forward simulation plus the core's determinism.  If the reference semantics
     says the program takes [g] to [h], then whatever store the core reaches from
     [enc g] *is* [enc h] -- the translation cannot silently compute something
-    else.  (The remaining gap to full soundness is the other direction: a core
-    run whose source has *no* run.  That needs the source semantics to be shown
-    total on the well-formed fragment, or the core's [None] to be related back.) *)
+    else.  The converse is [lower_stmt_complete] below. *)
 
 Corollary lower_stmt_correct : forall Γ s g h t,
   sexec s g h -> exec Γ 0 (lower_stmt s) (enc g) t -> t = enc h.
@@ -318,4 +316,204 @@ Example self_swap_has_no_step : forall g x,
   wf_asn 0 (enc g) (RG x) OXor (Rd (RG x)) = false.
 Proof.
   intros g x; unfold wf_asn; simpl; rewrite Nat.eqb_refl; reflexivity.
+Qed.
+
+(* ===================================================================== *)
+(** ** The other direction: the core cannot run what the source cannot.
+
+    [lower_stmt_sound] says a source run is realised by the core.  Its converse
+    rules out the opposite failure -- vjanus *accepting* a program the reference
+    semantics rejects -- and it is not automatic, because the core sees only the
+    translated form.  Anything the source checks and the translation erases has
+    to be recovered, and getting this direction to go through is exactly what
+    exposed the two lowering bugs:
+
+      - a zero divisor is recovered from [RevFrame.safe], which the core carries
+        only because of the first fix (before it, [BDiv] was total and the core
+        simply ran where the source errored);
+      - the boolean restriction on [&&]/[||]/[!] is **not recoverable at all**:
+        the lowering erases it ([&&] becomes [BMul]).  So it has to be a
+        hypothesis, [wfs s] -- and `lower.ml` now enforces exactly that check
+        statically, which is the second fix. *)
+
+Fixpoint wfs (s : sstmt) : bool :=
+  match s with
+  | TSkip => true
+  | TAsn _ _ e => wf e
+  | TSwap _ _ => true
+  | TSeq a b => wfs a && wfs b
+  | TIf e1 a b e2 => wf e1 && wf e2 && wfs a && wfs b
+  | TLoop e1 a b e2 => wf e1 && wf e2 && wfs a && wfs b
+  end.
+
+(** The core's safety guard is the source's definedness: an expression the core
+    is willing to evaluate is one the source gives a value to.  (With the
+    syntactic boolean rule, division is [seval]'s only way to fail.) *)
+Lemma seval_defined : forall g e,
+  wf e = true -> safe 0 (enc g) (lower e) = true -> exists v, seval g e = Some v.
+Proof.
+  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros Hw Hs.
+  - exists z; reflexivity.
+  - exists (g n); reflexivity.
+  - simpl in Hw; apply andb_true_iff in Hw as [_ Hw].
+    simpl in Hs; rewrite ?andb_true_r in Hs.
+    destruct (IH1 Hw Hs) as [v1 E1].
+    exists (b2z (Z.eqb v1 0)); simpl; now rewrite E1.
+  - simpl in Hw; apply andb_true_iff in Hw as [Hw Hwb];
+      apply andb_true_iff in Hw as [_ Hwa].
+    assert (Hab : safe 0 (enc g) (lower a) = true /\ safe 0 (enc g) (lower b) = true).
+    { destruct o; simpl in Hs;
+        repeat (apply andb_true_iff in Hs as [Hs ?]); split; assumption. }
+    destruct Hab as [Sa Sb].
+    destruct (IHa Hwa Sa) as [va Ea]; destruct (IHb Hwb Sb) as [vb Eb].
+    assert (Vb : eval 0 (enc g) (lower b) = vb)
+      by (apply lower_expr_sound; assumption).
+    destruct o; simpl; rewrite Ea, Eb; simpl;
+      try (eexists; reflexivity).
+    + (* SDiv *) simpl in Hs; rewrite Vb in Hs.
+      repeat (apply andb_true_iff in Hs as [_ Hs]).
+      apply negb_true_iff in Hs; rewrite Hs; eexists; reflexivity.
+    + (* SMod *) simpl in Hs; rewrite Vb in Hs.
+      repeat (apply andb_true_iff in Hs as [_ Hs]).
+      apply negb_true_iff in Hs; rewrite Hs; eexists; reflexivity.
+Qed.
+
+(** One turn of the loop, generalised so the induction on the core derivation
+    keeps its indices abstract. *)
+Lemma lp_complete : forall Γ d E1 A B E2 u t,
+  lp Γ d E1 A B E2 u t ->
+  forall e1 a b e2 g,
+    d = 0%nat ->
+    E1 = lower e1 -> A = lower_stmt a -> B = lower_stmt b -> E2 = lower e2 ->
+    u = enc g -> wf e1 = true -> wf e2 = true ->
+    (forall g' t', exec Γ 0 (lower_stmt a) (enc g') t' ->
+                   exists h, t' = enc h /\ sexec a g' h) ->
+    (forall g' t', exec Γ 0 (lower_stmt b) (enc g') t' ->
+                   exists h, t' = enc h /\ sexec b g' h) ->
+    exists h, t = enc h /\ slp e1 a b e2 g h.
+Proof.
+  intros Γ d E1 A B E2 u t H.
+  induction H; intros f1 sa sb f2 gg Hd HE1 HA HB HE2 Hu W1 W2 IHa IHb; subst.
+  - (* L_one *)
+    destruct (IHa gg b H) as [h [Hb Hsa]]; subst b.
+    match goal with S : safe 0 (enc h) (lower f2) = true |- _ =>
+      destruct (seval_defined h f2 W2 S) as [v2 E2v] end.
+    exists h; split; [ reflexivity | ].
+    eapply SL_one; [ exact Hsa | exact W2 | exact E2v | ].
+    rewrite <- (lower_expr_sound h f2 v2 W2 E2v); assumption.
+  - (* L_more *)
+    match goal with HA : exec Γ 0 (lower_stmt sa) (enc gg) ?m |- _ =>
+      destruct (IHa gg m HA) as [h1 [Hb1 Hsa]]; subst m end.
+    match goal with S : safe 0 (enc h1) (lower f2) = true |- _ =>
+      destruct (seval_defined h1 f2 W2 S) as [v2 E2v] end.
+    match goal with HB : exec Γ 0 (lower_stmt sb) (enc h1) ?m |- _ =>
+      destruct (IHb h1 m HB) as [h2 [Hb2 Hsb]]; subst m end.
+    match goal with S : safe 0 (enc h2) (lower f1) = true |- _ =>
+      destruct (seval_defined h2 f1 W1 S) as [v1 E1v] end.
+    destruct (IHlp f1 sa sb f2 h2 eq_refl eq_refl eq_refl eq_refl eq_refl eq_refl
+                W1 W2 IHa IHb) as [h [Hbt Hrest]]; subst.
+    exists h; split; [ reflexivity | ].
+    eapply SL_more with (g1 := h1) (g2 := h2) (v2 := v2) (v1 := v1).
+    + exact Hsa.
+    + exact W2.
+    + exact E2v.
+    + rewrite <- (lower_expr_sound h1 f2 v2 W2 E2v); assumption.
+    + exact Hsb.
+    + exact W1.
+    + exact E1v.
+    + rewrite <- (lower_expr_sound h2 f1 v1 W1 E1v); assumption.
+    + exact Hrest.
+Qed.
+
+Theorem lower_stmt_complete : forall Γ s g t,
+  wfs s = true -> exec Γ 0 (lower_stmt s) (enc g) t ->
+  exists h, t = enc h /\ sexec s g h.
+Proof.
+  intros Γ s; induction s as [ | x o e | x y | a IHa b IHb
+                             | e1 a IHa b IHb e2 | e1 a IHa b IHb e2 ];
+    intros g t Hw Hex; simpl in Hw, Hex.
+  - (* TSkip *) inversion Hex; subst; exists g; split; [reflexivity | apply S_Skip].
+  - (* TAsn *)
+    inversion Hex; subst.
+    match goal with W : wf_asn _ _ _ _ _ = true |- _ =>
+      rename W into Wa end.
+    assert (Wa' := Wa); unfold wf_asn in Wa'.
+    apply andb_true_iff in Wa' as [Wa' Hok]; apply andb_true_iff in Wa' as [Wr Hsf].
+    cbn [loc_of_ref] in Wr, Hsf, Hok.
+    apply negb_true_iff in Wr; rewrite reads_lower in Wr.
+    destruct (seval_defined g e Hw Hsf) as [v Ev].
+    assert (Hv : eval 0 (enc g) (lower e) = v) by (apply lower_expr_sound; assumption).
+    rewrite Hv, enc_get in Hok.
+    exists (supd g x (app o (g x) v)); split.
+    + cbn [loc_of_ref]; rewrite Hv, enc_get, enc_supd; reflexivity.
+    + apply S_Asn; assumption.
+  - (* TSwap *)
+    assert (Hxy : x <> y).
+    { inversion Hex; subst.
+      match goal with HA : exec _ _ (Asn _ _ _) _ _ |- _ => inversion HA; subst end.
+      match goal with W : wf_asn _ _ _ _ _ = true |- _ =>
+        unfold wf_asn in W; cbn [loc_of_ref reads loceqb] in W;
+        apply andb_true_iff in W as [W _]; apply andb_true_iff in W as [W _];
+        apply negb_true_iff, Nat.eqb_neq in W; exact W end. }
+    exists (supd (supd g x (g y)) y (g x)); split.
+    + eapply exec_det; [ exact Hex | apply swap_lowering; exact Hxy ].
+    + apply S_Swap; exact Hxy.
+  - (* TSeq *)
+    apply andb_true_iff in Hw as [Hwa Hwb].
+    inversion Hex; subst.
+    match goal with H1 : exec _ _ (lower_stmt a) _ ?m |- _ =>
+      destruct (IHa g m Hwa H1) as [h1 [-> Hsa]] end.
+    match goal with H2 : exec _ _ (lower_stmt b) _ t |- _ =>
+      destruct (IHb h1 t Hwb H2) as [h [-> Hsb]] end.
+    exists h; split; [ reflexivity | eapply S_Seq; eassumption ].
+  - (* TIf *)
+    apply andb_true_iff in Hw as [Hw Hwb]; apply andb_true_iff in Hw as [Hw Hwa];
+      apply andb_true_iff in Hw as [W1 W2].
+    inversion Hex; subst.
+    + (* took the then-branch *)
+      match goal with H1 : exec _ _ (lower_stmt a) _ t |- _ =>
+        destruct (IHa g t Hwa H1) as [h [-> Hsa]] end.
+      destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
+      destruct (seval_defined h e2 W2 ltac:(assumption)) as [v2 E2v].
+      exists h; split; [ reflexivity | ].
+      eapply S_IfT; [ exact W1 | exact E1v | | exact Hsa | exact W2 | exact E2v | ].
+      * rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
+      * rewrite <- (lower_expr_sound h e2 v2 W2 E2v); assumption.
+    + (* took the else-branch *)
+      match goal with H1 : exec _ _ (lower_stmt b) _ t |- _ =>
+        destruct (IHb g t Hwb H1) as [h [-> Hsb]] end.
+      destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
+      destruct (seval_defined h e2 W2 ltac:(assumption)) as [v2 E2v].
+      exists h; split; [ reflexivity | ].
+      eapply S_IfF; [ exact W1 | exact E1v | | exact Hsb | exact W2 | exact E2v | ].
+      * rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
+      * rewrite <- (lower_expr_sound h e2 v2 W2 E2v); assumption.
+  - (* TLoop *)
+    apply andb_true_iff in Hw as [Hw Hwb]; apply andb_true_iff in Hw as [Hw Hwa];
+      apply andb_true_iff in Hw as [W1 W2].
+    inversion Hex; subst.
+    destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
+    match goal with Hl : lp _ _ _ _ _ _ _ t |- _ =>
+      destruct (lp_complete _ _ _ _ _ _ _ _ Hl e1 a b e2 g
+                  eq_refl eq_refl eq_refl eq_refl eq_refl eq_refl W1 W2
+                  (fun g' t' H => IHa g' t' Hwa H)
+                  (fun g' t' H => IHb g' t' Hwb H)) as [h [-> Hsl]] end.
+    exists h; split; [ reflexivity | ].
+    eapply S_Loop; [ exact W1 | exact E1v | | exact Hsl ].
+    rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
+Qed.
+
+(** The two directions together: on the well-formed scalar fragment, the source
+    semantics and the lowered core agree exactly. *)
+Corollary lower_stmt_iff : forall Γ s g h,
+  wfs s = true ->
+  (sexec s g h <-> exec Γ 0 (lower_stmt s) (enc g) (enc h)).
+Proof.
+  intros Γ s g h Hw; split; intro H.
+  - apply lower_stmt_sound; exact H.
+  - destruct (lower_stmt_complete Γ s g (enc h) Hw H) as [h' [Heq Hs]].
+    (* [enc] is injective on stores, so the two source stores coincide *)
+    assert (h = h') as ->; [ | exact Hs ].
+    apply functional_extensionality; intro n.
+    change (enc h (G n) = enc h' (G n)); rewrite Heq; reflexivity.
 Qed.

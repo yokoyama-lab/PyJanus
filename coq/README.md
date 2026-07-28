@@ -461,6 +461,8 @@ core results) on each build.
 | The `&&`/`\|\|` check is syntactic, and needed | `and_needs_wf`, `bool_check_is_syntactic` | `RevLowerExpr.v` | none |
 | **The statement lowering simulates the source** | `lower_stmt_sound` | `RevLowerStmt.v` | funext |
 | Hence the core cannot compute a different answer | `lower_stmt_correct` | `RevLowerStmt.v` | funext |
+| **...and cannot run what the source cannot** | `lower_stmt_complete` | `RevLowerStmt.v` | funext |
+| Source and lowered core agree exactly (scalar fragment) | `lower_stmt_iff` | `RevLowerStmt.v` | funext |
 | The XOR triple realises `x <=> y` (against `exec`) | `swap_lowering` | `RevLowerStmt.v` | funext |
 | Expression evaluation is guarded (no division by zero) | `safe_ncell` | `RevFrame.v` | funext |
 | `&&`/`\|\|` arithmetic encodings correct on 0/1 | `and_encoding`, `or_encoding` | `RevLowerExpr.v` | none |
