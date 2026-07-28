@@ -37,6 +37,7 @@ structured reversible flowchart languages の圏論的意味論**を確立して
 | `RevTraced`（trace 公理） | join inverse category が **dagger trace** を持つことは既知（Kaarsgaard 2019 が一般化） | 既知。しかも我々の「plain traced」より強い |
 | `RevFix.Dfix`（環境汎関数の Kleene 鎖の合併＝最小不動点） | Axelsen–Kaarsgaard 2016 / Kaarsgaard–Axelsen–Glück 2017（**join から不動点**） | **同じ構成**。我々が「完備束だから領域理論不要」と説明したものは、join inverse category の join 構造そのもの |
 | `RevSmallStep`（小ステップ ↔ 大ステップ同値） | Lanese–Vidal 2026（原文確認済み） | **彼らの指摘は我々にも当てはまる**。§3-A 参照 |
+| `RevJoin`（両立族の join、`pinj_join`） | join inverse category の join そのもの（Axelsen–Kaarsgaard 2016 ほか） | 既知の構造を我々のモデルに入れて機械検証しただけ。§3-B 参照 |
 
 ## 2. 語彙 — 標準名は「join inverse rig category」
 
@@ -56,8 +57,8 @@ dagger trace を持つ、Kaarsgaard 2019）。
 
 **この事実は今後の作業方針を変える**: `RevTraced.v` に残した vanishing-II と
 dinaturality を経路手術で直接証明するより、**join 経由で導出する方が文献の筋に乗る**。
-現状の `traceH` は「経路の存在」で定義しており、join としての性質（可算結び）を
-まだ取り出していない。
+→ `coq/RevJoin.v` で join 構造を導入した（§3-B）。`traceH` は
+`traceH_is_join_fam` で可算結びとして明示され、`pinj_traceH` はその系になった。
 
 ## 3. 何が新しいか（切り分け）
 
@@ -126,14 +127,58 @@ flowchart 言語の soundness・adequacy・full abstraction、join からの可�
 
 - **否定は足せた** — `RevCtrl.test_negation : testH (¬∘g) = testH g ; swapS`。
   余積の対称性だけで済む
-- **連言・選言は足せなかった。** `testH g1` の左枝で `testH g2` を走らせると
+- **連言・選言はこの時点では足せなかった。** `testH g1` の左枝で `testH g2` を走らせると
   `(A+A)+A` に落ち、これを `A+A` へ潰す写像は**単射ではない**（`inl (inr a)` と `inr a` が
   衝突する）。衝突する2ケースは**定義域が交わらない**ので実際には問題ないが、それを
   言うには **disjoint join** が要る。これはまさに彼らが持っていて我々が露出していない構造で、
   `RevTraced.v` が vanishing-II / dinaturality について到達した結論と同じ
 
 つまり **`testH` と `traceH` の join 構造を取り出す**ことが、複数の未達項目に共通の
-ボトルネックだと確認できた。
+ボトルネックだと確認できた。→ 次節でそれを実施した。
+
+## 3-B. join 構造の導入（`coq/RevJoin.v`）
+
+上のボトルネックを解消するために、文献が `PInj` を構成する際に使う構造そのもの
+——**join inverse category**（Axelsen–Kaarsgaard 2016 / Kaarsgaard–Axelsen–Glück 2017 /
+Glück–Kaarsgaard 2018）——を `hrel` 上に入れた。`hrel` では join は単なる**和集合**なので、
+証明すべきことは「**両立する**部分単射の族の和集合は部分単射である」の一点に集約される。
+
+| 定義・定理 | 内容 |
+|---|---|
+| `hle` / `heq` | 包含順序（`hle_antisym` で `heq` に一致） |
+| `compatH R S` | **両立**：両方が定義されている所で前向き・後ろ向きとも一致 |
+| `disjH R S` | **素**：両方定義されている点が無い（`disjH_compatH`） |
+| `joinH F` / `joinH2` / `zeroH` | 族の結び（`joinH_ub` / `joinH_lub` で上限） |
+| **`pinj_join`** | **両立族の結びは部分単射** — これが3か所で個別に再導出されていた定理 |
+| `pinj_join_chain` | 増加鎖は両立族。`RevFix` の場当たり的議論はこの系 |
+| `compH_joinH_l` / `_r`, `convH_joinH` | 合成・逆は join を保つ（関係上では**無条件**） |
+
+得られたもの:
+
+1. **trace が join であることの明示。** `traceH_is_join_fam : traceH R ≃ joinH (tracefam R)`
+   （`tracefam None` = 即時脱出、`tracefam (Some n)` = 長さ `n` の周回）。
+   `compatH_tracefam` はこの族が両立することを示す（2種の総和は**素**、長さの違う周回どうしは
+   `path_exit_unique` により一致）。これにより `pinj_traceH_via_join` は
+   `RevTrace.pinj_traceH` を **`pinj_join` の一事例として再証明**する——経路の議論ではなく
+   join 構造から出る。
+2. **Theorem 9 が揃った。** `testH_decompose` が決定を「2つの**素な**半恒等射の結び」に分解し、
+   `decisions_closed_neg` / `_and` / `_or` が否定・連言・選言を与える。ここで
+   **連言は合成、選言は join** になる。選言の2枝は素ではなく**両立**するだけなので、
+   文献が「disjoint join」ではなく「compatible join」を要求する理由がそのまま現れる。
+   さらに `dfalse_and` は連言の偽枝が2つの**素な**半恒等射の結びであることを示す——
+   §3-A で「言うには disjoint join が要る」と書いた当のものである。
+3. **最小不動点が join であることの明示。** `FixJoin.Dfix_is_join` と
+   `Dfix_reversible_via_join` で、`RevFix.Dfix_reversible`（`max n m` を取る場当たり的議論）を
+   `pinj_join_chain` から導出し直した。
+
+**残ったもの。** vanishing-II と dinaturality は依然として未達。join によって
+「族の再添字づけ」という形に言い換わったが、再添字づけの中身（`U ⊎ V` を通る経路を
+`U` 訪問間の `V` 区間へ分解する）は経路手術そのもので、まだ行っていない。
+`RevTraced.v` 末尾の記述をこの通りに更新した。
+
+**新規性。** join inverse category は既知であり、ここでやったのは
+**その構造を我々の `hrel` モデルに入れて機械検証した**ことに尽きる。
+`pinj_join` を「新しい定理」として書いてはいけない。
 
 ## 4. 注意 — 主張を書くときに
 

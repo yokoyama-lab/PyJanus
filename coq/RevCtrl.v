@@ -258,10 +258,10 @@ Qed.
     defined because those two cases have **disjoint domains** ([g1] holds in the
     first, fails in the second), i.e. it is a *join of disjoint maps*.
 
-    That is exactly the structure Glueck--Kaarsgaard rely on and that this
-    development has not exposed: their decisions live in an inverse category
-    with **disjoint joins**, where Thm 9 is available wholesale.  [testH] here is
-    defined pointwise and carries no join structure, so the Boolean connectives
-    beyond negation are out of reach until it is recast -- the same conclusion
-    [RevTraced.v] reaches for vanishing-II and dinaturality.  See
+    That is exactly the structure Glueck--Kaarsgaard rely on: their decisions
+    live in an inverse category with **disjoint joins**, where Thm 9 is available
+    wholesale.  [RevJoin.v] now supplies that structure --- [testH_decompose]
+    exhibits a decision as the join of its two disjoint halves, and
+    [decisions_closed_and] / [_or] / [_neg] complete Theorem 9 there, with
+    [dfalse_and] making the disjointness described above explicit.  See
     docs/reversible-categorical-semantics.md. *)

@@ -165,11 +165,15 @@ Qed.
     inverse category is not axiomatized element-by-element: it is *derived from
     the joins*, and comes out a **dagger** trace (Kaarsgaard, RC 2019,
     arXiv:1904.01679; the underlying models are Glueck--Kaarsgaard's join inverse
-    categories).  [traceH] here is defined by existence of a path and its join
-    structure -- the countable supremum -- has not been exposed, so the two
-    remaining axioms are being attacked by hand where the standard development
-    gets them wholesale.  Before grinding out the path surgery it is worth
-    recasting [traceH] as a join.  See docs/reversible-categorical-semantics.md.
+    categories).  [RevJoin.v] takes the first step: [traceH_is_join_fam] exhibits
+    the execution formula as the join of the family {immediate exit} u {runs of
+    length n}, [compatH_tracefam] shows that family is pairwise compatible, and
+    [pinj_traceH_via_join] rederives closure of \textsf{PInj} under the trace as
+    an instance of [pinj_join] rather than by reasoning about paths.  The two
+    remaining axioms are now statements about that join --- vanishing-II is a
+    re-indexing of the family, dinaturality a transport along [h] --- but the
+    re-indexing itself is still the path surgery described above and has not been
+    carried out.  See docs/reversible-categorical-semantics.md.
 
     Until they are proved, the honest statement of what is machine-checked is:
     \textsf{PInj} is symmetric monoidal for the coproduct and for the product,
