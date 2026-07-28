@@ -235,10 +235,29 @@ let rec reads_name (e : Ast.expr) nm = match e with
   | Not a -> reads_name a nm
   | _ -> false
 
+(* jana2014 gives `&&`, `||` and `!` *boolean* operands only.  PyJanus enforces
+   it dynamically with `isinstance(v, bool)`, and only a comparison, `!`, `&&`,
+   `||` or `empty(s)` ever produces one -- a variable holding 0/1 is still an
+   int and is rejected.  The check is therefore syntactic, and it has to happen:
+   the encodings below (`&& = l*r`, `|| = l+r-l*r`, `! = (e == 0)`) are correct
+   only on 0/1, so without it `2 && 3` quietly lowered to 6 where PyJanus raises
+   a type error. *)
+let is_bool_expr (e : Ast.expr) = match e with
+  | Ast.Not _ | Ast.Empty _ -> true
+  | Ast.Bin (("==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"), _, _) -> true
+  | _ -> false
+
+let check_bool_operand ~op (e : Ast.expr) =
+  if not (is_bool_expr e) then
+    raise (Ast.Error
+             (Printf.sprintf
+                "operand of `%s' must be a bool (a comparison, `!', `&&', `||' \
+                 or `empty'), not an int" op, 0, 0))
+
 let rec expr st scp (e : Ast.expr) : J.expr =
   match e with
   | Num n -> J.Cst (z n)
-  | Not e -> J.Bin (J.BEq, expr st scp e, J.Cst (z 0))
+  | Not e -> check_bool_operand ~op:"!" e; J.Bin (J.BEq, expr st scp e, J.Cst (z 0))
   | Lv ({ fields = _ :: _; _ } as lv) ->
     (match field_access st scp lv with
      | FScalar r -> J.Rd r
@@ -264,8 +283,10 @@ let rec expr st scp (e : Ast.expr) : J.expr =
      (* jana2014 requires boolean operands for && / || (PyJanus type-errors
         otherwise), so l, r are 0/1: && = l*r, || = l + r - l*r (inclusion-
         exclusion). The earlier || = l*l + r*r wrongly yields 2 when both hold. *)
-     | "&&" -> J.Bin (J.BMul, l, r)
-     | "||" -> J.Bin (J.BSub, J.Bin (J.BAdd, l, r), J.Bin (J.BMul, l, r))
+     | "&&" -> check_bool_operand ~op:"&&" a; check_bool_operand ~op:"&&" b;
+               J.Bin (J.BMul, l, r)
+     | "||" -> check_bool_operand ~op:"||" a; check_bool_operand ~op:"||" b;
+               J.Bin (J.BSub, J.Bin (J.BAdd, l, r), J.Bin (J.BMul, l, r))
      | "^" -> J.Bin (J.BXor, l, r) | "&" -> J.Bin (J.BAnd, l, r) | "|" -> J.Bin (J.BOr, l, r)
      | o -> raise (Unsupported ("operator " ^ o)))
 

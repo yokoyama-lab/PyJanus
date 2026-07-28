@@ -78,27 +78,28 @@ Inductive sstmt :=
 Inductive sexec : sstmt -> sstore -> sstore -> Prop :=
 | S_Skip : forall g, sexec TSkip g g
 | S_Asn  : forall g x o e v,
-    soccurs x e = false -> seval g e = Some v -> aok o (g x) v = true ->
+    soccurs x e = false -> wf e = true -> seval g e = Some v -> aok o (g x) v = true ->
     sexec (TAsn x o e) g (supd g x (app o (g x) v))
 | S_Swap : forall g x y, x <> y ->
     sexec (TSwap x y) g (supd (supd g x (g y)) y (g x))
 | S_Seq  : forall g m h a b, sexec a g m -> sexec b m h -> sexec (TSeq a b) g h
 | S_IfT  : forall g h e1 a b e2 v1 v2,
-    seval g e1 = Some v1 -> v1 <> 0 -> sexec a g h ->
-    seval h e2 = Some v2 -> v2 <> 0 -> sexec (TIf e1 a b e2) g h
+    wf e1 = true -> seval g e1 = Some v1 -> v1 <> 0 -> sexec a g h ->
+    wf e2 = true -> seval h e2 = Some v2 -> v2 <> 0 -> sexec (TIf e1 a b e2) g h
 | S_IfF  : forall g h e1 a b e2 v1 v2,
-    seval g e1 = Some v1 -> v1 = 0 -> sexec b g h ->
-    seval h e2 = Some v2 -> v2 = 0 -> sexec (TIf e1 a b e2) g h
+    wf e1 = true -> seval g e1 = Some v1 -> v1 = 0 -> sexec b g h ->
+    wf e2 = true -> seval h e2 = Some v2 -> v2 = 0 -> sexec (TIf e1 a b e2) g h
 | S_Loop : forall g h e1 a b e2 v1,
-    seval g e1 = Some v1 -> v1 <> 0 -> slp e1 a b e2 g h ->
+    wf e1 = true -> seval g e1 = Some v1 -> v1 <> 0 -> slp e1 a b e2 g h ->
     sexec (TLoop e1 a b e2) g h
 
 with slp : sexpr -> sstmt -> sstmt -> sexpr -> sstore -> sstore -> Prop :=
 | SL_one  : forall e1 a b e2 g h v2,
-    sexec a g h -> seval h e2 = Some v2 -> v2 <> 0 -> slp e1 a b e2 g h
+    sexec a g h -> wf e2 = true -> seval h e2 = Some v2 -> v2 <> 0 ->
+    slp e1 a b e2 g h
 | SL_more : forall e1 a b e2 g g1 g2 h v2 v1,
-    sexec a g g1 -> seval g1 e2 = Some v2 -> v2 = 0 ->
-    sexec b g1 g2 -> seval g2 e1 = Some v1 -> v1 = 0 ->
+    sexec a g g1 -> wf e2 = true -> seval g1 e2 = Some v2 -> v2 = 0 ->
+    sexec b g1 g2 -> wf e1 = true -> seval g2 e1 = Some v1 -> v1 = 0 ->
     slp e1 a b e2 g2 h -> slp e1 a b e2 g h.
 
 Scheme sexec_mut := Induction for sexec Sort Prop
@@ -212,8 +213,9 @@ Qed.
 (* discharge a lowered guard from the source's [seval] premise *)
 Ltac eval_guard :=
   match goal with
-  | H : seval ?G ?E = Some ?V |- context[eval 0 (enc ?G) (lower ?E)] =>
-      rewrite (lower_expr_sound G E V H)
+  | W : wf ?E = true, H : seval ?G ?E = Some ?V
+    |- context[eval 0 (enc ?G) (lower ?E)] =>
+      rewrite (lower_expr_sound G E V W H)
   end.
 
 Theorem lower_stmt_sound : forall Γ s g h,
@@ -226,7 +228,8 @@ Proof.
   - (* S_Skip *) apply E_Skip.
   - (* S_Asn *)
     simpl.
-    assert (Hv : eval 0 (enc g) (lower e) = v) by (apply lower_expr_sound; assumption).
+    assert (Hv : eval 0 (enc g) (lower e) = v)
+      by (apply lower_expr_sound; assumption).
     assert (W : wf_asn 0 (enc g) (RG x) o (lower e) = true).
     { unfold wf_asn; apply andb_true_iff; split;
         [ apply andb_true_iff; split | ].

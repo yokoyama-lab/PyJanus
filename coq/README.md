@@ -458,6 +458,7 @@ core results) on each build.
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
 | ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
+| The `&&`/`\|\|` check is syntactic, and needed | `and_needs_wf`, `bool_check_is_syntactic` | `RevLowerExpr.v` | none |
 | **The statement lowering simulates the source** | `lower_stmt_sound` | `RevLowerStmt.v` | funext |
 | Hence the core cannot compute a different answer | `lower_stmt_correct` | `RevLowerStmt.v` | funext |
 | The XOR triple realises `x <=> y` (against `exec`) | `swap_lowering` | `RevLowerStmt.v` | funext |

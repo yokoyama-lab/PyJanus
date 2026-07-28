@@ -125,6 +125,28 @@ today, as in most verified pipelines).
    preservation). Making `eval` itself `option`-valued would have been more
    faithful but ripples through every use, including extraction.
 
+   **A second live bug, same shape.** The first model wrote the boolean
+   restriction as a *value-level* condition (operands in `{0,1}`), which is
+   **more permissive than PyJanus** — the unsafe direction. PyJanus checks
+   `isinstance(v, bool)`, so the rule is **syntactic**: only a comparison, `!`,
+   `&&`, `||` or `empty` produces a Python `bool`, and a variable holding `1` is
+   an `int` and is rejected. vjanus had no such check, so:
+
+   | expression | PyJanus | vjanus (before) |
+   |---|---|---|
+   | `2 && 3` | type error | `6` (it lowers to `2 * 3`) |
+   | `b \|\| c`, `b`,`c` vars holding 1 | type error | `1` |
+   | `!x`, `x` an int | type error | `x == 0` |
+
+   The encodings `&& = l*r` and `|| = l + r - l*r` are correct *only* on 0/1, so
+   without the check the lowering is unsound — `and_needs_wf` states exactly
+   that: `wf (2 && 3) = false`, the source value is 1, the lowered value is 6.
+   Fixed by giving `lower.ml` the same syntactic check (`is_bool_expr`,
+   rejecting with a type error as PyJanus does), and by replacing the model's
+   value-level condition with `isbool`/`wf`, which `lower_expr_sound` and
+   `lower_expr_safe` now require. `bool_check_is_syntactic` pins that a variable
+   holding 1 does not qualify.
+
    Not covered by this slice (each needs the ref-classification model): array and
    struct l-values, stacks, `size`/`top`/`empty`, and the Cantor index fold —
    whose injectivity is already in `RevLowering.v`.
