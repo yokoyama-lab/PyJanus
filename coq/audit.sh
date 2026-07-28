@@ -145,6 +145,9 @@ Print Assumptions RevLowerStmt.reads_lower.
 Print Assumptions RevLowerStmt.lower_stmt_sound.
 Print Assumptions RevLowerStmt.lower_stmt_correct.
 Print Assumptions RevLowerStmt.lower_stmt_reversible.
+Print Assumptions RevLowerStmt.seval_defined.
+Print Assumptions RevLowerStmt.lower_stmt_complete.
+Print Assumptions RevLowerStmt.lower_stmt_iff.
 Print Assumptions ModFacts256.mod_reversible.
 Print Assumptions RevMod.i8_wraps.
 Print Assumptions ExtModFacts256.extmod_reversible.
