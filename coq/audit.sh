@@ -134,6 +134,9 @@ Print Assumptions RevLowering.tri_closed.
 Print Assumptions RevLowerExpr.lower_expr_sound.
 Print Assumptions RevLowerExpr.and_encoding.
 Print Assumptions RevLowerExpr.or_encoding.
+Print Assumptions RevLowerExpr.lower_expr_safe.
+Print Assumptions RevLowerExpr.lower_expr_ok.
+Print Assumptions RevFrame.safe_ncell.
 Print Assumptions ModFacts256.mod_reversible.
 Print Assumptions RevMod.i8_wraps.
 Print Assumptions ExtModFacts256.extmod_reversible.

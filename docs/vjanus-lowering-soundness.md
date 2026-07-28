@@ -92,8 +92,8 @@ today, as in most verified pipelines).
    (it yields 2 at `l = r = 1`) — the bug the comment below records as
    "caught by hand", now mechanized.
 
-   **The slice found a live soundness bug.** `seval` is partial where the core's
-   `bden` is total, and the two really do diverge:
+   **The slice found a live soundness bug — since fixed.** `seval` is partial
+   where the core's `bden` is total, and the two really did diverge:
 
    | expression | PyJanus | vjanus |
    |---|---|---|
@@ -101,20 +101,29 @@ today, as in most verified pipelines).
    | `x % 0` | raises `Division by zero` | quietly yields `x` (`Z.modulo a 0 = a`) |
 
    Confirmed against both implementations, not just on paper
-   (`RevLowerExpr.div_zero_diverges` / `mod_zero_diverges`, and the strict-xfail
+   (`RevLowerExpr.div_zero_diverges` / `mod_zero_diverges`, plus
    `test_division_by_zero_is_refused` in `tests/jana2014/test_vjanus_features.py`,
-   which will start failing the day it is fixed). The corpus differential test
-   never caught it because no example divides by zero, and a program PyJanus
-   rejects at run time is skipped by the harness rather than compared.
+   which now passes). The corpus differential test never caught it because no
+   example divides by zero, and a program PyJanus rejects at run time is skipped
+   by the harness rather than compared — a structural blind spot of differential
+   testing that a semantics model does not share.
 
-   Fixing it means making expression evaluation *guarded* in `RevFrame.v`. The
-   cheap shape is the one `aok` already uses for `*=`/`/=`: a decidable
-   `safe d s e` (no division or modulus by a zero divisor anywhere in `e`)
-   threaded into the premises that evaluate an expression — `E_Asn`, `E_AAsn`,
-   both `If` rules, the loop guards, `E_Enter`/`E_Exit` — plus a stability lemma
-   so the inverted statement's guard is recoverable (as `reads_cell_stable` does
-   for aliasing). Making `eval` itself `option`-valued would be more faithful but
-   ripples through every use, including extraction.
+   **Fixed** by making expression evaluation *guarded* in `RevFrame.v`, in the
+   shape `aok` already uses for `*=`/`/=`: a decidable `safe d s e` (no division
+   or modulus by a zero divisor anywhere in `e`), threaded into every premise
+   that evaluates an expression — `wf_asn`/`wf_aasn`, both `If` rules, `E_Loop`,
+   `L_one`/`L_more`, `O_cons`, `E_Enter`/`E_Exit` — with `safe_ncell` (safety
+   survives an update the expression does not read) as the stability lemma that
+   lets the reversal rebuild the inverted statement's guard, exactly as
+   `reads_cell_stable` does for aliasing. `run`/`runloop` check it too, so
+   `run_sound` and `run_complete` still hold. vjanus now refuses `x / 0` instead
+   of computing 0.
+
+   That the guard is not *over*-restrictive is itself proved: `lower_expr_safe`
+   says a source expression that has a value lowers to a safe one, so no program
+   PyJanus accepts is newly rejected (`lower_expr_ok` bundles safety with value
+   preservation). Making `eval` itself `option`-valued would have been more
+   faithful but ripples through every use, including extraction.
 
    Not covered by this slice (each needs the ref-classification model): array and
    struct l-values, stacks, `size`/`top`/`empty`, and the Cantor index fold —
