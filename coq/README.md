@@ -524,8 +524,15 @@ against both:
   2021) and Kaarsgaard (RC 2019). **The trace operator, the loop-as-trace reading
   and the `test†` conditional in this development all appear there first**;
   `docs/reversible-categorical-semantics.md` is the correspondence table and
-  states what is left as genuinely new (chiefly: that it is mechanized, and that
-  recursion is included).
+  states what is left as genuinely new. Note in particular that **recursion is
+  *not* an increment**: Glück, Kaarsgaard & Yokoyama (FM Workshops 2019; TCS
+  2022) already give the full semantics of an r-Turing complete reversible
+  while-language *with recursive procedures* in \textsf{PInj}.
+- **The small-step semantics is not step-reversible.** Lanese & Vidal
+  (arXiv:2602.16913, 2026) show the small-step Janus semantics `RevSmallStep.v`
+  mechanizes discards information, so single steps cannot be undone;
+  `step_not_backward_deterministic` and `exit_assertion_collapses` pin that down
+  here. `equiv` is about whole runs and is unaffected.
 
 ## Scope and next steps
 

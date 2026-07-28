@@ -57,7 +57,7 @@
     lemma anywhere.  Axiom-free. *)
 
 From Stdlib Require Import Bool.
-Require Import RevCore RevAlgebra RevDenote RevCat RevTrace.
+Require Import RevCore RevAlgebra RevDenote RevCat RevTrace RevSMC.
 
 (* ===================================================================== *)
 (** ** The reversible test. *)
@@ -230,3 +230,38 @@ End Struct.
     (their [rel_prod.ma] / [rel_distr.ma]) would recover their exact factoring
     and is what a full "PInj is a distributive traced symmetric monoidal
     category" claim would require; see [RevTrace.v]'s closing note. *)
+
+(* ===================================================================== *)
+(** ** Decisions are closed under Boolean operations (Glueck--Kaarsgaard Thm 9).
+
+    Their "decisions" -- the reversible representation of a predicate, which
+    [testH] is here -- are proved closed under negation, conjunction and
+    disjunction (LMCS 14(3:16), 2018, Thm 9).  Negation needs nothing beyond the
+    symmetry of the coproduct, and is the whole of it: *)
+
+Theorem test_negation : forall A (g : A -> bool),
+  heq (testH (fun a => negb (g a))) (compH (testH g) (@swapS A A)).
+Proof.
+  intros A g a x; unfold testH, compH, swapS, fnH, swapS_f.
+  destruct (g a) eqn:Hg; simpl; split.
+  - intro H; subst x; exists (inl a); split; reflexivity.
+  - intros [m [Hm Hx]]; subst m; simpl in Hx; exact Hx.
+  - intro H; subst x; exists (inr a); split; reflexivity.
+  - intros [m [Hm Hx]]; subst m; simpl in Hx; exact Hx.
+Qed.
+
+(** Conjunction and disjunction are a different matter, and the difference is
+    informative.  Running [testH g2] on the left branch of [testH g1] and the
+    identity on the right lands in [(A + A) + A]; collapsing that to [A + A] --
+    "either guard failed" -- is *not* a partial injection as a bare map, since
+    [inl (inr a)] and [inr a] both have to reach [inr a].  It is only well
+    defined because those two cases have **disjoint domains** ([g1] holds in the
+    first, fails in the second), i.e. it is a *join of disjoint maps*.
+
+    That is exactly the structure Glueck--Kaarsgaard rely on and that this
+    development has not exposed: their decisions live in an inverse category
+    with **disjoint joins**, where Thm 9 is available wholesale.  [testH] here is
+    defined pointwise and carries no join structure, so the Boolean connectives
+    beyond negation are out of reach until it is recast -- the same conclusion
+    [RevTraced.v] reaches for vanishing-II and dinaturality.  See
+    docs/reversible-categorical-semantics.md. *)
