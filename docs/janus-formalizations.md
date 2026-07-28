@@ -185,7 +185,18 @@ contribution ⑤（`RevPipeline` / `RevGolomb` / `RevVarint` / `RevZigzag`）が
 「仕様 `f` は Pfn の射で、左逆の存在が Pinj へ factor させる」と圏論層に接続できる。
 新定理というより整理。
 
-## 5. 参照
+## 5. 重要な注意 — 比較対象はこれだけではない
+
+本文書は **機械検証**（Matita 版）との比較に限っている。**紙の上の先行研究はもう一系統
+あり、そちらの方が `coq/` の圏論層に近い** — Kaarsgaard・Glück らによる
+structured reversible flowchart languages（Janus・R-CORE・R-WHILE）の圏論的意味論で、
+trace によるループ、`test†` による条件分岐、join による可逆再帰、rig 構造が
+すでに確立している。
+
+したがって **本文書の「先方に無い」欄をもって『我々が広い』と結論してはいけない。**
+必ず `docs/reversible-categorical-semantics.md` の対応表と併せて判断すること。
+
+## 6. 参照
 - ミラー: `yokoyama-lab/janus-matita-paolini`（private, `janus/` が展開済みアーカイブ）
 - 本リポジトリ: `coq/README.md`（定理→ファイル対応表）、`coq/audit.sh`（公理監査）
 - 関連: `docs/vjanus-lowering-soundness.md`（未証明の翻訳健全性）

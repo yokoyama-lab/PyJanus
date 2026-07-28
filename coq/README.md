@@ -404,6 +404,15 @@ read backwards is a run of the converse); `trace_yanking`, `trace_vanishing` and
 > dinaturality are not yet proved**, so the unqualified phrase "distributive
 > traced symmetric monoidal category" is still one step away — see the note at
 > the end of `RevTraced.v`.
+>
+> **None of this structure is new mathematics.** \textsf{PInj} is the canonical
+> model of a *join inverse rig category*, the established categorical model of
+> reversible computing, and its trace is a **dagger** trace obtained from the
+> joins. The contribution here is that it is machine-checked, and that the
+> language-level identities (`loop_is_trace`, `if_is_test_sum`) are *derived*
+> from an inductive operational semantics rather than taken as definitions.
+> `docs/reversible-categorical-semantics.md` maps every theorem in this section
+> onto the prior work it corresponds to.
 
 The payoff is `loop_is_trace`: `from g1 do R₁ loop R₂ until g2` is exactly
 `traceH turn`, where the left summand of `turn` is the outside of the loop and
@@ -494,6 +503,29 @@ core results) on each build.
 
 The stack machine and the cellular automaton share **no state space and no
 primitives** with Janus, yet inherit reversibility verbatim from the functor.
+
+## Relation to prior work
+
+Two independent lines precede this development, and the claims above are scoped
+against both:
+
+- **Machine-checked Janus.** Paolini, Piccolo & Roversi's Matita formalization
+  (TYPES 2015) — a big-step and denotational semantics for Janus with a
+  full-abstraction result, built on `Pinj`. Compared theorem by theorem in
+  `docs/janus-formalizations.md`; several of its results have been imported here
+  (`RevFix.v`, `RevTrace.v`, `RevCtrl.v`, `RevPPR.v`).
+- **The categorical semantics of reversible flowchart languages.** Glück &
+  Kaarsgaard (LMCS 14(3:16), 2018) give a categorical foundation for *structured
+  reversible flowchart languages* — the class containing Janus (without
+  recursion), R-CORE and R-WHILE — in **join inverse categories with joins and
+  extensivity**, and prove soundness, adequacy and equational full abstraction.
+  Reversible recursion via joins is Axelsen & Kaarsgaard (FoSSaCS 2016; JLAMP
+  2017); the rig structure and the dagger trace are Kaarsgaard & Rennela (MFPS
+  2021) and Kaarsgaard (RC 2019). **The trace operator, the loop-as-trace reading
+  and the `test†` conditional in this development all appear there first**;
+  `docs/reversible-categorical-semantics.md` is the correspondence table and
+  states what is left as genuinely new (chiefly: that it is mechanized, and that
+  recursion is included).
 
 ## Scope and next steps
 
