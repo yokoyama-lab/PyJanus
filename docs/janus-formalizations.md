@@ -166,7 +166,8 @@ matitac concrjanus.ma     # OK
 `run_le`/`runloop_le` 経由）。系として `run_none_no_exec`＝「全ての燃料で `None`
 なら実行は存在しない」が出るので、**vjanus の拒否がプログラムについての言明になった**
 （燃料不足かどうかの曖昧さが消えた）。
-残り: `RevExtractAr` / `RevExtractMod` / `RevExtractSMod` は `run_sound` のみ。
+**`RevExtractAr`（`driverar` を支える配列コア）にも同様に追加**。
+残り: `RevExtractMod` / `RevExtractSMod`（有界整数コア）は `run_sound` のみ。
 
 ### (B) 積・分配・trace 公理の残り — 「traced monoidal」と書くなら必須
 vanishing-II・superposing・右自然性・dinaturality と、それらが乗る積の対称モノイダル
