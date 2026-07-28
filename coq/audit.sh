@@ -142,6 +142,7 @@ Print Assumptions RevFrame.safe_ncell.
 (* statement lowering: forward simulation and what vjanus needs from it *)
 Print Assumptions RevLowerStmt.swap_lowering.
 Print Assumptions RevLowerStmt.reads_lower.
+Print Assumptions RevLowerStmt.loceqb_sloc.
 Print Assumptions RevLowerStmt.lower_stmt_sound.
 Print Assumptions RevLowerStmt.lower_stmt_correct.
 Print Assumptions RevLowerStmt.lower_stmt_reversible.

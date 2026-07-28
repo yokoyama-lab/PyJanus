@@ -210,8 +210,40 @@ today, as in most verified pipelines).
    is the source's definedness, so an expression the core will evaluate is one
    the source gives a value to.
 
-4. The remaining forms (arrays, structs, stacks, `local`/`delocal`,
-   `call`/`uncall`) need the ref-classification model — `RG`/`RF`/`RL`, the
-   array/stack/struct flattening and the Cantor index fold — which is the next
-   increment and the one where `RevLowering.v`'s isolation lemmas become leaves
-   of a simulation rather than free-standing facts.
+4. **(started)** The **ref classification** — `lower.ml`'s `ref_of`, which sends
+   a `main` variable to `RG n` (cell `G n`) and a local to `RL x` (cell `L d x`).
+   `RevLowerExpr`/`RevLowerStmt` now carry a scope `lv : nat -> bool` through
+   `lower`, `lower_stmt` and `enc`, so a source name lands in a global or a local
+   slot according to it, and:
+
+   - `loceqb_sloc` — **distinct source names never alias**, whatever their kinds:
+     a global slot and a local slot are always different cells, and two of the
+     same kind differ by name. This is the invariant that makes the flattening
+     safe, and it is what the aliasing side conditions rest on;
+   - `reads_lower` now relates the core's runtime aliasing test to the source's
+     occurrence check **across both slot kinds**, not just globals.
+
+   What is *not* done is `local`/`delocal` itself. Designing it turned up two
+   requirements worth recording, because they are not obvious until the proof
+   demands them:
+
+   - **the source semantics has to be scope-indexed** (`sexec lv`), not because
+     `seval` depends on the scope — it does not, the source store is one
+     namespace — but because the body of a `local` is lowered at `sc_set lv x`
+     while the surrounding statement is at `lv`, so the induction hypothesis has
+     to be available at the *inner* scope;
+   - **a deadness invariant has to be threaded**: `enc` sends an unbound name to
+     0, so `Enter`'s dead-cell premise `s (L d x) = 0` is *automatic* in the
+     forward direction but carries **no information back** — the backward
+     direction cannot recover `g x = 0` from it. It has to be an invariant on the
+     source store ("every name not currently bound holds 0"), preserved by every
+     rule, rather than a premise of the `local` rule.
+
+   Neither is hard, but together they change the shape of `sexec` and of both
+   simulation theorems, so they are their own increment rather than a case to
+   add.
+
+5. Then the rest: arrays and the Cantor index fold, structs, stacks, and
+   `call`/`uncall` with the frame depth — the point at which `RevLowering.v`'s
+   isolation lemmas become leaves of a simulation rather than free-standing
+   facts.

@@ -131,14 +131,28 @@ Fixpoint seval (g : nat -> Z) (e : sexpr) : option Z :=
 (* ===================================================================== *)
 (** ** The lowering, transcribed from [lower.ml]'s [expr]. *)
 
-Fixpoint lower (e : sexpr) : RevFrame.expr :=
+(** A source name is lowered to a *global* slot or to a *local* one, exactly as
+    `lower.ml`'s [ref_of] classifies it.  [lv] is the set of names currently
+    bound by an enclosing [local] -- the minimal form of that ref
+    classification, and what [local]/[delocal] needs. *)
+Definition scope := nat -> bool.
+Definition sc_set (lv : scope) (x : nat) : scope :=
+  fun n => Nat.eqb n x || lv n.
+
+Definition sref (lv : scope) (n : nat) : ref := if lv n then RL n else RG n.
+Definition sloc (lv : scope) (n : nat) : loc := if lv n then L 0 n else G n.
+
+Lemma sref_loc : forall lv n, loc_of_ref 0 (sref lv n) = sloc lv n.
+Proof. intros lv n; unfold sref, sloc; destruct (lv n); reflexivity. Qed.
+
+Fixpoint lower (lv : scope) (e : sexpr) : RevFrame.expr :=
   match e with
   | SNum z => Cst z
-  | SVar n => Rd (RG n)
-  | SNot e1 => Bin BEq (lower e1) (Cst 0)
+  | SVar n => Rd (sref lv n)
+  | SNot e1 => Bin BEq (lower lv e1) (Cst 0)
   | SBin o a b =>
-      let l := lower a in
-      let r := lower b in
+      let l := lower lv a in
+      let r := lower lv b in
       match o with
       | SAdd => Bin BAdd l r
       | SSub => Bin BSub l r
@@ -159,12 +173,17 @@ Fixpoint lower (e : sexpr) : RevFrame.expr :=
       end
   end.
 
-(** A source store is the globals of the frame store. *)
-Definition enc (g : nat -> Z) : store :=
-  fun l => match l with G n => g n | _ => 0 end.
+(** A source store lands in the globals or the depth-0 locals, according to the
+    scope.  Every other cell of the frame store is unused by this fragment. *)
+Definition enc (lv : scope) (g : nat -> Z) : store :=
+  fun l => match l with
+           | G n => if lv n then 0 else g n
+           | L 0 n => if lv n then g n else 0
+           | _ => 0
+           end.
 
-Lemma enc_var : forall g n, enc g (loc_of_ref 0 (RG n)) = g n.
-Proof. reflexivity. Qed.
+Lemma enc_var : forall lv g n, enc lv g (sloc lv n) = g n.
+Proof. intros lv g n; unfold enc, sloc; destruct (lv n) eqn:E; now rewrite E. Qed.
 
 (* ===================================================================== *)
 (** ** The boolean encodings are right (and the old one was wrong). *)
@@ -218,12 +237,12 @@ Proof. exists 1, 1; repeat split; discriminate. Qed.
 (* ===================================================================== *)
 (** ** Value preservation. *)
 
-Theorem lower_expr_sound : forall g e v,
-  wf e = true -> seval g e = Some v -> eval 0 (enc g) (lower e) = v.
+Theorem lower_expr_sound : forall lv g e v,
+  wf e = true -> seval g e = Some v -> eval 0 (enc lv g) (lower lv e) = v.
 Proof.
-  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
+  intros lv g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
   - (* SNum *) simpl in H |- *; congruence.
-  - (* SVar *) simpl in H |- *; congruence.
+  - (* SVar *) simpl in H |- *; rewrite sref_loc, enc_var; congruence.
   - (* SNot *)
     simpl in Hw; apply andb_true_iff in Hw as [_ Hw].
     simpl in H |- *.
@@ -274,10 +293,10 @@ Qed.
     reject programs PyJanus happily executes.  It does: a source expression that
     has a value lowers to a safe one. *)
 
-Theorem lower_expr_safe : forall g e v,
-  wf e = true -> seval g e = Some v -> safe 0 (enc g) (lower e) = true.
+Theorem lower_expr_safe : forall lv g e v,
+  wf e = true -> seval g e = Some v -> safe 0 (enc lv g) (lower lv e) = true.
 Proof.
-  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
+  intros lv g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
   - reflexivity.
   - reflexivity.
   - (* SNot *)
@@ -291,9 +310,9 @@ Proof.
     simpl in H.
     destruct (seval g a) as [va|] eqn:Ea; [|discriminate].
     destruct (seval g b) as [vb|] eqn:Eb; [|destruct o; discriminate].
-    assert (Sa : safe 0 (enc g) (lower a) = true) by (eapply IHa; [exact Hwa|reflexivity]).
-    assert (Sb : safe 0 (enc g) (lower b) = true) by (eapply IHb; [exact Hwb|reflexivity]).
-    assert (Vb : eval 0 (enc g) (lower b) = vb)
+    assert (Sa : safe 0 (enc lv g) (lower lv a) = true) by (eapply IHa; [exact Hwa|reflexivity]).
+    assert (Sb : safe 0 (enc lv g) (lower lv b) = true) by (eapply IHb; [exact Hwb|reflexivity]).
+    assert (Vb : eval 0 (enc lv g) (lower lv b) = vb)
       by (apply lower_expr_sound; [exact Hwb | exact Eb]).
     destruct o; simpl in H |- *; rewrite ?Sa, ?Sb, ?Vb; simpl; try reflexivity.
     + (* SDiv *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|reflexivity].
@@ -303,11 +322,11 @@ Qed.
 (** Together: the lowering of a source expression that has a value is safe and
     computes that value -- so guarding the core costs nothing on the programs
     the reference semantics accepts. *)
-Corollary lower_expr_ok : forall g e v,
+Corollary lower_expr_ok : forall lv g e v,
   wf e = true -> seval g e = Some v ->
-  safe 0 (enc g) (lower e) = true /\ eval 0 (enc g) (lower e) = v.
+  safe 0 (enc lv g) (lower lv e) = true /\ eval 0 (enc lv g) (lower lv e) = v.
 Proof.
-  intros g e v Hw H; split;
+  intros lv g e v Hw H; split;
     [ eapply lower_expr_safe; eassumption | apply lower_expr_sound; assumption ].
 Qed.
 
@@ -319,7 +338,7 @@ Example and_needs_wf :
   let e := SBin SAnd (SNum 2) (SNum 3) in
   wf e = false
   /\ seval (fun _ => 0) e = Some 1
-  /\ eval 0 (enc (fun _ => 0)) (lower e) = 6.
+  /\ eval 0 (enc (fun _ => false) (fun _ => 0)) (lower (fun _ => false) e) = 6.
 Proof. repeat split; reflexivity. Qed.
 
 (** And the check really is on the *shape*: a variable holding 1 is an [int],
@@ -340,14 +359,14 @@ Proof. split; reflexivity. Qed.
     the divergence invisible before the guard existed. *)
 Example div_zero_diverges :
   seval (fun _ => 0) (SBin SDiv (SNum 7) (SNum 0)) = None
-  /\ eval 0 (enc (fun _ => 0)) (lower (SBin SDiv (SNum 7) (SNum 0))) = 0.
+  /\ eval 0 (enc (fun _ => false) (fun _ => 0)) (lower (fun _ => false) (SBin SDiv (SNum 7) (SNum 0))) = 0.
 Proof. split; reflexivity. Qed.
 
 (** And the modulus is worse than the quotient: [Z.modulo a 0 = a], so `x % 0`
     lowers to something that quietly returns the *dividend*. *)
 Example mod_zero_diverges :
   seval (fun _ => 0) (SBin SMod (SNum 7) (SNum 0)) = None
-  /\ eval 0 (enc (fun _ => 0)) (lower (SBin SMod (SNum 7) (SNum 0))) = 7.
+  /\ eval 0 (enc (fun _ => false) (fun _ => 0)) (lower (fun _ => false) (SBin SMod (SNum 7) (SNum 0))) = 7.
 Proof. split; reflexivity. Qed.
 
 (** Floor, not truncation: [-7 / 2 = -4] in both PyJanus (Python [//]) and the
@@ -355,10 +374,10 @@ Proof. split; reflexivity. Qed.
     real agreement and not an accident of the sign-free examples. *)
 Example floor_division_agrees :
   seval (fun _ => 0) (SBin SDiv (SNum (-7)) (SNum 2)) = Some (-4)
-  /\ eval 0 (enc (fun _ => 0)) (lower (SBin SDiv (SNum (-7)) (SNum 2))) = -4.
+  /\ eval 0 (enc (fun _ => false) (fun _ => 0)) (lower (fun _ => false) (SBin SDiv (SNum (-7)) (SNum 2))) = -4.
 Proof. split; reflexivity. Qed.
 
 Example floor_modulus_agrees :
   seval (fun _ => 0) (SBin SMod (SNum (-7)) (SNum 2)) = Some 1
-  /\ eval 0 (enc (fun _ => 0)) (lower (SBin SMod (SNum (-7)) (SNum 2))) = 1.
+  /\ eval 0 (enc (fun _ => false) (fun _ => 0)) (lower (fun _ => false) (SBin SMod (SNum (-7)) (SNum 2))) = 1.
 Proof. split; reflexivity. Qed.

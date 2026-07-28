@@ -5,7 +5,7 @@
     have a skeleton to slot into.  [RevLowerExpr.v] did the expressions; this
     file adds statements over the same scalar store:
 
-      [lower_stmt_sound : sexec s g h -> exec 0 (lower_stmt s) (enc g) (enc h)]
+      [lower_stmt_sound : sexec s g h -> exec 0 (lower_stmt lv s) (enc lv g) (enc lv h)]
 
     -- a **forward simulation**.  Combined with the core's [exec_det] it gives
     what vjanus actually needs ([lower_stmt_correct]): if the source semantics
@@ -109,44 +109,72 @@ Scheme sexec_mut := Induction for sexec Sort Prop
 (** ** The lowering, transcribed from [lower.ml]. *)
 
 (** The frame core has no swap, so [x <=> y] is the XOR triple. *)
-Definition lower_swap (x y : nat) : stmt :=
-  Seq (Asn (RG x) OXor (Rd (RG y)))
-      (Seq (Asn (RG y) OXor (Rd (RG x)))
-           (Asn (RG x) OXor (Rd (RG y)))).
+Definition lower_swap (lv : scope) (x y : nat) : stmt :=
+  Seq (Asn (sref lv x) OXor (Rd (sref lv y)))
+      (Seq (Asn (sref lv y) OXor (Rd (sref lv x)))
+           (Asn (sref lv x) OXor (Rd (sref lv y)))).
 
-Fixpoint lower_stmt (s : sstmt) : stmt :=
+Fixpoint lower_stmt (lv : scope) (s : sstmt) : stmt :=
   match s with
   | TSkip => Skip
-  | TAsn x o e => Asn (RG x) o (lower e)
-  | TSwap x y => lower_swap x y
-  | TSeq a b => Seq (lower_stmt a) (lower_stmt b)
-  | TIf e1 a b e2 => If (lower e1) (lower_stmt a) (lower_stmt b) (lower e2)
-  | TLoop e1 a b e2 => Loop (lower e1) (lower_stmt a) (lower_stmt b) (lower e2)
+  | TAsn x o e => Asn (sref lv x) o (lower lv e)
+  | TSwap x y => lower_swap lv x y
+  | TSeq a b => Seq (lower_stmt lv a) (lower_stmt lv b)
+  | TIf e1 a b e2 =>
+      If (lower lv e1) (lower_stmt lv a) (lower_stmt lv b) (lower lv e2)
+  | TLoop e1 a b e2 =>
+      Loop (lower lv e1) (lower_stmt lv a) (lower_stmt lv b) (lower lv e2)
   end.
 
 (* ===================================================================== *)
 (** ** The encoding commutes with an update. *)
 
-Lemma enc_supd : forall g x v, update (enc g) (G x) v = enc (supd g x v).
+Lemma enc_supd : forall lv g x v,
+  update (enc lv g) (sloc lv x) v = enc lv (supd g x v).
 Proof.
-  intros g x v; apply functional_extensionality; intro l.
-  unfold update, enc, supd; destruct l as [n|d n|a i|d a i]; simpl; try reflexivity.
-  destruct (Nat.eqb x n) eqn:E.
-  - apply Nat.eqb_eq in E; subst; now rewrite Nat.eqb_refl.
-  - rewrite Nat.eqb_sym in E; now rewrite E.
+  intros lv g x v; apply functional_extensionality; intro l.
+  unfold update, enc, supd, sloc.
+  destruct (lv x) eqn:Ex; destruct l as [n|d n|a i|d a i]; simpl;
+    try reflexivity.
+  - (* local x, global cell *)
+    destruct (lv n) eqn:En; [reflexivity|].
+    destruct (Nat.eqb n x) eqn:E; [|reflexivity].
+    apply Nat.eqb_eq in E; subst; rewrite Ex in En; discriminate.
+  - (* local x, local cell *)
+    destruct d as [|d]; simpl; [|destruct (lv n); reflexivity].
+    destruct (Nat.eqb x n) eqn:E.
+    + apply Nat.eqb_eq in E; subst; rewrite Ex, Nat.eqb_refl; reflexivity.
+    + rewrite Nat.eqb_sym in E; rewrite E; destruct (lv n); reflexivity.
+  - (* global x, global cell *)
+    destruct (Nat.eqb x n) eqn:E.
+    + apply Nat.eqb_eq in E; subst; rewrite Ex, Nat.eqb_refl; reflexivity.
+    + rewrite Nat.eqb_sym in E; rewrite E; destruct (lv n); reflexivity.
+  - (* global x, local cell *)
+    destruct d as [|d]; simpl; [|reflexivity].
+    destruct (lv n) eqn:En; [|reflexivity].
+    destruct (Nat.eqb n x) eqn:E; [|reflexivity].
+    apply Nat.eqb_eq in E; subst; rewrite Ex in En; discriminate.
 Qed.
 
-Lemma enc_get : forall g x, enc g (G x) = g x.
-Proof. reflexivity. Qed.
+Lemma enc_get : forall lv g x, enc lv g (sloc lv x) = g x.
+Proof. intros; apply enc_var. Qed.
 
 (** Reading a scalar cell of the lowered expression is the source occurrence
     check -- so the core's runtime aliasing test and PyJanus's static one agree
     on this fragment. *)
-Lemma reads_lower : forall g x e, reads 0 (enc g) (G x) (lower e) = soccurs x e.
+Lemma reads_lower : forall lv g x e,
+  reads 0 (enc lv g) (sloc lv x) (lower lv e) = soccurs x e.
 Proof.
-  intros g x e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; simpl.
+  intros lv g x e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; simpl.
   - reflexivity.
-  - reflexivity.
+  - rewrite sref_loc; unfold sloc.
+    destruct (lv x) eqn:Ex; destruct (lv n) eqn:En; simpl.
+    + reflexivity.
+    + destruct (Nat.eqb x n) eqn:E;
+        [ apply Nat.eqb_eq in E; subst; rewrite Ex in En; discriminate | reflexivity ].
+    + destruct (Nat.eqb x n) eqn:E;
+        [ apply Nat.eqb_eq in E; subst; rewrite Ex in En; discriminate | reflexivity ].
+    + reflexivity.
   - now rewrite IH1, orb_false_r.
   - destruct o; simpl; rewrite ?IHa, ?IHb;
       destruct (soccurs x a), (soccurs x b); reflexivity.
@@ -166,45 +194,53 @@ Proof.
   intros a b; rewrite Z.lxor_comm, <- Z.lxor_assoc, Z.lxor_nilpotent; reflexivity.
 Qed.
 
-Lemma swap_lowering : forall Γ g x y, x <> y ->
-  exec Γ 0 (lower_swap x y) (enc g) (enc (supd (supd g x (g y)) y (g x))).
+Lemma loceqb_sloc : forall lv x y, x <> y -> loceqb (sloc lv x) (sloc lv y) = false.
 Proof.
-  intros Γ g x y Hxy.
-  assert (Hne : Nat.eqb x y = false) by (apply Nat.eqb_neq; exact Hxy).
-  assert (Hne' : Nat.eqb y x = false) by (apply Nat.eqb_neq; congruence).
-  (* the two intermediate source stores *)
+  intros lv x y H; unfold sloc; destruct (lv x), (lv y); simpl;
+    try reflexivity; now apply Nat.eqb_neq.
+Qed.
+
+Lemma wf_asn_xor : forall lv g x y, x <> y ->
+  wf_asn 0 (enc lv g) (sref lv x) OXor (Rd (sref lv y)) = true.
+Proof.
+  intros lv g x y H; unfold wf_asn; simpl; rewrite !sref_loc.
+  now rewrite (loceqb_sloc lv x y H).
+Qed.
+
+Lemma swap_lowering : forall Γ lv g x y, x <> y ->
+  exec Γ 0 (lower_swap lv x y) (enc lv g) (enc lv (supd (supd g x (g y)) y (g x))).
+Proof.
+  intros Γ lv g x y Hxy.
+  assert (Hyx : y <> x) by congruence.
   set (g1 := supd g x (Z.lxor (g x) (g y))).
   set (g2 := supd g1 y (g x)).
-  assert (W1 : wf_asn 0 (enc g) (RG x) OXor (Rd (RG y)) = true).
-  { unfold wf_asn; simpl; rewrite Hne; reflexivity. }
-  eapply E_Seq with (m := enc g1).
-  { assert (E := E_Asn Γ 0 (RG x) OXor (Rd (RG y)) (enc g) W1).
-    simpl in E; rewrite enc_supd in E; exact E. }
   assert (Hg1x : g1 x = Z.lxor (g x) (g y)) by apply supd_eq.
   assert (Hg1y : g1 y = g y) by (apply supd_neq; congruence).
-  assert (W2 : wf_asn 0 (enc g1) (RG y) OXor (Rd (RG x)) = true).
-  { unfold wf_asn; simpl; rewrite Hne'; reflexivity. }
-  eapply E_Seq with (m := enc g2).
-  { assert (E := E_Asn Γ 0 (RG y) OXor (Rd (RG x)) (enc g1) W2).
-    simpl in E; rewrite enc_supd in E.
-    replace (Z.lxor (g1 y) (g1 x)) with (g x) in E; [ exact E | ].
-    rewrite Hg1x, Hg1y; symmetry; apply xor_cancel_l. }
   assert (Hg2x : g2 x = Z.lxor (g x) (g y))
     by (unfold g2; rewrite supd_neq; [ exact Hg1x | congruence ]).
   assert (Hg2y : g2 y = g x) by apply supd_eq.
-  assert (W3 : wf_asn 0 (enc g2) (RG x) OXor (Rd (RG y)) = true).
-  { unfold wf_asn; simpl; rewrite Hne; reflexivity. }
-  assert (E := E_Asn Γ 0 (RG x) OXor (Rd (RG y)) (enc g2) W3).
-  simpl in E; rewrite enc_supd in E.
-  replace (Z.lxor (g2 x) (g2 y)) with (g y) in E.
-  - (* the resulting source store is the swap *)
-    replace (supd g2 x (g y)) with (supd (supd g x (g y)) y (g x)) in E;
-      [ exact E | ].
-    apply functional_extensionality; intro n.
-    unfold g2, g1, supd; destruct (Nat.eqb n x) eqn:Ex; destruct (Nat.eqb n y) eqn:Ey;
-      try reflexivity.
-    apply Nat.eqb_eq in Ex; apply Nat.eqb_eq in Ey; subst; contradiction.
-  - rewrite Hg2x, Hg2y; symmetry; apply xor_cancel_r.
+  (* each leg is one [E_Asn]; normalise its store to the source-level update *)
+  assert (step : forall gg u v, u <> v ->
+    exec Γ 0 (Asn (sref lv u) OXor (Rd (sref lv v))) (enc lv gg)
+             (enc lv (supd gg u (Z.lxor (gg u) (gg v))))).
+  { intros gg u v Huv.
+    assert (W := wf_asn_xor lv gg u v Huv).
+    assert (E := E_Asn Γ 0 (sref lv u) OXor (Rd (sref lv v)) (enc lv gg) W).
+    simpl in E; rewrite !sref_loc, !enc_var, enc_supd in E; exact E. }
+  eapply E_Seq with (m := enc lv g1); [ apply step; exact Hxy | ].
+  eapply E_Seq with (m := enc lv g2).
+  - assert (S2 := step g1 y x Hyx).
+    replace (Z.lxor (g1 y) (g1 x)) with (g x) in S2; [ exact S2 | ].
+    rewrite Hg1x, Hg1y; symmetry; apply xor_cancel_l.
+  - assert (S3 := step g2 x y Hxy).
+    replace (Z.lxor (g2 x) (g2 y)) with (g y) in S3.
+    + replace (supd g2 x (g y)) with (supd (supd g x (g y)) y (g x)) in S3;
+        [ exact S3 | ].
+      apply functional_extensionality; intro n.
+      unfold g2, g1, supd; destruct (Nat.eqb n x) eqn:Ex; destruct (Nat.eqb n y) eqn:Ey;
+        try reflexivity.
+      apply Nat.eqb_eq in Ex; apply Nat.eqb_eq in Ey; subst; contradiction.
+    + rewrite Hg2x, Hg2y; symmetry; apply xor_cancel_r.
 Qed.
 
 (* ===================================================================== *)
@@ -214,30 +250,30 @@ Qed.
 Ltac eval_guard :=
   match goal with
   | W : wf ?E = true, H : seval ?G ?E = Some ?V
-    |- context[eval 0 (enc ?G) (lower ?E)] =>
-      rewrite (lower_expr_sound G E V W H)
+    |- context[eval 0 (enc ?LV ?G) (lower ?LV ?E)] =>
+      rewrite (lower_expr_sound LV G E V W H)
   end.
 
-Theorem lower_stmt_sound : forall Γ s g h,
-  sexec s g h -> exec Γ 0 (lower_stmt s) (enc g) (enc h).
+Theorem lower_stmt_sound : forall Γ lv s g h,
+  sexec s g h -> exec Γ 0 (lower_stmt lv s) (enc lv g) (enc lv h).
 Proof.
-  intros Γ s g h H.
+  intros Γ lv s g h H.
   induction H using sexec_mut with
     (P0 := fun e1 a b e2 g h (_ : slp e1 a b e2 g h) =>
-      lp Γ 0 (lower e1) (lower_stmt a) (lower_stmt b) (lower e2) (enc g) (enc h)).
+      lp Γ 0 (lower lv e1) (lower_stmt lv a) (lower_stmt lv b) (lower lv e2) (enc lv g) (enc lv h)).
   - (* S_Skip *) apply E_Skip.
   - (* S_Asn *)
     simpl.
-    assert (Hv : eval 0 (enc g) (lower e) = v)
+    assert (Hv : eval 0 (enc lv g) (lower lv e) = v)
       by (apply lower_expr_sound; assumption).
-    assert (W : wf_asn 0 (enc g) (RG x) o (lower e) = true).
-    { unfold wf_asn; apply andb_true_iff; split;
+    assert (W : wf_asn 0 (enc lv g) (sref lv x) o (lower lv e) = true).
+    { unfold wf_asn; rewrite !sref_loc; apply andb_true_iff; split;
         [ apply andb_true_iff; split | ].
-      - apply negb_true_iff; cbn [loc_of_ref]; rewrite reads_lower; assumption.
+      - apply negb_true_iff; rewrite reads_lower; assumption.
       - eapply lower_expr_safe; eassumption.
-      - cbn [loc_of_ref]; rewrite enc_get, Hv; assumption. }
-    assert (E := E_Asn Γ 0 (RG x) o (lower e) (enc g) W).
-    cbn [loc_of_ref] in E; rewrite enc_get, Hv, enc_supd in E; exact E.
+      - rewrite enc_get, Hv; assumption. }
+    assert (E := E_Asn Γ 0 (sref lv x) o (lower lv e) (enc lv g) W).
+    rewrite !sref_loc, enc_get, Hv, enc_supd in E; exact E.
   - (* S_Swap *) apply swap_lowering; assumption.
   - (* S_Seq *) simpl; eapply E_Seq; eassumption.
   - (* S_IfT *)
@@ -283,19 +319,19 @@ Qed.
     [enc g] *is* [enc h] -- the translation cannot silently compute something
     else.  The converse is [lower_stmt_complete] below. *)
 
-Corollary lower_stmt_correct : forall Γ s g h t,
-  sexec s g h -> exec Γ 0 (lower_stmt s) (enc g) t -> t = enc h.
+Corollary lower_stmt_correct : forall Γ lv s g h t,
+  sexec s g h -> exec Γ 0 (lower_stmt lv s) (enc lv g) t -> t = enc lv h.
 Proof.
-  intros Γ s g h t Hs Hc.
-  apply (exec_det Γ 0 (lower_stmt s) (enc g) t Hc).
+  intros Γ lv s g h t Hs Hc.
+  apply (exec_det Γ 0 (lower_stmt lv s) (enc lv g) t Hc).
   apply lower_stmt_sound; exact Hs.
 Qed.
 
 (** And the lowered program is reversible, for free, from the core. *)
-Corollary lower_stmt_reversible : forall Γ s g h,
-  sexec s g h -> exec Γ 0 (invert (lower_stmt s)) (enc h) (enc g).
+Corollary lower_stmt_reversible : forall Γ lv s g h,
+  sexec s g h -> exec Γ 0 (invert (lower_stmt lv s)) (enc lv h) (enc lv g).
 Proof.
-  intros Γ s g h H; apply exec_rev, lower_stmt_sound; exact H.
+  intros Γ lv s g h H; apply exec_rev, lower_stmt_sound; exact H.
 Qed.
 
 (* ===================================================================== *)
@@ -307,15 +343,19 @@ Qed.
     alias, and the core's [wf_asn] gives [x ^= x] no step.  This example pins the
     encoding's failure mode so the side condition cannot be dropped by mistake. *)
 
-Example self_swap_would_zero : forall g x,
-  eval 0 (enc g) (Rd (RG x)) = g x /\
+Example self_swap_would_zero : forall lv g x,
+  eval 0 (enc lv g) (Rd (sref lv x)) = g x /\
   app OXor (g x) (g x) = 0.
-Proof. intros; split; [ reflexivity | apply Z.lxor_nilpotent ]. Qed.
-
-Example self_swap_has_no_step : forall g x,
-  wf_asn 0 (enc g) (RG x) OXor (Rd (RG x)) = false.
 Proof.
-  intros g x; unfold wf_asn; simpl; rewrite Nat.eqb_refl; reflexivity.
+  intros lv g x; split; [ | apply Z.lxor_nilpotent ].
+  simpl; rewrite sref_loc; apply enc_var.
+Qed.
+
+Example self_swap_has_no_step : forall lv g x,
+  wf_asn 0 (enc lv g) (sref lv x) OXor (Rd (sref lv x)) = false.
+Proof.
+  intros lv g x; unfold wf_asn; simpl; rewrite !sref_loc.
+  now rewrite loceqb_refl.
 Qed.
 
 (* ===================================================================== *)
@@ -349,10 +389,10 @@ Fixpoint wfs (s : sstmt) : bool :=
 (** The core's safety guard is the source's definedness: an expression the core
     is willing to evaluate is one the source gives a value to.  (With the
     syntactic boolean rule, division is [seval]'s only way to fail.) *)
-Lemma seval_defined : forall g e,
-  wf e = true -> safe 0 (enc g) (lower e) = true -> exists v, seval g e = Some v.
+Lemma seval_defined : forall lv g e,
+  wf e = true -> safe 0 (enc lv g) (lower lv e) = true -> exists v, seval g e = Some v.
 Proof.
-  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros Hw Hs.
+  intros lv g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros Hw Hs.
   - exists z; reflexivity.
   - exists (g n); reflexivity.
   - simpl in Hw; apply andb_true_iff in Hw as [_ Hw].
@@ -361,12 +401,12 @@ Proof.
     exists (b2z (Z.eqb v1 0)); simpl; now rewrite E1.
   - simpl in Hw; apply andb_true_iff in Hw as [Hw Hwb];
       apply andb_true_iff in Hw as [_ Hwa].
-    assert (Hab : safe 0 (enc g) (lower a) = true /\ safe 0 (enc g) (lower b) = true).
+    assert (Hab : safe 0 (enc lv g) (lower lv a) = true /\ safe 0 (enc lv g) (lower lv b) = true).
     { destruct o; simpl in Hs;
         repeat (apply andb_true_iff in Hs as [Hs ?]); split; assumption. }
     destruct Hab as [Sa Sb].
     destruct (IHa Hwa Sa) as [va Ea]; destruct (IHb Hwb Sb) as [vb Eb].
-    assert (Vb : eval 0 (enc g) (lower b) = vb)
+    assert (Vb : eval 0 (enc lv g) (lower lv b) = vb)
       by (apply lower_expr_sound; assumption).
     destruct o; simpl; rewrite Ea, Eb; simpl;
       try (eexists; reflexivity).
@@ -380,36 +420,36 @@ Qed.
 
 (** One turn of the loop, generalised so the induction on the core derivation
     keeps its indices abstract. *)
-Lemma lp_complete : forall Γ d E1 A B E2 u t,
+Lemma lp_complete : forall Γ lv d E1 A B E2 u t,
   lp Γ d E1 A B E2 u t ->
   forall e1 a b e2 g,
     d = 0%nat ->
-    E1 = lower e1 -> A = lower_stmt a -> B = lower_stmt b -> E2 = lower e2 ->
-    u = enc g -> wf e1 = true -> wf e2 = true ->
-    (forall g' t', exec Γ 0 (lower_stmt a) (enc g') t' ->
-                   exists h, t' = enc h /\ sexec a g' h) ->
-    (forall g' t', exec Γ 0 (lower_stmt b) (enc g') t' ->
-                   exists h, t' = enc h /\ sexec b g' h) ->
-    exists h, t = enc h /\ slp e1 a b e2 g h.
+    E1 = lower lv e1 -> A = lower_stmt lv a -> B = lower_stmt lv b -> E2 = lower lv e2 ->
+    u = enc lv g -> wf e1 = true -> wf e2 = true ->
+    (forall g' t', exec Γ 0 (lower_stmt lv a) (enc lv g') t' ->
+                   exists h, t' = enc lv h /\ sexec a g' h) ->
+    (forall g' t', exec Γ 0 (lower_stmt lv b) (enc lv g') t' ->
+                   exists h, t' = enc lv h /\ sexec b g' h) ->
+    exists h, t = enc lv h /\ slp e1 a b e2 g h.
 Proof.
-  intros Γ d E1 A B E2 u t H.
+  intros Γ lv d E1 A B E2 u t H.
   induction H; intros f1 sa sb f2 gg Hd HE1 HA HB HE2 Hu W1 W2 IHa IHb; subst.
   - (* L_one *)
     destruct (IHa gg b H) as [h [Hb Hsa]]; subst b.
-    match goal with S : safe 0 (enc h) (lower f2) = true |- _ =>
-      destruct (seval_defined h f2 W2 S) as [v2 E2v] end.
+    match goal with S : safe 0 (enc lv h) (lower lv f2) = true |- _ =>
+      destruct (seval_defined lv h f2 W2 S) as [v2 E2v] end.
     exists h; split; [ reflexivity | ].
     eapply SL_one; [ exact Hsa | exact W2 | exact E2v | ].
-    rewrite <- (lower_expr_sound h f2 v2 W2 E2v); assumption.
+    rewrite <- (lower_expr_sound lv h f2 v2 W2 E2v); assumption.
   - (* L_more *)
-    match goal with HA : exec Γ 0 (lower_stmt sa) (enc gg) ?m |- _ =>
+    match goal with HA : exec Γ 0 (lower_stmt lv sa) (enc lv gg) ?m |- _ =>
       destruct (IHa gg m HA) as [h1 [Hb1 Hsa]]; subst m end.
-    match goal with S : safe 0 (enc h1) (lower f2) = true |- _ =>
-      destruct (seval_defined h1 f2 W2 S) as [v2 E2v] end.
-    match goal with HB : exec Γ 0 (lower_stmt sb) (enc h1) ?m |- _ =>
+    match goal with S : safe 0 (enc lv h1) (lower lv f2) = true |- _ =>
+      destruct (seval_defined lv h1 f2 W2 S) as [v2 E2v] end.
+    match goal with HB : exec Γ 0 (lower_stmt lv sb) (enc lv h1) ?m |- _ =>
       destruct (IHb h1 m HB) as [h2 [Hb2 Hsb]]; subst m end.
-    match goal with S : safe 0 (enc h2) (lower f1) = true |- _ =>
-      destruct (seval_defined h2 f1 W1 S) as [v1 E1v] end.
+    match goal with S : safe 0 (enc lv h2) (lower lv f1) = true |- _ =>
+      destruct (seval_defined lv h2 f1 W1 S) as [v1 E1v] end.
     destruct (IHlp f1 sa sb f2 h2 eq_refl eq_refl eq_refl eq_refl eq_refl eq_refl
                 W1 W2 IHa IHb) as [h [Hbt Hrest]]; subst.
     exists h; split; [ reflexivity | ].
@@ -417,19 +457,19 @@ Proof.
     + exact Hsa.
     + exact W2.
     + exact E2v.
-    + rewrite <- (lower_expr_sound h1 f2 v2 W2 E2v); assumption.
+    + rewrite <- (lower_expr_sound lv h1 f2 v2 W2 E2v); assumption.
     + exact Hsb.
     + exact W1.
     + exact E1v.
-    + rewrite <- (lower_expr_sound h2 f1 v1 W1 E1v); assumption.
+    + rewrite <- (lower_expr_sound lv h2 f1 v1 W1 E1v); assumption.
     + exact Hrest.
 Qed.
 
-Theorem lower_stmt_complete : forall Γ s g t,
-  wfs s = true -> exec Γ 0 (lower_stmt s) (enc g) t ->
-  exists h, t = enc h /\ sexec s g h.
+Theorem lower_stmt_complete : forall Γ lv s g t,
+  wfs s = true -> exec Γ 0 (lower_stmt lv s) (enc lv g) t ->
+  exists h, t = enc lv h /\ sexec s g h.
 Proof.
-  intros Γ s; induction s as [ | x o e | x y | a IHa b IHb
+  intros Γ lv s; induction s as [ | x o e | x y | a IHa b IHb
                              | e1 a IHa b IHb e2 | e1 a IHa b IHb e2 ];
     intros g t Hw Hex; simpl in Hw, Hex.
   - (* TSkip *) inversion Hex; subst; exists g; split; [reflexivity | apply S_Skip].
@@ -439,31 +479,32 @@ Proof.
       rename W into Wa end.
     assert (Wa' := Wa); unfold wf_asn in Wa'.
     apply andb_true_iff in Wa' as [Wa' Hok]; apply andb_true_iff in Wa' as [Wr Hsf].
-    cbn [loc_of_ref] in Wr, Hsf, Hok.
+    rewrite !sref_loc in Wr, Hok.
     apply negb_true_iff in Wr; rewrite reads_lower in Wr.
-    destruct (seval_defined g e Hw Hsf) as [v Ev].
-    assert (Hv : eval 0 (enc g) (lower e) = v) by (apply lower_expr_sound; assumption).
+    destruct (seval_defined lv g e Hw Hsf) as [v Ev].
+    assert (Hv : eval 0 (enc lv g) (lower lv e) = v) by (apply lower_expr_sound; assumption).
     rewrite Hv, enc_get in Hok.
     exists (supd g x (app o (g x) v)); split.
-    + cbn [loc_of_ref]; rewrite Hv, enc_get, enc_supd; reflexivity.
+    + rewrite !sref_loc, Hv, enc_get, enc_supd; reflexivity.
     + apply S_Asn; assumption.
   - (* TSwap *)
     assert (Hxy : x <> y).
     { inversion Hex; subst.
       match goal with HA : exec _ _ (Asn _ _ _) _ _ |- _ => inversion HA; subst end.
       match goal with W : wf_asn _ _ _ _ _ = true |- _ =>
-        unfold wf_asn in W; cbn [loc_of_ref reads loceqb] in W;
+        unfold wf_asn in W; simpl in W; rewrite !sref_loc in W;
         apply andb_true_iff in W as [W _]; apply andb_true_iff in W as [W _];
-        apply negb_true_iff, Nat.eqb_neq in W; exact W end. }
+        apply negb_true_iff in W;
+        intro Heq; subst; rewrite loceqb_refl in W; discriminate end. }
     exists (supd (supd g x (g y)) y (g x)); split.
     + eapply exec_det; [ exact Hex | apply swap_lowering; exact Hxy ].
     + apply S_Swap; exact Hxy.
   - (* TSeq *)
     apply andb_true_iff in Hw as [Hwa Hwb].
     inversion Hex; subst.
-    match goal with H1 : exec _ _ (lower_stmt a) _ ?m |- _ =>
+    match goal with H1 : exec _ _ (lower_stmt lv a) _ ?m |- _ =>
       destruct (IHa g m Hwa H1) as [h1 [-> Hsa]] end.
-    match goal with H2 : exec _ _ (lower_stmt b) _ t |- _ =>
+    match goal with H2 : exec _ _ (lower_stmt lv b) _ t |- _ =>
       destruct (IHb h1 t Hwb H2) as [h [-> Hsb]] end.
     exists h; split; [ reflexivity | eapply S_Seq; eassumption ].
   - (* TIf *)
@@ -471,49 +512,49 @@ Proof.
       apply andb_true_iff in Hw as [W1 W2].
     inversion Hex; subst.
     + (* took the then-branch *)
-      match goal with H1 : exec _ _ (lower_stmt a) _ t |- _ =>
+      match goal with H1 : exec _ _ (lower_stmt lv a) _ t |- _ =>
         destruct (IHa g t Hwa H1) as [h [-> Hsa]] end.
-      destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
-      destruct (seval_defined h e2 W2 ltac:(assumption)) as [v2 E2v].
+      destruct (seval_defined lv g e1 W1 ltac:(assumption)) as [v1 E1v].
+      destruct (seval_defined lv h e2 W2 ltac:(assumption)) as [v2 E2v].
       exists h; split; [ reflexivity | ].
       eapply S_IfT; [ exact W1 | exact E1v | | exact Hsa | exact W2 | exact E2v | ].
-      * rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
-      * rewrite <- (lower_expr_sound h e2 v2 W2 E2v); assumption.
+      * rewrite <- (lower_expr_sound lv g e1 v1 W1 E1v); assumption.
+      * rewrite <- (lower_expr_sound lv h e2 v2 W2 E2v); assumption.
     + (* took the else-branch *)
-      match goal with H1 : exec _ _ (lower_stmt b) _ t |- _ =>
+      match goal with H1 : exec _ _ (lower_stmt lv b) _ t |- _ =>
         destruct (IHb g t Hwb H1) as [h [-> Hsb]] end.
-      destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
-      destruct (seval_defined h e2 W2 ltac:(assumption)) as [v2 E2v].
+      destruct (seval_defined lv g e1 W1 ltac:(assumption)) as [v1 E1v].
+      destruct (seval_defined lv h e2 W2 ltac:(assumption)) as [v2 E2v].
       exists h; split; [ reflexivity | ].
       eapply S_IfF; [ exact W1 | exact E1v | | exact Hsb | exact W2 | exact E2v | ].
-      * rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
-      * rewrite <- (lower_expr_sound h e2 v2 W2 E2v); assumption.
+      * rewrite <- (lower_expr_sound lv g e1 v1 W1 E1v); assumption.
+      * rewrite <- (lower_expr_sound lv h e2 v2 W2 E2v); assumption.
   - (* TLoop *)
     apply andb_true_iff in Hw as [Hw Hwb]; apply andb_true_iff in Hw as [Hw Hwa];
       apply andb_true_iff in Hw as [W1 W2].
     inversion Hex; subst.
-    destruct (seval_defined g e1 W1 ltac:(assumption)) as [v1 E1v].
+    destruct (seval_defined lv g e1 W1 ltac:(assumption)) as [v1 E1v].
     match goal with Hl : lp _ _ _ _ _ _ _ t |- _ =>
-      destruct (lp_complete _ _ _ _ _ _ _ _ Hl e1 a b e2 g
+      destruct (lp_complete _ _ _ _ _ _ _ _ _ Hl e1 a b e2 g
                   eq_refl eq_refl eq_refl eq_refl eq_refl eq_refl W1 W2
                   (fun g' t' H => IHa g' t' Hwa H)
                   (fun g' t' H => IHb g' t' Hwb H)) as [h [-> Hsl]] end.
     exists h; split; [ reflexivity | ].
     eapply S_Loop; [ exact W1 | exact E1v | | exact Hsl ].
-    rewrite <- (lower_expr_sound g e1 v1 W1 E1v); assumption.
+    rewrite <- (lower_expr_sound lv g e1 v1 W1 E1v); assumption.
 Qed.
 
 (** The two directions together: on the well-formed scalar fragment, the source
     semantics and the lowered core agree exactly. *)
-Corollary lower_stmt_iff : forall Γ s g h,
+Corollary lower_stmt_iff : forall Γ lv s g h,
   wfs s = true ->
-  (sexec s g h <-> exec Γ 0 (lower_stmt s) (enc g) (enc h)).
+  (sexec s g h <-> exec Γ 0 (lower_stmt lv s) (enc lv g) (enc lv h)).
 Proof.
-  intros Γ s g h Hw; split; intro H.
+  intros Γ lv s g h Hw; split; intro H.
   - apply lower_stmt_sound; exact H.
-  - destruct (lower_stmt_complete Γ s g (enc h) Hw H) as [h' [Heq Hs]].
+  - destruct (lower_stmt_complete Γ lv s g (enc lv h) Hw H) as [h' [Heq Hs]].
     (* [enc] is injective on stores, so the two source stores coincide *)
     assert (h = h') as ->; [ | exact Hs ].
     apply functional_extensionality; intro n.
-    change (enc h (G n) = enc h' (G n)); rewrite Heq; reflexivity.
+    rewrite <- (enc_var lv h n), <- (enc_var lv h' n), Heq; reflexivity.
 Qed.
