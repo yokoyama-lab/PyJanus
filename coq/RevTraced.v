@@ -161,6 +161,16 @@ Qed.
     ([pathn_snoc] is the only one of that kind so far), not the pointwise
     reasoning that discharges the axioms above.
 
+    **A better route probably exists.**  In the literature the trace of a join
+    inverse category is not axiomatized element-by-element: it is *derived from
+    the joins*, and comes out a **dagger** trace (Kaarsgaard, RC 2019,
+    arXiv:1904.01679; the underlying models are Glueck--Kaarsgaard's join inverse
+    categories).  [traceH] here is defined by existence of a path and its join
+    structure -- the countable supremum -- has not been exposed, so the two
+    remaining axioms are being attacked by hand where the standard development
+    gets them wholesale.  Before grinding out the path surgery it is worth
+    recasting [traceH] as a join.  See docs/reversible-categorical-semantics.md.
+
     Until they are proved, the honest statement of what is machine-checked is:
     \textsf{PInj} is symmetric monoidal for the coproduct and for the product,
     distributive, and carries a trace operator that is closed on it, commutes

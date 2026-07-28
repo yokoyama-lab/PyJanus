@@ -18,7 +18,10 @@
         functoriality, and dagger compatibility ([convH_sumH]);
       - the **trace** [traceH R] of [R : hrel (A+U) (B+U)] — run [R], and while
         it lands in the right summand feed the value back through [U]:
-        [traceH R = R11 ∪ (R12 ; fb* ; R21)], the "execution formula";
+        [traceH R = R11 ∪ (R12 ; fb* ; R21)], the "execution formula".  This is
+        the same operator Glueck and Kaarsgaard use (LMCS 14(3:16), 2018,
+        Prop. 2: Tr(f) = f11 \/ join_{n in omega} f21 f22^n f12); our [exists n]
+        is their omega-join;
       - [pinj_traceH] — **the trace of a partial injection is a partial
         injection** (their [good_rel_trace_inj]), so the operator is closed on
         \textsf{PInj};
@@ -37,6 +40,15 @@
     Hence [rev_loop] (RevAlgebra's closure lemma for the loop, proved there by a
     bespoke reversal argument) is re-derived as an *instance of the trace*:
     [rev_loop_via_trace].  The development is axiom-free.
+
+    **Prior work.**  That \textsf{PInj} is traced, and that the reversible loop
+    is its trace, is established: \textsf{PInj} is the canonical example of an
+    inverse category in Glueck--Kaarsgaard, who *define* the flowchart loop by the
+    operator above, and join inverse categories are known to carry a **dagger**
+    trace (Kaarsgaard, RC 2019).  [loop_is_trace] earns its keep by going the
+    other way -- deriving the trace presentation from the inductive [exec] -- and
+    by being machine-checked.  docs/reversible-categorical-semantics.md maps this
+    file onto that literature.
 
     Scope of the claim: the monoidal structure these axioms are stated relative
     to is in [RevSMC.v], and the further axioms in [RevTraced.v].  Vanishing-II

@@ -20,6 +20,16 @@
     reversible is not an extra proof obligation bolted on; it is the *converse of
     the very morphism that opened the branch*.
 
+    **This is not new.**  It is exactly how Glueck and Kaarsgaard define the
+    conditional for structured reversible flowchart languages (Janus among them):
+    [[ if p then c1 else c2 fi q ]] = [[q]]dagger ([[c1]] + [[c2]]) [[p]]
+    (LMCS 14(3:16), 2018, doi:10.23638/LMCS-14(3:16)2018), with their extensivity
+    /decision machinery playing the part of [testH] here.  What this file adds is
+    the *direction*: they take that composite as the definition, whereas
+    [if_is_test_sum] **derives** it from [RevCore]'s inductive [exec], so the two
+    presentations are proved to agree.  See docs/reversible-categorical-semantics.md
+    for the full correspondence.
+
     This file makes that precise.  We take the composite [state → state + state]
     directly as [testH] rather than routing through [× (1+1)] and [δ] (which
     would need the product monoidal structure and distributivity — see the note

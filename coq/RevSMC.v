@@ -14,8 +14,19 @@
       - and the two are related by a **distributor**
         [δ : A × (B + C) ≅ (A × B) + (A × C)], again a natural isomorphism.
 
-    [RevTraced.v] then adds the remaining trace axioms on top, completing
-    "distributive traced symmetric monoidal category".
+    [RevTraced.v] then adds the remaining trace axioms on top.
+
+    **Vocabulary.**  "Two symmetric monoidal structures related by a distributor"
+    is a **rig** category, and the established name for the categorical model of
+    reversible computing is a **join inverse rig category** (Kaarsgaard and
+    Rennela, MFPS 2021, arXiv:2105.09929) -- inverse (dagger + restriction) for
+    partial injectivity, joins for fixed points and iteration, rig for the two
+    tensors.  \textsf{PInj} is its canonical model, so what this file checks is
+    the rig half of a known structure, mechanized.  Note also that the trace of a
+    join inverse category is a **dagger** trace and is obtained *from the joins*
+    (Kaarsgaard, RC 2019, arXiv:1904.01679) rather than axiomatized separately --
+    a route [RevTraced.v] does not take, and probably should.  See
+    docs/reversible-categorical-semantics.md.
 
     The one device that makes this tractable: every structural map here is the
     *graph of a bijection*, so we define [fnH] once and each coherence law

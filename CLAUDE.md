@@ -165,6 +165,12 @@ interpreter).
   Piccolo & Roversi's Matita formalization, TYPES 2015) — and which of its
   results are still worth importing — is tracked in
   `docs/janus-formalizations.md`.
+- **Before claiming anything in the categorical layer is new, read
+  `docs/reversible-categorical-semantics.md`.** Glück & Kaarsgaard already give
+  the categorical semantics of Janus-class languages (join inverse categories,
+  LMCS 2018), and the trace-as-loop, `test†` conditional, join-based recursion
+  and rig structure all appear there first. That doc is the theorem-by-theorem
+  correspondence and says what is left as genuinely new.
 
 ### Differential testing (`coq/harness/`)
 

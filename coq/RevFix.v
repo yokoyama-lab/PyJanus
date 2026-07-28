@@ -42,7 +42,16 @@
                            dischargeable before only via [exec].
 
     Everything is a union over a chain of relations — relations under inclusion
-    form a complete lattice, so no domain theory is needed. *)
+    form a complete lattice, so no domain theory is needed.
+
+    **Prior work.**  Getting reversible recursion from *joins* is the established
+    route: Axelsen and Kaarsgaard model it in **join inverse categories**
+    (FoSSaCS 2016, doi:10.1007/978-3-662-49630-5_5; JLAMP 87, 2017,
+    doi:10.1016/j.jlamp.2016.08.003), where the fixed point of a functional is
+    the join of its finite approximants.  The union of the Kleene chain here is
+    that join, taken concretely in the lattice of relations; so this file is a
+    machine-checked instance of that construction rather than a new one.  See
+    docs/reversible-categorical-semantics.md. *)
 
 From Stdlib Require Import Bool Arith.
 Require Import RevCore RevAlgebra RevDenote.
