@@ -4,10 +4,14 @@
 `RevCtrl` / `RevFix` / `RevDenote`）が、Kaarsgaard らの既存研究のどれに当たるかを
 明示し、機械検証として何が新しいかを切り分けるための文書。*
 
-> **この文書の信頼度**: 書誌情報は dblp / DOI / arXiv で裏取り済み。内容は
-> **abstract と ar5iv 抽出の本文断片を読んだ範囲**であり、LMCS 論文の全文精読は
-> していない。「対応する」と書いた箇所は、**定義の形が一致していることを確認できた
-> ものだけ**に限り、推測は「要確認」と明記した。
+> **この文書の信頼度**: 書誌情報は dblp / DOI / arXiv / Semantic Scholar で裏取り済み。
+> 内容は **abstract と ar5iv/HTML 抽出の本文を読んだ範囲**。LMCS 論文は §6 soundness /
+> §7 full abstraction / §9 concluding remarks まで、Lanese–Vidal は全体を当たった。
+> 「対応する」と書いた箇所は**定義や定理の形を確認できたものだけ**に限り、
+> 推測は「要確認」と明記した。
+>
+> **2026-07-29 訂正**: 初版で「再帰込みの Janus は我々の増分」と書いたが、**誤り**。
+> 詳細は §3。
 
 ## 0. なぜこの文書が要るか
 
@@ -32,7 +36,7 @@ structured reversible flowchart languages の圏論的意味論**を確立して
 | `RevSMC`（余積・積の対称モノイダル＋分配） | Kaarsgaard–Rennela 2021 の **rig 構造** | rig ＝ 2つのモノイダル構造＋分配。我々が証明したのはこれに相当 |
 | `RevTraced`（trace 公理） | join inverse category が **dagger trace** を持つことは既知（Kaarsgaard 2019 が一般化） | 既知。しかも我々の「plain traced」より強い |
 | `RevFix.Dfix`（環境汎関数の Kleene 鎖の合併＝最小不動点） | Axelsen–Kaarsgaard 2016 / Kaarsgaard–Axelsen–Glück 2017（**join から不動点**） | **同じ構成**。我々が「完備束だから領域理論不要」と説明したものは、join inverse category の join 構造そのもの |
-| `RevSmallStep`（小ステップ ↔ 大ステップ同値） | Lanese–Vidal 2026 が「従来の小ステップ意味論は情報を捨てるため可逆でない」と指摘し、可逆な小ステップを与えている | **要確認**。我々が機械検証したのは RC 2024 版との同値であって、小ステップ自体の可逆性ではない |
+| `RevSmallStep`（小ステップ ↔ 大ステップ同値） | Lanese–Vidal 2026（原文確認済み） | **彼らの指摘は我々にも当てはまる**。§3-A 参照 |
 
 ## 2. 語彙 — 標準名は「join inverse rig category」
 
@@ -68,16 +72,68 @@ flowchart 言語の soundness・adequacy・full abstraction、join からの可�
    形式化は今回の探索では出てこなかった。Janus の *certified* な仕事として見つかるのは
    Paolini–Piccolo–Roversi の Matita 版（TYPES 2015）で、そちらは**圏論的意味論を
    `Pinj` 上で構築しているが、join inverse category の語彙は使っていない**。
-2. **再帰を含む Janus。** Glück–Kaarsgaard 2018 は明示的に「Janus **without**
-   recursion」。再帰は別系統（2016/2017）で扱われている。本開発は
-   `RevFix` / `RevProc` / `RevCoreP` / `RevFrame` で再帰を含めて一つの検証済み開発に
-   収めており、その組み合わせは増分かもしれない。
+2. ~~**再帰を含む Janus。**~~ **← 誤りだったので撤回（2026-07-29）。**
+   確かに LMCS 2018 §9 は "The framework presented does not yet cover recursive
+   reversible languages" と明記しており、構文も
+   `B ::= a | from p loop B until p | if p then B else B fi p | B ; B` で手続きが無い。
+   **しかし後続で解決済み**: Glück–Kaarsgaard–**Yokoyama** (FM Workshops 2019)
+   *Reversible Programs Have Reversible Semantics* が
+   「an r-Turing complete reversible while-language **with recursive procedures**」の
+   完全な意味論を **PInj 上で**展開しており、"the reversibility of the language and
+   its inverse semantics are immediate" としている。journal 版が TCS 2022。
+   したがって**再帰は増分ではない**。
 3. **法則の必要性**（`RevNecessity.v`）。「3法則は十分かつ必要」「非単射な原子は許容されない」
    に当たる議論は、先行研究側に対応物が見当たらなかった。
 4. **抽出インタプリタと差分試験**（`RevExtract*` / `vjanus` / `harness`）。圏論側の
    仕事ではないが、意味論と実装を突き合わせる層は先行研究の射程外。
 5. **形式化が実装のバグを検出したこと**（0除算の乖離、`&&`/`||` の bool 検査欠落。
    → `docs/vjanus-lowering-soundness.md`）。これも圏論の話ではない。
+
+## 3-A. 原文確認で判明したこと、および足したもの
+
+### Lanese–Vidal 2026（全文確認）— 指摘は我々にも当てはまる
+
+彼らの指摘は「従来の小ステップ Janus 意味論は前進計算で情報を捨てるため、
+**個々のステップが可逆でない**」。例は `if e1 then skip else s2 fi e2` が出口ガード
+成立時に `skip` へ簡約される点で、`skip` から元の条件文は復元できない。彼らは
+プログラムカウンタ／CFG による構成でこれを直し、**Loop Lemma**（任意の簡約に逆がある）
+を証明し、大ステップおよび従来の小ステップとの同値も示している。**機械検証はしていない。**
+
+**`RevSmallStep.v` は同じ欠陥を持つ。** 我々の `RAssert g v` は `RSkip` へ簡約されて
+情報を捨てるからである。これを暗黙にせず機械化した:
+
+- `step_not_backward_deterministic` — 逐次規則だけから、相異なる2配置が同一配置へ
+  簡約される（仮定なし）
+- `exit_assertion_collapses` — **彼らの例そのものの形**。出口表明が `RSkip` へ潰れるため、
+  出口ガードの違う2つの条件文は終了した瞬間に区別できなくなる
+
+**したがって `RevSmallStep.v` について「小ステップが可逆」と書いてはいけない。**
+`equiv` が述べているのは**実行全体**の可逆性（`exec_iff` を `multistep` へ移送したもの）で
+あって、ステップ単位の可逆性ではない。Loop Lemma を得るには捨てた制御情報を保持する
+配置（彼らのプログラムカウンタ等）へ移る必要があり、それは**別の意味論**であって
+この意味論についての補題ではない。ファイル末尾に同趣旨を明記した。
+
+### LMCS 2018（§6/§7/§9 確認）— Thm 9 のうち否定だけ足せた
+
+- §6: computational soundness `σ⊢c↓σ′ ⟹ ⟦c⟧(σ)=σ′` と adequacy（逆向き）
+- §7: equational full abstraction の十分条件は「圏が定義可能な述語をすべて区別できる」
+  ことと「disjointness tensor が有限 join を一様に保存する」こと
+- §9: **"The framework presented does not yet cover recursive reversible languages"**
+  を主要な未解決として明記（→ §3 の訂正の根拠）。**proof assistant への言及は無い**
+
+彼らの **Theorem 9「decisions は否定・連言・選言について閉じている」** に対応するものを
+足そうとした結果:
+
+- **否定は足せた** — `RevCtrl.test_negation : testH (¬∘g) = testH g ; swapS`。
+  余積の対称性だけで済む
+- **連言・選言は足せなかった。** `testH g1` の左枝で `testH g2` を走らせると
+  `(A+A)+A` に落ち、これを `A+A` へ潰す写像は**単射ではない**（`inl (inr a)` と `inr a` が
+  衝突する）。衝突する2ケースは**定義域が交わらない**ので実際には問題ないが、それを
+  言うには **disjoint join** が要る。これはまさに彼らが持っていて我々が露出していない構造で、
+  `RevTraced.v` が vanishing-II / dinaturality について到達した結論と同じ
+
+つまり **`testH` と `traceH` の join 構造を取り出す**ことが、複数の未達項目に共通の
+ボトルネックだと確認できた。
 
 ## 4. 注意 — 主張を書くときに
 
@@ -126,7 +182,7 @@ flowchart 言語の soundness・adequacy・full abstraction、join からの可�
 - I. Lanese, G. Vidal. *A Reversible Semantics for Janus.* 2026.
   [arXiv:2602.16913](https://arxiv.org/abs/2602.16913)
   — 従来の小ステップ意味論が前進計算で情報を捨てるため可逆でないことを指摘し、
-  Loop Lemma を満たす小ステップを与える。`RevSmallStep.v` の位置づけに影響しうる。
+  Loop Lemma を満たす小ステップを与える（機械検証なし）。→ §3-A
 
 **機械検証（Janus）**
 - L. Paolini, M. Piccolo, L. Roversi. *A Certified Study of a Reversible Programming

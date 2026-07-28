@@ -321,4 +321,51 @@ Theorem equiv : forall Γ s a b,
   L.exec Γ s a b <-> multistep Γ (embed s) a RSkip b.
 Proof. intros; split; [ apply complete | apply sound ]. Qed.
 
+(* ===================================================================== *)
+(** ** Scope: this semantics is *not* step-reversible, and that is expected.
+
+    Lanese and Vidal ("A Reversible Semantics for Janus", arXiv:2602.16913,
+    2026) observe that the small-step semantics this file mechanizes is not
+    reversible *as a small-step relation*: it discards information going
+    forwards, so an individual step cannot be undone.  Their example is a
+    conditional [if e1 then skip else s2 fi e2] reducing to [skip] once the exit
+    guard holds -- from [skip] the conditional cannot be recovered.  They repair
+    it with a program-counter/CFG presentation satisfying the **Loop Lemma**
+    (every reduction has an inverse), proved equivalent to both the big-step and
+    the previous small-step semantics.  Their development is not mechanized.
+
+    The same defect is present here, and it is worth pinning down rather than
+    leaving implicit, because it bounds what [equiv] may be read as saying.
+
+    Two *distinct* configurations that step to the *same* one, so [step] is not
+    backward deterministic.  First, unconditionally, from the sequencing rules
+    alone: *)
+
+Theorem step_not_backward_deterministic : forall Γ (a : state),
+  step Γ (RSeq (RSeq RSkip RSkip) RSkip) a (RSeq RSkip RSkip) a
+  /\ step Γ (RSeq RSkip (RSeq RSkip RSkip)) a (RSeq RSkip RSkip) a
+  /\ RSeq (RSeq RSkip RSkip) RSkip <> RSeq RSkip (RSeq RSkip RSkip).
+Proof.
+  intros Γ a; repeat split.
+  - apply S_SeqStep, S_SeqDone.
+  - apply S_SeqDone.
+  - discriminate.
+Qed.
+
+(** And second, in exactly Lanese and Vidal's shape: the *exit assertion* of a
+    conditional collapses to [RSkip], so two conditionals with different exit
+    guards become indistinguishable the moment they finish. *)
+Theorem exit_assertion_collapses : forall Γ (g h : guard) (a : state),
+  gtest g a = true -> gtest h a = true ->
+  step Γ (RAssert g true) a RSkip a /\ step Γ (RAssert h true) a RSkip a.
+Proof. intros Γ g h a Hg Hh; split; apply S_Assert; assumption. Qed.
+
+(** What survives is the statement [equiv] actually makes: reversibility here is
+    a property of *whole runs*, not of single steps.  [RevCore.exec_iff] inverts
+    a complete [exec], and [equiv] transports that to [multistep]; neither
+    claims, nor needs, that [step] itself is invertible.  Getting the Loop Lemma
+    would mean adopting a configuration that retains the discarded control
+    information -- Lanese and Vidal's program counter, or equivalent -- which is
+    a different semantics, not a lemma about this one. *)
+
 End SmallStep.

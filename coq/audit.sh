@@ -21,7 +21,7 @@ cleanup() { rm -f "$AUDIT" "$BASE.vo" "$BASE.glob" ".$BASE.aux"; }
 trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
-Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
+Require Import Janus RevCore RevExtract RevInvert RevStack RevCA RevSmallStep
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
@@ -30,6 +30,7 @@ Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
 Module ExtSModFacts8 := RevExtSMod.ExtSModFacts RevExtSMod.B8.
+Module SsS := RevSmallStep.SmallStep RevStack.StackPrim.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
@@ -62,6 +63,9 @@ Print Assumptions RevFrame.aok_ainv.
 Print Assumptions DnS.adequacy.
 Print Assumptions DnS.full_abstraction.
 Print Assumptions DnS.denote_invert.
+(* the small-step semantics is not step-reversible (Lanese-Vidal) *)
+Print Assumptions SsS.step_not_backward_deterministic.
+Print Assumptions SsS.exit_assertion_collapses.
 (* denotational, closed: procedure meanings as a least fixed point *)
 Print Assumptions FxS.fix_adequacy.
 Print Assumptions FxS.Dfix_fixed.
@@ -110,6 +114,7 @@ Print Assumptions trace_superposing.
 Print Assumptions pinj_testH.
 Print Assumptions test_dagger.
 Print Assumptions if_is_test_sum.
+Print Assumptions test_negation.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
