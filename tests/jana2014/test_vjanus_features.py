@@ -163,6 +163,46 @@ def test_multiplicative_update_guard_is_enforced(op: str) -> None:
     )
 
 
+@pytest.mark.parametrize("src", [
+    # plain ints
+    "procedure main()\n    int x\n    int y\n    int r\n"
+    "    x += 2\n    y += 3\n    r += x && y\n",
+    # variables that happen to hold 0/1 -- still ints, still rejected
+    "procedure main()\n    int b\n    int c\n    int r\n"
+    "    b += 1\n    c += 1\n    r += b || c\n",
+    # `!` has the same rule
+    "procedure main()\n    int x\n    int r\n    x += 1\n    r += !x\n",
+])
+def test_non_boolean_logical_operand_is_rejected(src: str) -> None:
+    """`&&`, `||` and `!` take bool operands only, and the rule is *syntactic*.
+
+    PyJanus checks `isinstance(v, bool)`, and only a comparison, `!`, `&&`, `||`
+    or `empty` ever produces one -- a variable holding 1 is an int and is
+    rejected.  vjanus used to lower `2 && 3` to `2 * 3 = 6` because the
+    encodings (`&& = l*r`, `|| = l+r-l*r`) are only correct on 0/1.  Found by
+    modelling the source semantics (`RevLowerExpr.and_needs_wf` shows the
+    lowering is unsound without the check), then confirmed against both."""
+    result = _run_vjanus(src)
+    assert result.returncode != 0, (
+        f"Expected a rejection, got 0.\nstdout: {result.stdout!r}"
+    )
+    assert "must be a bool" in result.stderr, result.stderr
+
+
+def test_boolean_logical_operands_run() -> None:
+    """...and a well-typed use still runs."""
+    src = (
+        "procedure main()\n"
+        "    int b\n"
+        "    int r\n"
+        "    b += 1\n"
+        "    r += (b = 1) && (b > 0)\n"
+    )
+    result = _run_vjanus(src)
+    assert result.returncode == 0, result.stderr
+    assert "r = 1" in result.stdout, result.stdout
+
+
 @pytest.mark.parametrize("op", ["/", "%"])
 def test_division_by_zero_is_refused(op: str) -> None:
     """vjanus refuses a division by zero, as PyJanus does.

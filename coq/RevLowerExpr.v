@@ -69,6 +69,29 @@ Definition b2z (b : bool) : Z := if b then 1 else 0.
     comparison's [True]/[False] is read as 1/0. *)
 Definition isb (v : Z) : bool := Z.eqb v 0 || Z.eqb v 1.
 
+(** PyJanus's bool check is on the *Python* type, so it is decided by the
+    expression's **shape**, not by its value: only a comparison, [!], [&&] or
+    [||] produces a Python [bool].  A variable holding 1 is an [int] and is
+    rejected.  ([empty s] also qualifies, but stacks are outside this slice.) *)
+Definition isbool (e : sexpr) : bool :=
+  match e with
+  | SNot _ => true
+  | SBin (SEq | SNe | SLt | SGt | SLe | SGe | SAnd | SOr) _ _ => true
+  | _ => false
+  end.
+
+(** ...and the well-formedness that check induces: every [!], [&&], [||] has
+    boolean-shaped operands.  ([bok] keeps the [SBin] case one shape.) *)
+Definition bok (o : sbin) (a b : sexpr) : bool :=
+  match o with SAnd | SOr => isbool a && isbool b | _ => true end.
+
+Fixpoint wf (e : sexpr) : bool :=
+  match e with
+  | SNum _ | SVar _ => true
+  | SNot e1 => isbool e1 && wf e1
+  | SBin o a b => bok o a b && wf a && wf b
+  end.
+
 Definition sbin_den (o : sbin) (a b : Z) : option Z :=
   match o with
   | SAdd => Some (a + b)
@@ -82,10 +105,8 @@ Definition sbin_den (o : sbin) (a b : Z) : option Z :=
   | SGt  => Some (b2z (Z.ltb b a))
   | SLe  => Some (b2z (Z.leb a b))
   | SGe  => Some (b2z (Z.leb b a))
-  | SAnd => if isb a && isb b
-            then Some (b2z (negb (Z.eqb a 0) && negb (Z.eqb b 0))) else None
-  | SOr  => if isb a && isb b
-            then Some (b2z (negb (Z.eqb a 0) || negb (Z.eqb b 0))) else None
+  | SAnd => Some (b2z (negb (Z.eqb a 0) && negb (Z.eqb b 0)))
+  | SOr  => Some (b2z (negb (Z.eqb a 0) || negb (Z.eqb b 0)))
   | SXorB => Some (Z.lxor a b)
   | SAndB => Some (Z.land a b)
   | SOrB  => Some (Z.lor a b)
@@ -97,7 +118,7 @@ Fixpoint seval (g : nat -> Z) (e : sexpr) : option Z :=
   | SVar n => Some (g n)
   | SNot e1 =>
       match seval g e1 with
-      | Some v => if isb v then Some (b2z (Z.eqb v 0)) else None
+      | Some v => Some (b2z (Z.eqb v 0))
       | None => None
       end
   | SBin o a b =>
@@ -154,6 +175,25 @@ Proof.
     apply Z.eqb_eq in H; auto.
 Qed.
 
+(** A boolean-shaped expression really does evaluate to 0/1 -- every such form
+    returns [b2z] of something.  This is what the syntactic check buys, and what
+    the arithmetic encodings need. *)
+Lemma isbool_isb : forall g e v,
+  isbool e = true -> seval g e = Some v -> isb v = true.
+Proof.
+  intros g [z|n|e1|o a b] v Hb H; simpl in Hb; try discriminate.
+  - (* SNot *) simpl in H.
+    destruct (seval g e1) as [v1|]; [|discriminate].
+    injection H; intro; subst v; unfold isb, b2z; destruct (Z.eqb v1 0); reflexivity.
+  - (* comparisons and the boolean connectives *)
+    simpl in H.
+    destruct (seval g a) as [va|]; [|discriminate].
+    destruct (seval g b) as [vb|]; [|destruct o; discriminate].
+    destruct o; simpl in Hb, H; try discriminate;
+      injection H; intro; subst v; unfold isb, b2z;
+      match goal with |- context[if ?c then _ else _] => destruct c end; reflexivity.
+Qed.
+
 Lemma and_encoding : forall a b, isb a = true -> isb b = true ->
   a * b = b2z (negb (Z.eqb a 0) && negb (Z.eqb b 0)).
 Proof.
@@ -179,23 +219,25 @@ Proof. exists 1, 1; repeat split; discriminate. Qed.
 (** ** Value preservation. *)
 
 Theorem lower_expr_sound : forall g e v,
-  seval g e = Some v -> eval 0 (enc g) (lower e) = v.
+  wf e = true -> seval g e = Some v -> eval 0 (enc g) (lower e) = v.
 Proof.
-  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v H.
+  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
   - (* SNum *) simpl in H |- *; congruence.
   - (* SVar *) simpl in H |- *; congruence.
   - (* SNot *)
+    simpl in Hw; apply andb_true_iff in Hw as [_ Hw].
     simpl in H |- *.
     destruct (seval g e1) as [v1|] eqn:E1; [|discriminate].
-    destruct (isb v1) eqn:Hb; [|discriminate].
-    rewrite (IH1 v1 eq_refl); simpl in H |- *.
+    rewrite (IH1 v1 Hw eq_refl).
     injection H; intro; subst v; unfold b2z; destruct (Z.eqb v1 0); reflexivity.
   - (* SBin *)
+    simpl in Hw; apply andb_true_iff in Hw as [Hw Hwb];
+      apply andb_true_iff in Hw as [Hbo Hwa].
     simpl in H.
     destruct (seval g a) as [va|] eqn:Ea; [|discriminate].
     destruct (seval g b) as [vb|] eqn:Eb; [|destruct o; discriminate].
-    specialize (IHa va eq_refl); specialize (IHb vb eq_refl).
-    destruct o; simpl; rewrite IHa, IHb; simpl in H;
+    specialize (IHa va Hwa eq_refl); specialize (IHb vb Hwb eq_refl).
+    destruct o; simpl; rewrite IHa, IHb; simpl in H, Hbo;
       try (injection H; intro; subst v; reflexivity).
     + (* SDiv *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|].
       injection H; intro; subst v; reflexivity.
@@ -215,12 +257,12 @@ Proof.
         apply Z.ltb_lt in Hlt; lia.
       * apply Z.leb_gt in Hle. destruct (Z.ltb va vb) eqn:Hlt; [reflexivity|].
         apply Z.ltb_ge in Hlt; lia.
-    + (* SAnd *) destruct (isb va) eqn:Hva; [|discriminate].
-      destruct (isb vb) eqn:Hvb; [|discriminate].
-      injection H; intro; subst v; apply and_encoding; assumption.
-    + (* SOr *) destruct (isb va) eqn:Hva; [|discriminate].
-      destruct (isb vb) eqn:Hvb; [|discriminate].
-      injection H; intro; subst v; apply or_encoding; assumption.
+    + (* SAnd *) apply andb_true_iff in Hbo as [Ba Bb].
+      injection H; intro; subst v; apply and_encoding;
+        [ exact (isbool_isb g a va Ba Ea) | exact (isbool_isb g b vb Bb Eb) ].
+    + (* SOr *) apply andb_true_iff in Hbo as [Ba Bb].
+      injection H; intro; subst v; apply or_encoding;
+        [ exact (isbool_isb g a va Ba Ea) | exact (isbool_isb g b vb Bb Eb) ].
 Qed.
 
 (* ===================================================================== *)
@@ -233,23 +275,26 @@ Qed.
     has a value lowers to a safe one. *)
 
 Theorem lower_expr_safe : forall g e v,
-  seval g e = Some v -> safe 0 (enc g) (lower e) = true.
+  wf e = true -> seval g e = Some v -> safe 0 (enc g) (lower e) = true.
 Proof.
-  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v H.
+  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v Hw H.
   - reflexivity.
   - reflexivity.
   - (* SNot *)
+    simpl in Hw; apply andb_true_iff in Hw as [_ Hw].
     simpl in H |- *.
     destruct (seval g e1) as [v1|] eqn:E1; [|discriminate].
-    destruct (isb v1) eqn:Hb; [|discriminate].
-    rewrite (IH1 v1 eq_refl); reflexivity.
+    rewrite (IH1 v1 Hw eq_refl); reflexivity.
   - (* SBin *)
+    simpl in Hw; apply andb_true_iff in Hw as [Hw Hwb];
+      apply andb_true_iff in Hw as [_ Hwa].
     simpl in H.
     destruct (seval g a) as [va|] eqn:Ea; [|discriminate].
     destruct (seval g b) as [vb|] eqn:Eb; [|destruct o; discriminate].
-    assert (Sa : safe 0 (enc g) (lower a) = true) by (eapply IHa; reflexivity).
-    assert (Sb : safe 0 (enc g) (lower b) = true) by (eapply IHb; reflexivity).
-    assert (Vb : eval 0 (enc g) (lower b) = vb) by (apply lower_expr_sound; exact Eb).
+    assert (Sa : safe 0 (enc g) (lower a) = true) by (eapply IHa; [exact Hwa|reflexivity]).
+    assert (Sb : safe 0 (enc g) (lower b) = true) by (eapply IHb; [exact Hwb|reflexivity]).
+    assert (Vb : eval 0 (enc g) (lower b) = vb)
+      by (apply lower_expr_sound; [exact Hwb | exact Eb]).
     destruct o; simpl in H |- *; rewrite ?Sa, ?Sb, ?Vb; simpl; try reflexivity.
     + (* SDiv *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|reflexivity].
     + (* SMod *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|reflexivity].
@@ -259,12 +304,31 @@ Qed.
     computes that value -- so guarding the core costs nothing on the programs
     the reference semantics accepts. *)
 Corollary lower_expr_ok : forall g e v,
-  seval g e = Some v ->
+  wf e = true -> seval g e = Some v ->
   safe 0 (enc g) (lower e) = true /\ eval 0 (enc g) (lower e) = v.
 Proof.
-  intros g e v H; split;
-    [ eapply lower_expr_safe; exact H | apply lower_expr_sound; exact H ].
+  intros g e v Hw H; split;
+    [ eapply lower_expr_safe; eassumption | apply lower_expr_sound; assumption ].
 Qed.
+
+(** The well-formedness hypothesis is not decoration: without it the theorem is
+    **false**.  `2 && 3` is a type error in PyJanus, has value 1 under the
+    connective's own meaning, and lowers to `2 * 3 = 6`.  vjanus computed the 6
+    until `lower.ml` grew the same syntactic check. *)
+Example and_needs_wf :
+  let e := SBin SAnd (SNum 2) (SNum 3) in
+  wf e = false
+  /\ seval (fun _ => 0) e = Some 1
+  /\ eval 0 (enc (fun _ => 0)) (lower e) = 6.
+Proof. repeat split; reflexivity. Qed.
+
+(** And the check really is on the *shape*: a variable holding 1 is an [int],
+    so `b && c` is ill-formed however [b] and [c] happen to evaluate -- exactly
+    what PyJanus's [isinstance(v, bool)] does. *)
+Example bool_check_is_syntactic :
+  wf (SBin SAnd (SVar 0) (SVar 1)) = false
+  /\ wf (SBin SAnd (SBin SEq (SVar 0) (SNum 1)) (SBin SLt (SNum 0) (SVar 1))) = true.
+Proof. split; reflexivity. Qed.
 
 (* ===================================================================== *)
 (** ** The divergence this guard was added for. *)

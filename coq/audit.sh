@@ -135,6 +135,8 @@ Print Assumptions RevLowerExpr.lower_expr_sound.
 Print Assumptions RevLowerExpr.and_encoding.
 Print Assumptions RevLowerExpr.or_encoding.
 Print Assumptions RevLowerExpr.lower_expr_safe.
+Print Assumptions RevLowerExpr.isbool_isb.
+Print Assumptions RevLowerExpr.and_needs_wf.
 Print Assumptions RevLowerExpr.lower_expr_ok.
 Print Assumptions RevFrame.safe_ncell.
 (* statement lowering: forward simulation and what vjanus needs from it *)
