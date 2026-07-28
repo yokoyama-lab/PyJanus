@@ -128,5 +128,41 @@ today, as in most verified pipelines).
    Not covered by this slice (each needs the ref-classification model): array and
    struct l-values, stacks, `size`/`top`/`empty`, and the Cantor index fold —
    whose injectivity is already in `RevLowering.v`.
-3. Tackle a single statement form end-to-end (e.g. `Assign`) against a Coq source
-   semantics, establishing the simulation skeleton the other forms slot into.
+3. **(done, `coq/RevLowerStmt.v`)** The statement forms of the scalar fragment,
+   end to end against a Coq reference semantics, establishing the simulation
+   skeleton:
+
+   ```
+   lower_stmt_sound   : sexec s g h -> exec Γ 0 (lower_stmt s) (enc g) (enc h)
+   lower_stmt_correct : sexec s g h -> exec Γ 0 (lower_stmt s) (enc g) t -> t = enc h
+   ```
+
+   The first is the forward simulation; the second is what vjanus actually needs
+   — with the core's `exec_det`, if the reference semantics says the answer is
+   `h` then the translation cannot produce anything else. `lower_stmt_reversible`
+   comes free from `exec_rev`.
+
+   Covered: `skip`, `x op= e`, `x <=> y`, sequencing, `if/fi`, `from/loop/until`.
+   The guards follow PyJanus (`Runtime` applies `bool(value)`, so *any* nonzero
+   is true — no boolean requirement, unlike `&&`/`||`), and an assignment carries
+   the occurrence check, the expression's definedness and `aok`.
+
+   The case that carries the content is `x <=> y`, the one rule here that is not
+   one-to-one: `swap_lowering` discharges the XOR triple against `RevFrame.exec`
+   itself rather than on an abstract store, and in doing so **forces the side
+   condition into the statement** — the triple zeroes the cell when `x = y`, so
+   the source semantics may only admit `x <> y` (`self_swap_has_no_step` pins the
+   failure mode). Both implementations already agreed on that; the proof now
+   records *why* it is needed instead of leaving it to the aliasing checker.
+   `reads_lower` is the other bridge: the core's runtime aliasing test on a
+   lowered expression is exactly the source's occurrence check.
+
+   Still open for full soundness on this fragment: the *other* direction — a core
+   run whose source has no run. That needs the source semantics shown total on
+   the well-formed fragment, or the core's `None` related back.
+
+4. The remaining forms (arrays, structs, stacks, `local`/`delocal`,
+   `call`/`uncall`) need the ref-classification model — `RG`/`RF`/`RL`, the
+   array/stack/struct flattening and the Cantor index fold — which is the next
+   increment and the one where `RevLowering.v`'s isolation lemmas become leaves
+   of a simulation rather than free-standing facts.

@@ -458,6 +458,9 @@ core results) on each build.
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
 | ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
+| **The statement lowering simulates the source** | `lower_stmt_sound` | `RevLowerStmt.v` | funext |
+| Hence the core cannot compute a different answer | `lower_stmt_correct` | `RevLowerStmt.v` | funext |
+| The XOR triple realises `x <=> y` (against `exec`) | `swap_lowering` | `RevLowerStmt.v` | funext |
 | Expression evaluation is guarded (no division by zero) | `safe_ncell` | `RevFrame.v` | funext |
 | `&&`/`\|\|` arithmetic encodings correct on 0/1 | `and_encoding`, `or_encoding` | `RevLowerExpr.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
