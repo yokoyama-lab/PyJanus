@@ -224,12 +224,56 @@ Proof.
 Qed.
 
 (* ===================================================================== *)
-(** ** Where it does *not* hold: a total [BDiv] against a partial source. *)
+(** ** The guard is never spuriously triggered.
 
-(** PyJanus raises "Division by zero"; the frame core's [BDiv] is total and
-    [Z.div _ 0 = 0], so the lowered expression quietly has a value.  An
-    end-to-end soundness theorem therefore needs a no-division-by-zero side
-    condition, or the core needs a guarded division. *)
+    [RevFrame.safe] refuses an expression that would divide by zero.  For the
+    lowering to be *usable* it is not enough that the core agrees where it runs:
+    the guard must accept everything the source accepts, or the core would
+    reject programs PyJanus happily executes.  It does: a source expression that
+    has a value lowers to a safe one. *)
+
+Theorem lower_expr_safe : forall g e v,
+  seval g e = Some v -> safe 0 (enc g) (lower e) = true.
+Proof.
+  intros g e; induction e as [z | n | e1 IH1 | o a IHa b IHb]; intros v H.
+  - reflexivity.
+  - reflexivity.
+  - (* SNot *)
+    simpl in H |- *.
+    destruct (seval g e1) as [v1|] eqn:E1; [|discriminate].
+    destruct (isb v1) eqn:Hb; [|discriminate].
+    rewrite (IH1 v1 eq_refl); reflexivity.
+  - (* SBin *)
+    simpl in H.
+    destruct (seval g a) as [va|] eqn:Ea; [|discriminate].
+    destruct (seval g b) as [vb|] eqn:Eb; [|destruct o; discriminate].
+    assert (Sa : safe 0 (enc g) (lower a) = true) by (eapply IHa; reflexivity).
+    assert (Sb : safe 0 (enc g) (lower b) = true) by (eapply IHb; reflexivity).
+    assert (Vb : eval 0 (enc g) (lower b) = vb) by (apply lower_expr_sound; exact Eb).
+    destruct o; simpl in H |- *; rewrite ?Sa, ?Sb, ?Vb; simpl; try reflexivity.
+    + (* SDiv *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|reflexivity].
+    + (* SMod *) destruct (Z.eqb vb 0) eqn:Hz; [discriminate|reflexivity].
+Qed.
+
+(** Together: the lowering of a source expression that has a value is safe and
+    computes that value -- so guarding the core costs nothing on the programs
+    the reference semantics accepts. *)
+Corollary lower_expr_ok : forall g e v,
+  seval g e = Some v ->
+  safe 0 (enc g) (lower e) = true /\ eval 0 (enc g) (lower e) = v.
+Proof.
+  intros g e v H; split;
+    [ eapply lower_expr_safe; exact H | apply lower_expr_sound; exact H ].
+Qed.
+
+(* ===================================================================== *)
+(** ** The divergence this guard was added for. *)
+
+(** [bden] is still total -- [eval] of the lowered expression has a value even
+    at a zero divisor.  What changed is that [RevFrame.safe] now *refuses* such
+    an expression, and every rule that evaluates one carries [safe] as a side
+    condition, so no step is taken.  These examples pin the arithmetic that made
+    the divergence invisible before the guard existed. *)
 Example div_zero_diverges :
   seval (fun _ => 0) (SBin SDiv (SNum 7) (SNum 0)) = None
   /\ eval 0 (enc (fun _ => 0)) (lower (SBin SDiv (SNum 7) (SNum 0))) = 0.

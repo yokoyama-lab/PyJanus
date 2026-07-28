@@ -221,8 +221,44 @@ Proof.
   - apply orb_false_iff in H as [H1 H2]; rewrite (IH1 H1), (IH2 H2); reflexivity.
 Qed.
 
+(* [bden] is total, so [BDiv]/[BMod] have to *choose* a value at a zero divisor
+   ([Z.div a 0 = 0], [Z.modulo a 0 = a]).  The source language does not: PyJanus
+   raises "Division by zero".  Left unguarded, the two diverge silently -- an
+   expression with a zero divisor evaluates in the core and errors in the
+   reference (see [RevLowerExpr.div_zero_diverges]).  So an expression carries
+   an admissibility side condition too, exactly like an assignment operator's
+   [aok]: it may be evaluated only where every division and modulus it performs
+   has a nonzero divisor. *)
+Fixpoint safe (d : nat) (s : store) (e : expr) : bool :=
+  match e with
+  | Cst _ => true
+  | Rd _ => true
+  | ARd _ idx => safe d s idx
+  | Bin o a b =>
+      safe d s a && safe d s b &&
+      match o with
+      | BDiv | BMod => negb (Z.eqb (eval d s b) 0)
+      | _ => true
+      end
+  end.
+
+(* like [eval_ncell]: an update the expression does not read cannot change
+   whether it is safe *)
+Lemma safe_ncell : forall d c v s e,
+  reads d s c e = false -> safe d (update s c v) e = safe d s e.
+Proof.
+  intros d c v s e; induction e as [z | r | r idx IH | o e1 IH1 e2 IH2]; intro H;
+    simpl in H |- *.
+  - reflexivity.
+  - reflexivity.
+  - apply orb_false_iff in H as [_ Hi]; exact (IH Hi).
+  - apply orb_false_iff in H as [H1 H2].
+    rewrite (IH1 H1), (IH2 H2), (eval_ncell d c v s e2 H2); reflexivity.
+Qed.
+
 Definition wf_asn (d : nat) (s : store) (r : ref) (o : aop) (e : expr) : bool :=
   negb (reads d s (loc_of_ref d r) e)
+  && safe d s e
   && aok o (s (loc_of_ref d r)) (eval d s e).
 
 (* undoing an assignment: when [e] does not read the target, applying the inverse
@@ -250,6 +286,7 @@ Qed.
 Definition wf_aasn (d : nat) (s : store) (r : ref) (idx : expr) (o : aop) (e : expr) : bool :=
   negb (reads d s (acell d r (eval d s idx)) e)
   && negb (reads d s (acell d r (eval d s idx)) idx)
+  && safe d s idx && safe d s e
   && aok o (s (acell d r (eval d s idx))) (eval d s e).
 
 Lemma aasn_inv_store : forall d s r idx o e,
@@ -343,14 +380,20 @@ Inductive exec : nat -> stmt -> store -> store -> Prop :=
       (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
 | E_Seq  : forall d s1 s2 a m b, exec d s1 a m -> exec d s2 m b -> exec d (Seq s1 s2) a b
 | E_IfT  : forall d e1 s1 s2 e2 a b,
-    eval d a e1 <> 0 -> exec d s1 a b -> eval d b e2 <> 0 -> exec d (If e1 s1 s2 e2) a b
+    safe d a e1 = true -> eval d a e1 <> 0 -> exec d s1 a b ->
+    safe d b e2 = true -> eval d b e2 <> 0 -> exec d (If e1 s1 s2 e2) a b
 | E_IfF  : forall d e1 s1 s2 e2 a b,
-    eval d a e1 =  0 -> exec d s2 a b -> eval d b e2 =  0 -> exec d (If e1 s1 s2 e2) a b
+    safe d a e1 = true -> eval d a e1 =  0 -> exec d s2 a b ->
+    safe d b e2 = true -> eval d b e2 =  0 -> exec d (If e1 s1 s2 e2) a b
 | E_Loop : forall d e1 s1 s2 e2 a b,
-    eval d a e1 <> 0 -> lp d e1 s1 s2 e2 a b -> exec d (Loop e1 s1 s2 e2) a b
+    safe d a e1 = true -> eval d a e1 <> 0 -> lp d e1 s1 s2 e2 a b ->
+    exec d (Loop e1 s1 s2 e2) a b
 | E_Enter : forall d x e s, s (L d x) = 0 -> reads d s (L d x) e = false ->
+    safe d s e = true ->
     exec d (Enter x e) s (update s (L d x) (eval d s e))
-| E_Exit  : forall d x e s, reads d s (L d x) e = false -> s (L d x) = eval d (update s (L d x) 0) e ->
+| E_Exit  : forall d x e s, reads d s (L d x) e = false ->
+    safe d (update s (L d x) 0) e = true ->
+    s (L d x) = eval d (update s (L d x) 0) e ->
     exec d (Exit x e) s (update s (L d x) 0)
 | E_Call  : forall d p args a b,
     exec (S d) (subst (rargs d args) (Γ p)) a b -> exec d (Call p args) a b
@@ -359,10 +402,10 @@ Inductive exec : nat -> stmt -> store -> store -> Prop :=
 
 with lp : nat -> expr -> stmt -> stmt -> expr -> store -> store -> Prop :=
 | L_one  : forall d e1 s1 s2 e2 a b,
-    exec d s1 a b -> eval d b e2 <> 0 -> lp d e1 s1 s2 e2 a b
+    exec d s1 a b -> safe d b e2 = true -> eval d b e2 <> 0 -> lp d e1 s1 s2 e2 a b
 | L_more : forall d e1 s1 s2 e2 a a1 a2 b,
-    exec d s1 a a1 -> eval d a1 e2 = 0 ->
-    exec d s2 a1 a2 -> eval d a2 e1 = 0 ->
+    exec d s1 a a1 -> safe d a1 e2 = true -> eval d a1 e2 = 0 ->
+    exec d s2 a1 a2 -> safe d a2 e1 = true -> eval d a2 e1 = 0 ->
     lp d e1 s1 s2 e2 a2 b -> lp d e1 s1 s2 e2 a b.
 
 Scheme exec_mut := Induction for exec Sort Prop
@@ -371,24 +414,31 @@ Scheme exec_mut := Induction for exec Sort Prop
 Lemma lp_exit_true : forall d e1 s1 s2 e2 a b, lp d e1 s1 s2 e2 a b -> eval d b e2 <> 0.
 Proof. intros until b; intro H; induction H; assumption. Qed.
 
+Lemma lp_exit_safe : forall d e1 s1 s2 e2 a b, lp d e1 s1 s2 e2 a b -> safe d b e2 = true.
+Proof. intros until b; intro H; induction H; assumption. Qed.
+
 (* an "open" run of the loop body, used to reverse a [lp] derivation *)
 Inductive opn (d : nat) (e1 : expr) (s1 s2 : stmt) (e2 : expr) : store -> store -> Prop :=
 | O_nil  : forall a, opn d e1 s1 s2 e2 a a
 | O_cons : forall a a1 a2 b,
-    exec d s1 a a1 -> eval d a1 e2 = 0 -> exec d s2 a1 a2 -> eval d a2 e1 = 0 ->
+    exec d s1 a a1 -> safe d a1 e2 = true -> eval d a1 e2 = 0 ->
+    exec d s2 a1 a2 -> safe d a2 e1 = true -> eval d a2 e1 = 0 ->
     opn d e1 s1 s2 e2 a2 b -> opn d e1 s1 s2 e2 a b.
 
 Lemma opn_snoc : forall d e1 s1 s2 e2 a m m1 m2,
-  opn d e1 s1 s2 e2 a m -> exec d s1 m m1 -> eval d m1 e2 = 0 ->
-  exec d s2 m1 m2 -> eval d m2 e1 = 0 -> opn d e1 s1 s2 e2 a m2.
+  opn d e1 s1 s2 e2 a m -> exec d s1 m m1 ->
+  safe d m1 e2 = true -> eval d m1 e2 = 0 ->
+  exec d s2 m1 m2 -> safe d m2 e1 = true -> eval d m2 e1 = 0 ->
+  opn d e1 s1 s2 e2 a m2.
 Proof. intros d e1 s1 s2 e2 a m m1 m2 H; revert m1 m2.
-  induction H; intros m1 m2 Hs1 He2 Hs2 He1.
+  induction H; intros m1 m2 Hs1 Hf2 He2 Hs2 Hf1 He1.
   - eapply O_cons; eauto. apply O_nil.
   - eapply O_cons; eauto. Qed.
 
 Lemma opn_to_lp : forall d e1 s1 s2 e2 a m b,
-  opn d e1 s1 s2 e2 a m -> exec d s1 m b -> eval d b e2 <> 0 -> lp d e1 s1 s2 e2 a b.
-Proof. intros d e1 s1 s2 e2 a m b H; induction H; intros Hs1 Hex.
+  opn d e1 s1 s2 e2 a m -> exec d s1 m b ->
+  safe d b e2 = true -> eval d b e2 <> 0 -> lp d e1 s1 s2 e2 a b.
+Proof. intros d e1 s1 s2 e2 a m b H; induction H; intros Hs1 Hf Hex.
   - apply L_one; assumption.
   - eapply L_more; eauto. Qed.
 
@@ -398,7 +448,8 @@ Proof. intros d e1 s1 s2 e2 a m b H; induction H; intros Hs1 Hex.
 Lemma asn_rev : forall d r o e s, wf_asn d s r o e = true ->
   exec d (Asn r (ainv o) e) (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) s.
 Proof.
-  intros d r o e s W. unfold wf_asn in W; apply andb_true_iff in W as [W Hok];
+  intros d r o e s W. unfold wf_asn in W;
+    apply andb_true_iff in W as [W Hok]; apply andb_true_iff in W as [W Hsafe];
     apply negb_true_iff in W.
   cut (exec d (Asn r (ainv o) e) (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e)))
         (update (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) (loc_of_ref d r)
@@ -406,7 +457,9 @@ Proof.
             (eval d (update s (loc_of_ref d r) (app o (s (loc_of_ref d r)) (eval d s e))) e)))).
   - intro Hc; rewrite (asn_inv_store d r o e s W Hok) in Hc; exact Hc.
   - apply E_Asn; unfold wf_asn; apply andb_true_iff; split.
-    + apply negb_true_iff; apply reads_cell_stable; exact W.
+    + apply andb_true_iff; split.
+      * apply negb_true_iff; apply reads_cell_stable; exact W.
+      * rewrite (safe_ncell d (loc_of_ref d r) _ s e W); exact Hsafe.
     + rewrite update_eq, (eval_ncell d (loc_of_ref d r) _ s e W).
       apply aok_ainv, Hok.
 Qed.
@@ -416,7 +469,9 @@ Lemma aasn_rev : forall d r idx o e s, wf_aasn d s r idx o e = true ->
     (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) s.
 Proof.
   intros d r idx o e s W. unfold wf_aasn in W;
-    apply andb_true_iff in W as [W Hok]; apply andb_true_iff in W as [He Hi];
+    apply andb_true_iff in W as [W Hok];
+    apply andb_true_iff in W as [W Hse]; apply andb_true_iff in W as [W Hsi];
+    apply andb_true_iff in W as [He Hi];
     apply negb_true_iff in He; apply negb_true_iff in Hi.
   cut (exec d (AAsn r idx (ainv o) e)
         (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e)))
@@ -431,31 +486,37 @@ Proof.
     assert (Hcell : acell d r (eval d (update s (acell d r (eval d s idx)) (app o (s (acell d r (eval d s idx))) (eval d s e))) idx)
                   = acell d r (eval d s idx)) by (f_equal; apply eval_ncell; exact Hi).
     rewrite Hcell; apply andb_true_iff; split.
-    + apply andb_true_iff; split; apply negb_true_iff;
-        apply reads_cell_stable; assumption.
+    + apply andb_true_iff; split; [ apply andb_true_iff; split | ].
+      * apply andb_true_iff; split; apply negb_true_iff;
+          apply reads_cell_stable; assumption.
+      * rewrite (safe_ncell d (acell d r (eval d s idx)) _ s idx Hi); exact Hsi.
+      * rewrite (safe_ncell d (acell d r (eval d s idx)) _ s e He); exact Hse.
     + rewrite update_eq, (eval_ncell d (acell d r (eval d s idx)) _ s e He).
       apply aok_ainv, Hok.
 Qed.
 
 Lemma enter_rev : forall d x e s, s (L d x) = 0 -> reads d s (L d x) e = false ->
+  safe d s e = true ->
   exec d (Exit x e) (update s (L d x) (eval d s e)) s.
 Proof.
-  intros d x e s Hz Hr.
+  intros d x e s Hz Hr Hf.
   cut (exec d (Exit x e) (update s (L d x) (eval d s e)) (update (update s (L d x) (eval d s e)) (L d x) 0)).
   - intro Hc; replace (update (update s (L d x) (eval d s e)) (L d x) 0) with s in Hc;
       [exact Hc | rewrite update_shadow, <- Hz, update_same; reflexivity].
-  - apply E_Exit; [apply reads_cell_stable; exact Hr|].
-    rewrite update_eq, update_shadow, (eval_ncell d (L d x) 0 s e Hr); reflexivity.
+  - apply E_Exit; [apply reads_cell_stable; exact Hr | | ].
+    + rewrite update_shadow, (safe_ncell d (L d x) 0 s e Hr); exact Hf.
+    + rewrite update_eq, update_shadow, (eval_ncell d (L d x) 0 s e Hr); reflexivity.
 Qed.
 
 Lemma exit_rev : forall d x e s, reads d s (L d x) e = false ->
+  safe d (update s (L d x) 0) e = true ->
   s (L d x) = eval d (update s (L d x) 0) e -> exec d (Enter x e) (update s (L d x) 0) s.
 Proof.
-  intros d x e s Hr Hv.
+  intros d x e s Hr Hf Hv.
   cut (exec d (Enter x e) (update s (L d x) 0) (update (update s (L d x) 0) (L d x) (eval d (update s (L d x) 0) e))).
   - intro Hc; replace (update (update s (L d x) 0) (L d x) (eval d (update s (L d x) 0) e)) with s in Hc;
       [exact Hc | rewrite update_shadow, <- Hv, update_same; reflexivity].
-  - apply E_Enter; [apply update_eq | apply reads_cell_stable; exact Hr].
+  - apply E_Enter; [apply update_eq | apply reads_cell_stable; exact Hr | exact Hf].
 Qed.
 
 Theorem exec_rev : forall d s a b, exec d s a b -> exec d (invert s) b a.
@@ -471,8 +532,9 @@ Proof.
   - cbn [invert]. apply E_IfT; assumption.
   - cbn [invert]. apply E_IfF; assumption.
   - cbn [invert]. match goal with Hx : exists _, _ |- _ => destruct Hx as [q [Hopn Hq]] end.
-    apply E_Loop; [ eapply lp_exit_true; eassumption
-                  | eapply opn_to_lp; [exact Hopn | exact Hq | eassumption] ].
+    apply E_Loop; [ eapply lp_exit_safe; eassumption
+                  | eapply lp_exit_true; eassumption
+                  | eapply opn_to_lp; [exact Hopn | exact Hq | assumption | assumption] ].
   - cbn [invert]. apply enter_rev; assumption.
   - cbn [invert]. apply exit_rev; assumption.
   - cbn [invert]. apply E_Uncall; rewrite subst_invert; assumption.
@@ -546,15 +608,22 @@ Fixpoint run (f d : nat) (s : stmt) (st : store) {struct f} : option store :=
                         else None
     | Seq a b => match run f d a st with Some m => run f d b m | None => None end
     | If e1 s1 s2 e2 =>
-        if negb (Z.eqb (eval d st e1) 0)
-        then match run f d s1 st with
-             | Some b => if negb (Z.eqb (eval d b e2) 0) then Some b else None | None => None end
-        else match run f d s2 st with
-             | Some b => if Z.eqb (eval d b e2) 0 then Some b else None | None => None end
-    | Loop e1 s1 s2 e2 => if negb (Z.eqb (eval d st e1) 0) then runloop f d e1 s1 s2 e2 st else None
-    | Enter x e => if Z.eqb (st (L d x)) 0 && negb (reads d st (L d x) e)
+        if safe d st e1 then
+          (if negb (Z.eqb (eval d st e1) 0)
+           then match run f d s1 st with
+                | Some b => if safe d b e2 && negb (Z.eqb (eval d b e2) 0) then Some b else None
+                | None => None end
+           else match run f d s2 st with
+                | Some b => if safe d b e2 && Z.eqb (eval d b e2) 0 then Some b else None
+                | None => None end)
+        else None
+    | Loop e1 s1 s2 e2 =>
+        if safe d st e1 && negb (Z.eqb (eval d st e1) 0)
+        then runloop f d e1 s1 s2 e2 st else None
+    | Enter x e => if Z.eqb (st (L d x)) 0 && negb (reads d st (L d x) e) && safe d st e
                    then Some (update st (L d x) (eval d st e)) else None
-    | Exit x e => if negb (reads d st (L d x) e) && Z.eqb (st (L d x)) (eval d (update st (L d x) 0) e)
+    | Exit x e => if negb (reads d st (L d x) e) && safe d (update st (L d x) 0) e
+                     && Z.eqb (st (L d x)) (eval d (update st (L d x) 0) e)
                   then Some (update st (L d x) 0) else None
     | Call p args => run f (S d) (subst (rargs d args) (Γ p)) st
     | Uncall p args => run f (S d) (subst (rargs d args) (invert (Γ p))) st
@@ -567,11 +636,14 @@ with runloop (f d : nat) (e1 : expr) (s1 s2 : stmt) (e2 : expr) (st : store) {st
     match run f d s1 st with
     | None => None
     | Some a1 =>
-        if negb (Z.eqb (eval d a1 e2) 0) then Some a1
-        else match run f d s2 a1 with
-             | None => None
-             | Some a2 => if negb (Z.eqb (eval d a2 e1) 0) then None else runloop f d e1 s1 s2 e2 a2
-             end
+        if safe d a1 e2 then
+          (if negb (Z.eqb (eval d a1 e2) 0) then Some a1
+           else match run f d s2 a1 with
+                | None => None
+                | Some a2 => if safe d a2 e1 && Z.eqb (eval d a2 e1) 0
+                             then runloop f d e1 s1 s2 e2 a2 else None
+                end)
+        else None
     end
   end.
 
@@ -588,34 +660,48 @@ Proof.
       * destruct (wf_aasn d st r idx o e) eqn:W; [|discriminate]. inversion H; subst. now apply E_AAsn.
       * destruct (run f d s1 st) as [m|] eqn:R1; [|discriminate].
         eapply E_Seq; [apply IHr; exact R1 | apply IHr; exact H].
-      * destruct (negb (Z.eqb (eval d st e1) 0)) eqn:G1.
+      * destruct (safe d st e1) eqn:S1; [|discriminate].
+        destruct (negb (Z.eqb (eval d st e1) 0)) eqn:G1.
         -- destruct (run f d s1 st) as [b|] eqn:R; [|discriminate].
-           destruct (negb (Z.eqb (eval d b e2) 0)) eqn:G2; [|discriminate]. inversion H; subst.
-           apply E_IfT; [apply negb_true_iff, Z.eqb_neq in G1; exact G1 | apply IHr; exact R
+           destruct (safe d b e2 && negb (Z.eqb (eval d b e2) 0)) eqn:G2; [|discriminate].
+           apply andb_true_iff in G2 as [S2 G2]. inversion H; subst.
+           apply E_IfT; [exact S1 | apply negb_true_iff, Z.eqb_neq in G1; exact G1
+                        | apply IHr; exact R | exact S2
                         | apply negb_true_iff, Z.eqb_neq in G2; exact G2].
         -- destruct (run f d s2 st) as [b|] eqn:R; [|discriminate].
-           destruct (Z.eqb (eval d b e2) 0) eqn:G2; [|discriminate]. inversion H; subst.
-           apply E_IfF; [ apply negb_false_iff, Z.eqb_eq in G1; exact G1 | apply IHr; exact R
-                        | apply Z.eqb_eq in G2; exact G2].
-      * destruct (negb (Z.eqb (eval d st e1) 0)) eqn:G1; [|discriminate].
-        apply E_Loop; [apply negb_true_iff, Z.eqb_neq in G1; exact G1 | apply IHl; exact H].
-      * destruct (Z.eqb (st (L d x)) 0 && negb (reads d st (L d x) e)) eqn:E; [|discriminate].
-        apply andb_true_iff in E as [E1 E2]. inversion H; subst.
-        apply E_Enter; [now apply Z.eqb_eq in E1 | now apply negb_true_iff in E2].
-      * destruct (negb (reads d st (L d x) e) && Z.eqb (st (L d x)) (eval d (update st (L d x) 0) e)) eqn:E; [|discriminate].
-        apply andb_true_iff in E as [E1 E2]. inversion H; subst.
-        apply E_Exit; [now apply negb_true_iff in E1 | now apply Z.eqb_eq in E2].
+           destruct (safe d b e2 && Z.eqb (eval d b e2) 0) eqn:G2; [|discriminate].
+           apply andb_true_iff in G2 as [S2 G2]. inversion H; subst.
+           apply E_IfF; [ exact S1 | apply negb_false_iff, Z.eqb_eq in G1; exact G1
+                        | apply IHr; exact R | exact S2 | apply Z.eqb_eq in G2; exact G2].
+      * destruct (safe d st e1 && negb (Z.eqb (eval d st e1) 0)) eqn:G1; [|discriminate].
+        apply andb_true_iff in G1 as [S1 G1].
+        apply E_Loop; [exact S1 | apply negb_true_iff, Z.eqb_neq in G1; exact G1
+                      | apply IHl; exact H].
+      * destruct (Z.eqb (st (L d x)) 0 && negb (reads d st (L d x) e) && safe d st e) eqn:E;
+          [|discriminate].
+        apply andb_true_iff in E as [E12 E3]; apply andb_true_iff in E12 as [E1 E2].
+        inversion H; subst.
+        apply E_Enter; [now apply Z.eqb_eq in E1 | now apply negb_true_iff in E2 | exact E3].
+      * destruct (negb (reads d st (L d x) e) && safe d (update st (L d x) 0) e
+                  && Z.eqb (st (L d x)) (eval d (update st (L d x) 0) e)) eqn:E; [|discriminate].
+        apply andb_true_iff in E as [E12 E3]; apply andb_true_iff in E12 as [E1 E2].
+        inversion H; subst.
+        apply E_Exit; [now apply negb_true_iff in E1 | exact E2 | now apply Z.eqb_eq in E3].
       * apply E_Call; apply IHr; exact H.
       * apply E_Uncall; apply IHr; exact H.
     + intros d e1 s1 s2 e2 st st' H; simpl in H.
       destruct (run f d s1 st) as [a1|] eqn:R1; [|discriminate].
+      destruct (safe d a1 e2) eqn:Sx; [|discriminate].
       destruct (negb (Z.eqb (eval d a1 e2) 0)) eqn:Ex.
-      * inversion H; subst. apply L_one; [apply IHr; exact R1 | apply negb_true_iff, Z.eqb_neq in Ex; exact Ex].
+      * inversion H; subst.
+        apply L_one; [apply IHr; exact R1 | exact Sx
+                     | apply negb_true_iff, Z.eqb_neq in Ex; exact Ex].
       * destruct (run f d s2 a1) as [a2|] eqn:R2; [|discriminate].
-        destruct (negb (Z.eqb (eval d a2 e1) 0)) eqn:Ec; [discriminate|].
+        destruct (safe d a2 e1 && Z.eqb (eval d a2 e1) 0) eqn:Ec; [|discriminate].
+        apply andb_true_iff in Ec as [Sc Ec].
         eapply L_more;
-          [ apply IHr; exact R1 | apply negb_false_iff, Z.eqb_eq in Ex; exact Ex
-          | apply IHr; exact R2 | apply negb_false_iff, Z.eqb_eq in Ec; exact Ec | apply IHl; exact H ].
+          [ apply IHr; exact R1 | exact Sx | apply negb_false_iff, Z.eqb_eq in Ex; exact Ex
+          | apply IHr; exact R2 | exact Sc | apply Z.eqb_eq in Ec; exact Ec | apply IHl; exact H ].
 Qed.
 
 Theorem run_sound : forall f d s st st', run f d s st = Some st' -> exec d s st st'.
@@ -644,22 +730,25 @@ Proof.
         destruct (run f d s1 st) as [m|] eqn:E1; [|discriminate].
         apply IHr in E1; rewrite E1; apply IHr; exact H.
       * (* If *)
+        destruct (safe d st e1); [|discriminate].
         destruct (negb (Z.eqb (eval d st e1) 0)).
         -- destruct (run f d s1 st) as [b1|] eqn:E1; [|discriminate].
            apply IHr in E1; rewrite E1; exact H.
         -- destruct (run f d s2 st) as [b2|] eqn:E2; [|discriminate].
            apply IHr in E2; rewrite E2; exact H.
       * (* Loop *)
-        destruct (negb (Z.eqb (eval d st e1) 0)); [ apply IHl; exact H | discriminate ].
+        destruct (safe d st e1 && negb (Z.eqb (eval d st e1) 0));
+          [ apply IHl; exact H | discriminate ].
       * (* Call *)   apply IHr; exact H.
       * (* Uncall *) apply IHr; exact H.
     + intros d e1 s1 s2 e2 st b H; simpl in H |- *.
       destruct (run f d s1 st) as [a1|] eqn:E1; [|discriminate].
       apply IHr in E1; rewrite E1.
+      destruct (safe d a1 e2); [|discriminate].
       destruct (negb (Z.eqb (eval d a1 e2) 0)); [exact H|].
       destruct (run f d s2 a1) as [a2|] eqn:E2; [|discriminate].
       apply IHr in E2; rewrite E2.
-      destruct (negb (Z.eqb (eval d a2 e1) 0)); [discriminate|].
+      destruct (safe d a2 e1 && Z.eqb (eval d a2 e1) 0); [|discriminate].
       apply IHl; exact H.
 Qed.
 
@@ -684,6 +773,7 @@ Ltac guards := repeat match goal with
   | H : reads ?d ?s ?l ?e = false |- context[reads ?d ?s ?l ?e] => rewrite H
   | W : wf_asn ?d ?s ?r ?o ?e = true |- context[wf_asn ?d ?s ?r ?o ?e] => rewrite W
   | W : wf_aasn ?d ?s ?r ?i ?o ?e = true |- context[wf_aasn ?d ?s ?r ?i ?o ?e] => rewrite W
+  | S : safe ?d ?s ?e = true |- context[safe ?d ?s ?e] => rewrite S
   end.
 
 Theorem run_complete : forall d s a b, exec d s a b -> exists f, run f d s a = Some b.

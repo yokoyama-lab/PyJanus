@@ -107,7 +107,10 @@ another only when the factor divides it).  `RevFrame.v` now carries the same two
 guards concretely, as a boolean `aok` folded into the assignment rules'
 `wf_asn`/`wf_aasn` side condition, so `vjanus` **runs** multiplicative updates
 instead of refusing them (`app_ainv` needs the guard, `aok_ainv` shows the guard
-survives inversion).
+survives inversion).  The same shape carries `safe`, which refuses an expression
+that would divide by zero — the source language errors there, and without the
+guard the core silently computed a value instead (see
+`docs/vjanus-lowering-soundness.md`).
 
 `RevMod.v` is the basis for Janus's **sized integer types** (`i8`/`i16`/`i32`/…,
 and the global `-m bits` mode): each register has a modulus `M = 2^bits`, so every
@@ -454,6 +457,8 @@ core results) on each build.
 | Hence a refusal is informative (`None` at every fuel ⟹ no run) | `run_none_no_exec` | `RevFrame.v`, `RevExtractAr.v` | funext |
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
+| ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
+| Expression evaluation is guarded (no division by zero) | `safe_ncell` | `RevFrame.v` | funext |
 | `&&`/`\|\|` arithmetic encodings correct on 0/1 | `and_encoding`, `or_encoding` | `RevLowerExpr.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
 | Full abstraction | `full_abstraction` | `RevDenote.v` | none |

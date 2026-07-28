@@ -163,15 +163,17 @@ def test_multiplicative_update_guard_is_enforced(op: str) -> None:
     )
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known divergence, found by RevLowerExpr.div_zero_diverges and confirmed "
-    "against both implementations: PyJanus raises 'Division by zero', but the "
-    "frame core's BDiv/BMod are total (Z.div _ 0 = 0, Z.modulo a 0 = a), so "
-    "vjanus quietly computes a value.  Fixing it means giving expression "
-    "evaluation a safety guard in RevFrame.v the way `aok` guards assignment."))
 @pytest.mark.parametrize("op", ["/", "%"])
 def test_division_by_zero_is_refused(op: str) -> None:
-    """vjanus should refuse a division by zero, as PyJanus does."""
+    """vjanus refuses a division by zero, as PyJanus does.
+
+    This used to diverge: the frame core's BDiv/BMod are total
+    (`Z.div _ 0 = 0`, `Z.modulo a 0 = a`), so vjanus quietly computed 0 and the
+    dividend respectively while PyJanus raised.  Found by modelling the source
+    expression semantics in `coq/RevLowerExpr.v`, then confirmed by running
+    both.  `RevFrame.safe` now guards every rule that evaluates an expression,
+    so no step is taken -- and `lower_expr_safe` proves the guard never fires on
+    an expression the source accepts."""
     src = (
         "procedure main()\n"
         "    int x\n"
