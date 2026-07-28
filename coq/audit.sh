@@ -48,6 +48,8 @@ Print Assumptions run_invert_iff.
 (* arrays core + its extracted interpreter *)
 Print Assumptions RevArr.exec_injective.
 Print Assumptions RevExtractAr.run_sound.
+Print Assumptions RevExtractAr.run_complete.
+Print Assumptions RevExtractAr.run_none_no_exec.
 (* frame-stacked core (recursion with locals) + its extracted interpreter *)
 Print Assumptions RevFrame.exec_injective.
 Print Assumptions RevFrame.exec_iff.

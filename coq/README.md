@@ -246,7 +246,8 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   Janus and admitting `A[j][i] += … A[j][k]` (`i≠k`) which a static name-based
   check would reject.
 - `RevExtractAr.v` — the verified computable interpreter for `RevArr`
-  (`run_sound` vs. `RevArr.exec`), extracted to `janus_arr.ml`.
+  (`run_sound` **and `run_complete`** vs. `RevArr.exec`), extracted to
+  `janus_arr.ml`.
 - `RevFrame.v` — Janus with **frame-stacked locals**: locals live in
   depth-indexed frames (`L d x`), so a procedure that **recurses while
   declaring a `local`** gets fresh storage per activation (the flat `RevArr`
@@ -449,7 +450,8 @@ core results) on each build.
 | 2nd-order cellular-automaton instance | `ca_reversible` | `RevCA.v` | funext |
 | Executable invert correctness (extracted `run`) | `run_invert_iff` | `RevInvert.v` | funext |
 | Frame core: the fuel interpreter is **complete** | `RevFrame.run_complete` | `RevFrame.v` | funext |
-| Hence a refusal is informative (`None` at every fuel ⟹ no run) | `RevFrame.run_none_no_exec` | `RevFrame.v` | funext |
+| Array core: same | `RevExtractAr.run_complete` | `RevExtractAr.v` | funext |
+| Hence a refusal is informative (`None` at every fuel ⟹ no run) | `run_none_no_exec` | `RevFrame.v`, `RevExtractAr.v` | funext |
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
 | Full abstraction | `full_abstraction` | `RevDenote.v` | none |
