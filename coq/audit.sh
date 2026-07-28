@@ -25,7 +25,7 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevFix RevInverse RevCat RevTrace RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
-Require Import RevIO RevMul RevLowering RevLowerExpr RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
@@ -137,6 +137,12 @@ Print Assumptions RevLowerExpr.or_encoding.
 Print Assumptions RevLowerExpr.lower_expr_safe.
 Print Assumptions RevLowerExpr.lower_expr_ok.
 Print Assumptions RevFrame.safe_ncell.
+(* statement lowering: forward simulation and what vjanus needs from it *)
+Print Assumptions RevLowerStmt.swap_lowering.
+Print Assumptions RevLowerStmt.reads_lower.
+Print Assumptions RevLowerStmt.lower_stmt_sound.
+Print Assumptions RevLowerStmt.lower_stmt_correct.
+Print Assumptions RevLowerStmt.lower_stmt_reversible.
 Print Assumptions ModFacts256.mod_reversible.
 Print Assumptions RevMod.i8_wraps.
 Print Assumptions ExtModFacts256.extmod_reversible.
