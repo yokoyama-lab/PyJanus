@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
-               RevDenote RevFix RevInverse RevCat RevTrace RevCtrl RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -84,6 +84,26 @@ Print Assumptions trace_natural_l.
 Print Assumptions loop_is_trace.
 Print Assumptions pinj_turn.
 Print Assumptions rev_loop_via_trace.
+(* PInj is symmetric monoidal for both the coproduct and the product,
+   and the two are related by a distributor *)
+Print Assumptions pinj_assocS.
+Print Assumptions iso_assocS.
+Print Assumptions sumS_pentagon.
+Print Assumptions sumS_triangle.
+Print Assumptions sumS_hexagon.
+Print Assumptions assocS_natural.
+Print Assumptions swapS_natural.
+Print Assumptions lunitS_natural.
+Print Assumptions runitS_natural.
+Print Assumptions pinj_prodH.
+Print Assumptions prodP_pentagon.
+Print Assumptions prodP_triangle.
+Print Assumptions prodP_hexagon.
+Print Assumptions assocP_natural.
+Print Assumptions swapP_natural.
+Print Assumptions pinj_distrH.
+Print Assumptions iso_distrH.
+Print Assumptions distrH_natural.
 (* the control constructors ARE PInj structure: exit assertion = dagger of the test *)
 Print Assumptions pinj_testH.
 Print Assumptions test_dagger.
