@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA RevSmallStep
-               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -34,6 +34,7 @@ Module SsS := RevSmallStep.SmallStep RevStack.StackPrim.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
+Module JnS := RevJoin.FixJoin RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
@@ -115,6 +116,17 @@ Print Assumptions pinj_testH.
 Print Assumptions test_dagger.
 Print Assumptions if_is_test_sum.
 Print Assumptions test_negation.
+(* join structure of PInj *)
+Print Assumptions pinj_join.
+Print Assumptions pinj_join_chain.
+Print Assumptions traceH_is_join_fam.
+Print Assumptions pinj_traceH_via_join.
+Print Assumptions decisions_closed_neg.
+Print Assumptions decisions_closed_and.
+Print Assumptions decisions_closed_or.
+Print Assumptions dfalse_and.
+Print Assumptions testH_decompose.
+Print Assumptions JnS.Dfix_reversible_via_join.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.

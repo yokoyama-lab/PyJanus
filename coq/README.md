@@ -403,7 +403,10 @@ read backwards is a run of the converse); `trace_yanking`, `trace_vanishing` and
 > naturality in **both** arguments, and superposing. **Vanishing-II and
 > dinaturality are not yet proved**, so the unqualified phrase "distributive
 > traced symmetric monoidal category" is still one step away — see the note at
-> the end of `RevTraced.v`.
+> the end of `RevTraced.v`. `RevJoin.v` exhibits the trace as the join it always
+> was (`traceH_is_join_fam`) and rederives its closure on \textsf{PInj} from
+> `pinj_join`; the two missing axioms become re-indexings of that join, but the
+> re-indexing has not been carried out.
 >
 > **None of this structure is new mathematics.** \textsf{PInj} is the canonical
 > model of a *join inverse rig category*, the established categorical model of
@@ -426,6 +429,54 @@ reversal argument.
 
 Not covered: vanishing-II and superposing, which need the coproduct's
 associativity/symmetry coherence.
+
+## The join structure (`RevJoin.v`)
+
+Three parts of this development stalled at the same place. `RevCtrl.v` could add
+only the *negation* case of Glück–Kaarsgaard's Theorem 9 (decisions are closed
+under the Boolean operations), because conjunction and disjunction need a map
+that is injective only thanks to a **disjointness** side condition. `RevTraced.v`
+attacks vanishing-II and dinaturality as statements about paths, where the
+literature gets them from the **countable supremum** the execution formula takes.
+And `RevFix.v` proves its fixed point reversible by an ad-hoc argument about
+*increasing chains*.
+
+All three want the structure the literature builds \textsf{PInj} out of: a **join
+inverse category**, in which compatible families of morphisms have joins. Over
+`hrel` the join is just union, so the whole of it reduces to one theorem —
+
+```coq
+Theorem pinj_join : forall I A B (F : I -> hrel A B),
+  (forall i, pinj (F i)) -> (forall i j, compatH (F i) (F j)) -> pinj (joinH F).
+```
+
+— where `compatH R S` says `R` and `S` agree wherever both are defined, forwards
+*and* backwards. Composition and the converse distribute over joins with no side
+conditions at all (`compH_joinH_l`, `compH_joinH_r`, `convH_joinH`).
+
+What that buys, in the three places:
+
+- **the trace.** `traceH_is_join_fam` exhibits the execution formula as the join
+  of the family {immediate exit} ∪ {runs of length *n*}; `compatH_tracefam` shows
+  the family is pairwise compatible — the two kinds of summand are *disjoint* (a
+  state either exits at once or enters the wire), and runs of different lengths
+  agree by `path_exit_unique`. So `pinj_traceH_via_join` rederives
+  `RevTrace.pinj_traceH` as an instance of `pinj_join`, from the join structure
+  rather than from reasoning about paths.
+- **decisions.** `testH_decompose` writes a decision as the join of its two
+  disjoint halves, and `decisions_closed_neg` / `_and` / `_or` complete Theorem 9:
+  conjunction is composition of partial identities, **disjunction is a join**.
+  The two disjuncts overlap, so they are merely *compatible* — which is exactly
+  why the literature asks for compatible joins and not only disjoint ones.
+  `dfalse_and` then makes the disjointness `RevCtrl.v` was missing explicit.
+- **the fixed point.** `FixJoin.Dfix_is_join` and `Dfix_reversible_via_join`
+  redo `RevFix.Dfix_reversible` through `pinj_join_chain` (an increasing chain is
+  a compatible family), replacing the `max n m` argument.
+
+**None of this is new.** Join inverse categories are the established model; what
+is here is that structure put into this model and machine-checked. Vanishing-II
+and dinaturality are still open: the join turns them into re-indexings of the
+family, but the re-indexing is the path surgery itself.
 
 ## Their parametric Janus is one of our instances (`RevPPR.v`)
 
@@ -497,6 +548,10 @@ core results) on each build.
 | **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
 | **The exit assertion is the dagger of the entry test** | `if_is_test_sum` | `RevCtrl.v` | none |
 | Reversibility from PInj structure alone | `denote_reversible_structural` | `RevCtrl.v` | none |
+| **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
+| The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
+| **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |
+| The least fixed point is the join of the Kleene chain | `Dfix_is_join`, `Dfix_reversible_via_join` | `RevJoin.v` | none |
 | Paolini et al.'s parametric Janus is a `REV_PRIM` | `ppr_reversible` | `RevPPR.v` | none |
 | Janus over a **list** store — reversible, axiom-free | `janus_list_reversible` | `RevPPR.v` | **none** |
 | Bennett reversibilization (compute–copy–uncompute) | `bennett_correct` | `RevBennett.v` | none |
@@ -524,7 +579,10 @@ against both:
   2021) and Kaarsgaard (RC 2019). **The trace operator, the loop-as-trace reading
   and the `test†` conditional in this development all appear there first**;
   `docs/reversible-categorical-semantics.md` is the correspondence table and
-  states what is left as genuinely new. Note in particular that **recursion is
+  states what is left as genuinely new. `RevJoin.v` now puts **their** join
+  structure into this model (compatibility, `pinj_join`, the trace as a countable
+  join, the Boolean algebra of decisions); it is a mechanization of a known
+  construction, not a new one. Note in particular that **recursion is
   *not* an increment**: Glück, Kaarsgaard & Yokoyama (FM Workshops 2019; TCS
   2022) already give the full semantics of an r-Turing complete reversible
   while-language *with recursive procedures* in \textsf{PInj}.
