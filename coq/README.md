@@ -453,6 +453,8 @@ core results) on each build.
 | Array core: same | `RevExtractAr.run_complete` | `RevExtractAr.v` | funext |
 | Hence a refusal is informative (`None` at every fuel ⟹ no run) | `run_none_no_exec` | `RevFrame.v`, `RevExtractAr.v` | funext |
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
+| **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
+| `&&`/`\|\|` arithmetic encodings correct on 0/1 | `and_encoding`, `or_encoding` | `RevLowerExpr.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
 | Full abstraction | `full_abstraction` | `RevDenote.v` | none |
 | Inverter = relational converse, denotationally | `denote_invert` | `RevDenote.v` | none |

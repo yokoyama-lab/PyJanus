@@ -76,12 +76,48 @@ today, as in most verified pipelines).
    The one remaining rule of this kind is the by-value call idiom (`Enter`/`Exit`
    on a fresh local around the call), which needs the frame core's `Enter`/`Exit`
    and so is best proved against `RevFrame.v` rather than in isolation.
-2. Formalize the jana2014 **expression** semantics in Coq and prove the
-   expression-lowering (`expr` in `lower.ml`) preserves values — the smallest
-   self-contained slice of full soundness. This would systematically pin down the
-   boolean-coercion rules (jana2014 requires `&&`/`||` operands to be `0/1`, so
-   `&& = l*r` and `|| = l + r - l*r`; a wrong `|| = l*l + r*r` used to yield 2
-   when both operands held — caught by hand and fixed, but a value-level
-   expression-preservation proof would have flagged it mechanically).
+2. **(done, `coq/RevLowerExpr.v`)** The jana2014 **expression** semantics in
+   Coq, the Gallina model of `lower.ml`'s `expr`, and value preservation:
+
+   ```
+   lower_expr_sound : seval g e = Some v -> eval 0 (enc g) (lower e) = v
+   ```
+
+   The source semantics is read off PyJanus's `_eval_bin` / `_check_bin_operands`
+   and is *partial*: `/` and `%` have no value at a zero divisor, and `&&`, `||`,
+   `!` have none unless their operands are booleans — which is exactly what
+   licenses the arithmetic encodings. `and_encoding` / `or_encoding` prove
+   `&& = l*r` and `|| = l + r - l*r` correct on 0/1 operands, and
+   `or_squares_wrong` refutes the `|| = l*l + r*r` this file used to have
+   (it yields 2 at `l = r = 1`) — the bug the comment below records as
+   "caught by hand", now mechanized.
+
+   **The slice found a live soundness bug.** `seval` is partial where the core's
+   `bden` is total, and the two really do diverge:
+
+   | expression | PyJanus | vjanus |
+   |---|---|---|
+   | `x / 0` | raises `Division by zero` | quietly yields `0` |
+   | `x % 0` | raises `Division by zero` | quietly yields `x` (`Z.modulo a 0 = a`) |
+
+   Confirmed against both implementations, not just on paper
+   (`RevLowerExpr.div_zero_diverges` / `mod_zero_diverges`, and the strict-xfail
+   `test_division_by_zero_is_refused` in `tests/jana2014/test_vjanus_features.py`,
+   which will start failing the day it is fixed). The corpus differential test
+   never caught it because no example divides by zero, and a program PyJanus
+   rejects at run time is skipped by the harness rather than compared.
+
+   Fixing it means making expression evaluation *guarded* in `RevFrame.v`. The
+   cheap shape is the one `aok` already uses for `*=`/`/=`: a decidable
+   `safe d s e` (no division or modulus by a zero divisor anywhere in `e`)
+   threaded into the premises that evaluate an expression — `E_Asn`, `E_AAsn`,
+   both `If` rules, the loop guards, `E_Enter`/`E_Exit` — plus a stability lemma
+   so the inverted statement's guard is recoverable (as `reads_cell_stable` does
+   for aliasing). Making `eval` itself `option`-valued would be more faithful but
+   ripples through every use, including extraction.
+
+   Not covered by this slice (each needs the ref-classification model): array and
+   struct l-values, stacks, `size`/`top`/`empty`, and the Cantor index fold —
+   whose injectivity is already in `RevLowering.v`.
 3. Tackle a single statement form end-to-end (e.g. `Assign`) against a Coq source
    semantics, establishing the simulation skeleton the other forms slot into.

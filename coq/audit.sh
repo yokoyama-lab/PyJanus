@@ -25,7 +25,7 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
                RevDenote RevFix RevInverse RevCat RevTrace RevCtrl RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
-Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Require Import RevIO RevMul RevLowering RevLowerExpr RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
@@ -130,6 +130,10 @@ Print Assumptions RevLowering.push_clean.
 Print Assumptions RevLowering.addr_injective.
 Print Assumptions RevLowering.cantor2_injective.
 Print Assumptions RevLowering.tri_closed.
+(* the expression lowering preserves values (vjanus lowering soundness, slice 1) *)
+Print Assumptions RevLowerExpr.lower_expr_sound.
+Print Assumptions RevLowerExpr.and_encoding.
+Print Assumptions RevLowerExpr.or_encoding.
 Print Assumptions ModFacts256.mod_reversible.
 Print Assumptions RevMod.i8_wraps.
 Print Assumptions ExtModFacts256.extmod_reversible.

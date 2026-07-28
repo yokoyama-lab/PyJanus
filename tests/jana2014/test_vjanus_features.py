@@ -163,6 +163,29 @@ def test_multiplicative_update_guard_is_enforced(op: str) -> None:
     )
 
 
+@pytest.mark.xfail(strict=True, reason=(
+    "Known divergence, found by RevLowerExpr.div_zero_diverges and confirmed "
+    "against both implementations: PyJanus raises 'Division by zero', but the "
+    "frame core's BDiv/BMod are total (Z.div _ 0 = 0, Z.modulo a 0 = a), so "
+    "vjanus quietly computes a value.  Fixing it means giving expression "
+    "evaluation a safety guard in RevFrame.v the way `aok` guards assignment."))
+@pytest.mark.parametrize("op", ["/", "%"])
+def test_division_by_zero_is_refused(op: str) -> None:
+    """vjanus should refuse a division by zero, as PyJanus does."""
+    src = (
+        "procedure main()\n"
+        "    int x\n"
+        "    int z\n"
+        "    int r\n"
+        "    x += 7\n"
+        f"    r += x {op} z\n"
+    )
+    result = _run_vjanus(src)
+    assert result.returncode != 0, (
+        f"Expected a refusal for a zero divisor, got 0.\nstdout: {result.stdout!r}"
+    )
+
+
 def test_non_dividing_factor_is_refused() -> None:
     """`/=` additionally needs exact divisibility -- 3 /= 2 has no step."""
     src = (
