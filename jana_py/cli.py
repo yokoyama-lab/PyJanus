@@ -117,6 +117,9 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("-I", dest="include_dirs", metavar="DIR", action="append", default=[], help="add DIR to the `#include` search path (repeatable); the bundled standard library is always searched")
   parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
   parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
+  parser.add_argument("--smv", action="store_true", dest="smv", help="emit an nuXmv model whose ERR location is reachable iff a runtime assertion can fail")
+  parser.add_argument("--smv-init", dest="smv_init", choices=["any", "zero"], default="zero", help="initial store for --smv: zero (what PyJanus runs, default) or any (prove totality on every input)")
+  parser.add_argument("--smv-assume", dest="smv_assume", default=None, metavar="EXPR", help="SMV boolean expression restricting the initial store of --smv (a precondition)")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
   parser.add_argument("--direction", dest="direction", choices=["forward", "backward"], default="forward", help="execution direction: forward (default) or backward (run the program inverted)")
   parser.add_argument("--expect", dest="expect", default=None, metavar="TEXT", help="compare program output against TEXT; exit 0 if equal, 1 otherwise")
@@ -213,6 +216,11 @@ def main(argv: list[str] | None = None) -> int:
       from .circuit import synthesize_program
       circuit = synthesize_program(program)
       print(circuit.to_text())
+      return 0
+    if args.smv:
+      phase = "SMV generation"
+      from .smv import compile_to_smv
+      print(compile_to_smv(program, init=args.smv_init, assume=args.smv_assume), end="")
       return 0
     if args.profile:
       phase = "profiling"
