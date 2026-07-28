@@ -464,6 +464,7 @@ core results) on each build.
 | **...and cannot run what the source cannot** | `lower_stmt_complete` | `RevLowerStmt.v` | funext |
 | Source and lowered core agree exactly (scalar fragment) | `lower_stmt_iff` | `RevLowerStmt.v` | funext |
 | The XOR triple realises `x <=> y` (against `exec`) | `swap_lowering` | `RevLowerStmt.v` | funext |
+| Global and local slots never alias (ref classification) | `loceqb_sloc` | `RevLowerStmt.v` | none |
 | Expression evaluation is guarded (no division by zero) | `safe_ncell` | `RevFrame.v` | funext |
 | `&&`/`\|\|` arithmetic encodings correct on 0/1 | `and_encoding`, `or_encoding` | `RevLowerExpr.v` | none |
 | Denotational adequacy (`denote = exec`) | `adequacy` | `RevDenote.v` | none |
