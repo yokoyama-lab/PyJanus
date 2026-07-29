@@ -13,20 +13,42 @@ and the property is `INVARSPEC pc != ERR`.  nuXmv's IC3 then either proves it
 with an inductive invariant — over **unbounded** integers, which no amount of
 testing can do — or returns a concrete counterexample store.
 
-Two traps this encoding has to avoid, both of which a naive translation falls
-into:
+**Large-block encoding.**  A statement does *not* get its own program location.
+Straight-line code is executed symbolically into a pending map (variable → an
+expression over the values at the block's entry) plus a path condition, and a
+location is cut only where control actually branches or merges.  So
+
+    v += g   h -= v   h += halfg   t += 1
+
+becomes one transition whose update for `h` is `((h - (v + g)) + halfg)`, not
+four transitions.  Because expression translation *reads* the pending map, the
+sequential composition happens as the expressions are built and no substitution
+pass over already-generated text is ever needed.
+
+Two output shapes are available.  `style="trans"` writes one big disjunction of
+edges, each restating `next(v) = v` for every unchanged variable;
+`style="assign"` writes one next-state function per variable, where a single
+`TRUE` default absorbs all of those frame conditions.
+
+Three traps this encoding has to avoid, all of which a naive translation falls
+into and the first two of which would silently turn a proof into a lie:
 
 * **Integer division.**  nuXmv's `/` truncates toward zero, while Janus (like
   Python) floors, and nuXmv's `mod` is not available on integers at all inside
   the SMT engine.  Every division site is therefore emitted through the
   floor-division macro `_div_defines` builds, checked against the interpreter's
   semantics in `tests/verify/test_smv.py`.
+* **Aliasing is a run-time check, not a static one.**  `x += x` passes
+  `validate_program` and is rejected only when PyJanus reaches it, so the
+  obvious translation `next(x) = x + x` would model a non-injective program as
+  a safe one.  After inlining resolves parameters the alias is syntactic, so
+  reaching such a statement is itself the error.
 * **Sort confusion.**  Janus comparisons yield integers, so `x += (y > 0)` is
   legal.  The translation is two-sorted and *refuses* such expressions rather
   than guessing — the same discipline `coq/RevLowerExpr.v` formalizes as `wf`.
 
 Anything outside the fragment raises `SmvUnsupported`; nothing is ever emitted
-as an approximation, because an unsound model would turn a proof into a lie.
+as an approximation.
 """
 
 from __future__ import annotations
@@ -60,6 +82,10 @@ ERR_LOC = 0
 #: Program-counter value standing for "the inlining bound was hit".
 BOUND_LOC = 1
 _FIRST_LOC = 2
+
+#: Cut a block once its pending expressions get this large, so that a long
+#: straight-line stretch cannot blow the term size up.
+_BLOCK_CHARS = 4000
 
 #: Reserved in SMV (plus `pc`, which names the program counter).  A Janus
 #: variable with one of these names is renamed, the way `c_codegen.py` renames
@@ -96,7 +122,8 @@ class _Trans:
 
 
 class _Compiler:
-  def __init__(self, program: Program, init: str, assume: str | None, max_depth: int):
+  def __init__(self, program: Program, init: str, assume: str | None, max_depth: int,
+               style: str = "trans"):
     if program.main is None:
       raise SmvUnsupported("no main procedure")
     self.program = program
@@ -104,6 +131,7 @@ class _Compiler:
     self.init_mode = init
     self.assume = assume
     self.max_depth = max_depth
+    self.style = style
     self.varnames: list[str] = []
     self.var_init: dict[str, str | None] = {}
     self.defines: list[tuple[str, str]] = []
@@ -112,8 +140,12 @@ class _Compiler:
     self._uid = 0
     self.uses_err = False
     self.uses_bound = False
+    # The symbolic state of the block currently being accumulated.
+    self.loc = self._loc()
+    self.pending: dict[str, str] = {}
+    self.path: list[str] = []
 
-  # -- small helpers ---------------------------------------------------
+  # -- names and locations ---------------------------------------------
 
   def _loc(self) -> int:
     loc = self._next_loc
@@ -140,16 +172,48 @@ class _Compiler:
       return "TRUE"
     return " & ".join(f"({p})" for p in parts)
 
-  def _emit(self, src: int, guard: str, updates: tuple[tuple[str, str], ...], dst: int) -> None:
-    self.trans.append(_Trans(src, guard, updates, dst))
+  # -- the block being accumulated -------------------------------------
 
-  def _err(self, src: int, guard: str) -> None:
+  def _val(self, name: str) -> str:
+    """The value of `name` at this point, as an expression over block entry."""
+    return self.pending.get(name, name)
+
+  def _edge(self, guard: str, dst: int) -> None:
+    """Leave the current block by `guard`, carrying its pending updates."""
+    updates = tuple((n, e) for n, e in self.pending.items() if e != n)
+    self.trans.append(_Trans(self.loc, self._conj(self.path + [guard]), updates, dst))
+
+  def _err(self, guard: str) -> None:
+    """Leave for ERR by `guard`; ERR is absorbing, so no updates are needed."""
     self.uses_err = True
-    self.trans.append(_Trans(src, guard, (), ERR_LOC))
+    self.trans.append(_Trans(self.loc, self._conj(self.path + [guard]), (), ERR_LOC))
 
-  def _bound(self, src: int) -> None:
-    self.uses_bound = True
-    self.trans.append(_Trans(src, "TRUE", (), BOUND_LOC))
+  def _check(self, obligations: list[str]) -> None:
+    """Fail to ERR unless every obligation holds, then assume that it does."""
+    for obligation in obligations:
+      if obligation == "TRUE":
+        continue
+      self._err(f"!({obligation})")
+      self.path.append(obligation)
+
+  def _enter(self, dst: int) -> None:
+    self.loc = dst
+    self.pending = {}
+    self.path = []
+
+  def _seal(self, dst: int | None = None) -> int:
+    """Cut the block here, emitting it as one transition."""
+    if dst is None:
+      if not self.pending and not self.path:
+        return self.loc
+      dst = self._loc()
+    self._edge("TRUE", dst)
+    self._enter(dst)
+    return dst
+
+  def _maybe_seal(self) -> None:
+    if sum(len(e) for e in self.pending.values()) > _BLOCK_CHARS:
+      self._seal()
 
   # -- expressions -----------------------------------------------------
 
@@ -196,7 +260,7 @@ class _Compiler:
     if isinstance(e, Number):
       return str(e.value) if e.value >= 0 else f"({e.value})"
     if isinstance(e, LvalExpr):
-      return self._lval_name(e.lval, env)
+      return self._val(self._lval_name(e.lval, env))
     if isinstance(e, BinExpr):
       if e.op in _ARITH:
         left = self._iexpr(e.left, env, obl)
@@ -206,8 +270,8 @@ class _Compiler:
         left = self._iexpr(e.left, env, obl)
         right = self._iexpr(e.right, env, obl)
         obl.append(f"({right}) != 0")
-        fq, fr = self._div_defines(left, right)
-        return fq if e.op is BinOpKind.DIV else fr
+        quotient, remainder = self._div_defines(left, right)
+        return quotient if e.op is BinOpKind.DIV else remainder
       raise SmvUnsupported(f"integer operator outside the fragment: {e.op.value}")
     raise SmvUnsupported(f"integer expression outside the fragment: {type(e).__name__}")
 
@@ -230,119 +294,108 @@ class _Compiler:
         return f"({self._bexpr(e.left, env, obl)} | {self._bexpr(e.right, env, obl)})"
     raise SmvUnsupported(f"condition outside the fragment: {type(e).__name__}")
 
-  def _cond(self, e, env: dict[str, str]) -> tuple[str, str]:
-    """A condition together with the guard under which evaluating it is safe."""
+  def _cond(self, e, env: dict[str, str]) -> str:
+    """A condition, with its evaluation obligations already checked into ERR."""
     obl: list[str] = []
     text = self._bexpr(e, env, obl)
-    return text, self._conj(obl)
+    self._check(obl)
+    return text
 
   # -- statements ------------------------------------------------------
 
-  def _stmts(self, stmts, env: dict[str, str], loc: int, depth: int) -> int:
+  def _stmts(self, stmts, env: dict[str, str], depth: int) -> None:
     for stmt in stmts:
-      loc = self._stmt(stmt, env, loc, depth)
-    return loc
+      self._stmt(stmt, env, depth)
 
-  def _stmt(self, s, env: dict[str, str], loc: int, depth: int) -> int:
+  def _stmt(self, s, env: dict[str, str], depth: int) -> None:
     if isinstance(s, SkipStmt):
-      return loc
+      return
     if isinstance(s, PrintsStmt):
       if s.prints.reversible:
         raise SmvUnsupported("reversible read/write")
-      return loc  # printing does not touch the store
+      return  # printing does not touch the store
     if isinstance(s, AssignStmt):
-      return self._assign(s, env, loc)
+      return self._assign(s, env)
     if isinstance(s, SwapStmt):
       left = self._lval_name(s.left, env)
       right = self._lval_name(s.right, env)
-      out = self._loc()
-      self._emit(loc, "TRUE", ((left, right), (right, left)), out)
-      return out
+      before_left, before_right = self._val(left), self._val(right)
+      self.pending[left], self.pending[right] = before_right, before_left
+      return
     if isinstance(s, AssertStmt):
-      cond, ok = self._cond(s.expr, env)
-      out = self._loc()
-      self._emit(loc, self._conj([ok, cond]), (), out)
-      self._err(loc, f"!({self._conj([ok, cond])})")
-      return out
+      self._check([self._cond(s.expr, env)])
+      return
     if isinstance(s, IfStmt):
-      return self._if(s, env, loc, depth)
+      return self._if(s, env, depth)
     if isinstance(s, FromStmt):
-      return self._from(s, env, loc, depth)
+      return self._from(s, env, depth)
     if isinstance(s, LocalStmt):
-      return self._local(s, env, loc, depth)
+      return self._local(s, env, depth)
     if isinstance(s, (CallStmt, UncallStmt)):
-      return self._call(s, env, loc, depth, isinstance(s, UncallStmt))
+      return self._call(s, env, depth, isinstance(s, UncallStmt))
     raise SmvUnsupported(f"statement outside the fragment: {type(s).__name__}")
 
-  def _assign(self, s: AssignStmt, env: dict[str, str], loc: int) -> int:
+  def _assign(self, s: AssignStmt, env: dict[str, str]) -> None:
     target = self._lval_name(s.lval, env)
     if self._occurs(target, s.expr, env):
       # `x += x` is not injective, and Janus rejects it *at run time* — after
       # inlining, `call bar(x, x); a += b` resolves to exactly this.  Reaching
       # the statement is the error, so it becomes an unconditional edge to ERR.
-      out = self._loc()
-      self._err(loc, "TRUE")
-      return out
+      self._err("TRUE")
+      self._enter(self._loc())  # the continuation is unreachable
+      return
     obl: list[str] = []
     rhs = self._iexpr(s.expr, env, obl)
+    old = self._val(target)
     if s.mod_op is ModOp.ADD_EQ:
-      update = f"({target} + {rhs})"
+      new = f"({old} + {rhs})"
     elif s.mod_op is ModOp.SUB_EQ:
-      update = f"({target} - {rhs})"
+      new = f"({old} - {rhs})"
     elif s.mod_op is ModOp.MUL_EQ:
       obl.append(f"({rhs}) != 0")  # x *= 0 is not injective
-      update = f"({target} * {rhs})"
+      new = f"({old} * {rhs})"
     elif s.mod_op is ModOp.DIV_EQ:
       obl.append(f"({rhs}) != 0")
-      quotient, remainder = self._div_defines(target, rhs)
+      quotient, remainder = self._div_defines(old, rhs)
       obl.append(f"{remainder} = 0")  # `/=` must divide exactly
-      update = quotient
+      new = quotient
     else:
       raise SmvUnsupported(f"assignment operator outside the fragment: {s.mod_op.value}")
-    guard = self._conj(obl)
-    out = self._loc()
-    self._emit(loc, guard, ((target, update),), out)
-    if guard != "TRUE":
-      self._err(loc, f"!({guard})")
-    return out
+    self._check(obl)
+    self.pending[target] = new
+    self._maybe_seal()
 
-  def _if(self, s: IfStmt, env: dict[str, str], loc: int, depth: int) -> int:
-    entry, entry_ok = self._cond(s.entry_cond, env)
+  def _if(self, s: IfStmt, env: dict[str, str], depth: int) -> None:
+    entry = self._cond(s.entry_cond, env)
     then_loc, else_loc, out = self._loc(), self._loc(), self._loc()
-    self._emit(loc, self._conj([entry_ok, entry]), (), then_loc)
-    self._emit(loc, self._conj([entry_ok, f"!({entry})"]), (), else_loc)
-    if entry_ok != "TRUE":
-      self._err(loc, f"!({entry_ok})")
+    self._edge(entry, then_loc)
+    self._edge(f"!({entry})", else_loc)
     for branch, body, taken in ((then_loc, s.if_part, True), (else_loc, s.else_part, False)):
-      end = self._stmts(body, env, branch, depth)
-      exit_cond, exit_ok = self._cond(s.exit_cond, env)
-      expected = exit_cond if taken else f"!({exit_cond})"
-      self._emit(end, self._conj([exit_ok, expected]), (), out)
-      self._err(end, f"!({self._conj([exit_ok, expected])})")
-    return out
+      self._enter(branch)
+      self._stmts(body, env, depth)
+      exit_cond = self._cond(s.exit_cond, env)
+      self._check([exit_cond if taken else f"!({exit_cond})"])
+      self._seal(out)
+    self._enter(out)
 
-  def _from(self, s: FromStmt, env: dict[str, str], loc: int, depth: int) -> int:
+  def _from(self, s: FromStmt, env: dict[str, str], depth: int) -> None:
     """`from e1 do S1 loop S2 until e2` = assert e1; S1; while !e2 { S2; assert !e1; S1 }."""
-    entry, entry_ok = self._cond(s.entry_cond, env)
-    top, out = self._loc(), self._loc()
-    self._emit(loc, self._conj([entry_ok, entry]), (), top)
-    self._err(loc, f"!({self._conj([entry_ok, entry])})")
+    self._check([self._cond(s.entry_cond, env)])
+    top, out, again = self._loc(), self._loc(), self._loc()
+    self._seal(top)
 
-    after_do = self._stmts(s.do_part, env, top, depth)
-    exit_cond, exit_ok = self._cond(s.exit_cond, env)
-    again = self._loc()
-    self._emit(after_do, self._conj([exit_ok, exit_cond]), (), out)
-    self._emit(after_do, self._conj([exit_ok, f"!({exit_cond})"]), (), again)
-    if exit_ok != "TRUE":
-      self._err(after_do, f"!({exit_ok})")
+    self._stmts(s.do_part, env, depth)
+    exit_cond = self._cond(s.exit_cond, env)
+    self._edge(exit_cond, out)
+    self._edge(f"!({exit_cond})", again)
 
-    after_loop = self._stmts(s.loop_part, env, again, depth)
-    back, back_ok = self._cond(s.entry_cond, env)
-    self._emit(after_loop, self._conj([back_ok, f"!({back})"]), (), top)
-    self._err(after_loop, f"!({self._conj([back_ok, f'!({back})'])})")
-    return out
+    self._enter(again)
+    self._stmts(s.loop_part, env, depth)
+    self._check([f"!({self._cond(s.entry_cond, env)})"])
+    self._seal(top)
+    self._enter(out)
 
-  def _local(self, s: LocalStmt, env: dict[str, str], loc: int, depth: int) -> int:
+  def _local(self, s: LocalStmt, env: dict[str, str], depth: int) -> None:
     enter, leave = s.enter_decl, s.exit_decl
     for decl in (enter, leave):
       if decl.dimensions or decl.typ.kind != "int":
@@ -351,39 +404,34 @@ class _Compiler:
         raise SmvUnsupported("constant local")
     if enter.ident.name != leave.ident.name:
       # Another run-time check: PyJanus raises when it reaches the `delocal`.
-      out = self._loc()
-      self._err(loc, "TRUE")
-      return out
+      self._err("TRUE")
+      self._enter(self._loc())
+      return
     obl: list[str] = []
     init = self._iexpr(enter.init_expr, env, obl) if enter.init_expr is not None else "0"
+    self._check(obl)
     name = self._declare(enter.ident.name, None)
-    guard = self._conj(obl)
-    body_loc = self._loc()
-    self._emit(loc, guard, ((name, init),), body_loc)
-    if guard != "TRUE":
-      self._err(loc, f"!({guard})")
+    self.pending[name] = init
 
     inner = dict(env)
     inner[enter.ident.name] = name
-    end = self._stmts(s.body, inner, body_loc, depth)
+    self._stmts(s.body, inner, depth)
 
     obl2: list[str] = []
     final = self._iexpr(leave.init_expr, inner, obl2) if leave.init_expr is not None else "0"
-    check = self._conj(obl2 + [f"{name} = {final}"])
-    out = self._loc()
-    self._emit(end, check, (), out)
-    self._err(end, f"!({check})")
-    return out
+    self._check(obl2 + [f"{self._val(name)} = {final}"])
 
-  def _call(self, s, env: dict[str, str], loc: int, depth: int, invert: bool) -> int:
+  def _call(self, s, env: dict[str, str], depth: int, invert: bool) -> None:
     if s.external:
       raise SmvUnsupported("external call")
     proc = self.procs.get(s.ident.name)
     if proc is None:
       raise SmvUnsupported(f"undefined procedure: {s.ident.name}")
     if depth >= self.max_depth:
-      self._bound(loc)
-      return self._loc()  # unreachable continuation; keeps the caller's shape
+      self.uses_bound = True
+      self.trans.append(_Trans(self.loc, self._conj(self.path), (), BOUND_LOC))
+      self._enter(self._loc())
+      return
     inner: dict[str, str] = {}
     for param, arg in zip(proc.params, s.args):
       if param.dimensions or param.typ.kind != "int":
@@ -392,12 +440,12 @@ class _Compiler:
         raise SmvUnsupported("argument is not a plain variable")
       resolved = self._lookup(arg.lval.ident.name, env)
       if resolved in inner.values():
-        out = self._loc()  # two parameters bound to the same variable
-        self._err(loc, "TRUE")
-        return out
+        self._err("TRUE")  # two parameters bound to the same variable
+        self._enter(self._loc())
+        return
       inner[param.ident.name] = resolved
     body = invert_stmts(proc.body, False) if invert else proc.body
-    return self._stmts(body, inner, loc, depth + 1)
+    self._stmts(body, inner, depth + 1)
 
   # -- driver ----------------------------------------------------------
 
@@ -416,19 +464,26 @@ class _Compiler:
       else:
         init = "0" if self.init_mode == "zero" else None
       env[decl.ident.name] = self._declare(decl.ident.name, init)
-    entry = self._loc()
-    final = self._stmts(main.stmts, env, entry, 0)
+    entry = self.loc
+    self._stmts(main.stmts, env, 0)
+    final = self._seal()
     return self._render(entry, final)
 
+  def _guard_of(self, t: _Trans) -> str:
+    return f"pc = {t.src}" if t.guard == "TRUE" else f"pc = {t.src} & {t.guard}"
+
   def _render(self, entry: int, final: int) -> str:
-    live = {t.src for t in self.trans}
-    for loc in range(_FIRST_LOC, self._next_loc):
-      if loc not in live:
-        self._emit(loc, "TRUE", (), loc)  # halt: every location must be total
-    if self.uses_err:
-      self._emit(ERR_LOC, "TRUE", (), ERR_LOC)
-    if self.uses_bound:
-      self._emit(BOUND_LOC, "TRUE", (), BOUND_LOC)
+    if self.style == "trans":
+      # The relational form needs an explicit self-loop everywhere, or nuXmv
+      # reports a deadlock; the functional form gets it from the `TRUE` default.
+      live = {t.src for t in self.trans}
+      for loc in range(_FIRST_LOC, self._next_loc):
+        if loc not in live:
+          self.trans.append(_Trans(loc, "TRUE", (), loc))
+      if self.uses_err:
+        self.trans.append(_Trans(ERR_LOC, "TRUE", (), ERR_LOC))
+      if self.uses_bound:
+        self.trans.append(_Trans(BOUND_LOC, "TRUE", (), BOUND_LOC))
 
     lines = ["MODULE main", "VAR", f"  pc : {ERR_LOC}..{self._next_loc - 1};"]
     for name in self.varnames:
@@ -445,29 +500,60 @@ class _Compiler:
       for name, body in self.defines:
         lines.append(f"  {name} := {body};")
       lines.append("")
-    init_parts = [f"pc = {entry}"]
-    for name in self.varnames:
-      value = self.var_init[name]
-      if value is not None:
-        init_parts.append(f"{name} = {value}")
-    if self.assume:
-      init_parts.append(f"({self.assume})")
-    lines.append("INIT")
-    lines.append("  " + " & ".join(init_parts) + ";")
-    lines.append("")
-    lines.append("TRANS")
-    rendered = []
-    for t in self.trans:
-      updated = dict(t.updates)
-      parts = [f"pc = {t.src}"]
-      if t.guard != "TRUE":
-        parts.append(t.guard)
-      parts.append(f"next(pc) = {t.dst}")
+    if self.style == "trans":
+      init_parts = [f"pc = {entry}"]
       for name in self.varnames:
-        parts.append(f"next({name}) = {updated.get(name, name)}")
-      rendered.append("  (" + " & ".join(parts) + ")")
-    lines.append(" |\n".join(rendered) + ";")
-    lines.append("")
+        value = self.var_init[name]
+        if value is not None:
+          init_parts.append(f"{name} = {value}")
+      if self.assume:
+        init_parts.append(f"({self.assume})")
+      lines.append("INIT")
+      lines.append("  " + " & ".join(init_parts) + ";")
+      lines.append("")
+      lines.append("TRANS")
+      rendered = []
+      for t in self.trans:
+        updated = dict(t.updates)
+        parts = [f"pc = {t.src}"]
+        if t.guard != "TRUE":
+          parts.append(t.guard)
+        parts.append(f"next(pc) = {t.dst}")
+        for name in self.varnames:
+          parts.append(f"next({name}) = {updated.get(name, name)}")
+        rendered.append("  (" + " & ".join(parts) + ")")
+      lines.append(" |\n".join(rendered) + ";")
+      lines.append("")
+    else:
+      # Functional form: one next-state function per variable.  The `TRUE`
+      # default absorbs every frame condition, so the model shrinks from
+      # |vars| x |edges| equalities to roughly |edges| case branches, and the
+      # system is deterministic by construction rather than by derivation.
+      lines.append("ASSIGN")
+      lines.append(f"  init(pc) := {entry};")
+      for name in self.varnames:
+        value = self.var_init[name]
+        if value is not None:
+          lines.append(f"  init({name}) := {value};")
+      lines.append("  next(pc) := case")
+      for t in self.trans:
+        lines.append(f"      {self._guard_of(t)} : {t.dst};")
+      lines.append("      TRUE : pc;")
+      lines.append("    esac;")
+      for name in self.varnames:
+        writes = [(t, dict(t.updates)[name]) for t in self.trans
+                  if any(n == name for n, _ in t.updates)]
+        if not writes:
+          continue
+        lines.append(f"  next({name}) := case")
+        for t, update in writes:
+          lines.append(f"      {self._guard_of(t)} : {update};")
+        lines.append(f"      TRUE : {name};")
+        lines.append("    esac;")
+      lines.append("")
+      if self.assume:
+        lines.append(f"INIT {self.assume};")
+        lines.append("")
     lines.append(f"INVARSPEC pc != {ERR_LOC}")
     if self.uses_bound:
       lines.append(f"INVARSPEC pc != {BOUND_LOC}")
@@ -475,7 +561,7 @@ class _Compiler:
 
 
 def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = None,
-                   max_depth: int = 16) -> str:
+                   max_depth: int = 16, style: str = "assign") -> str:
   """Compile `program` to an nuXmv model asserting that no assertion can fail.
 
   `init` is `"any"` (variables unconstrained — proves totality on the whole
@@ -483,7 +569,10 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
   SMV boolean expression restricting the initial store, i.e. a precondition.
   `max_depth` bounds procedure inlining; if the bound is reachable the model
   says so through the `BOUND` location and the proof is only valid below it.
+  `style` selects the relational (`"trans"`) or functional (`"assign"`) shape.
   """
   if init not in ("any", "zero"):
     raise ValueError(f"init must be 'any' or 'zero', not {init!r}")
-  return _Compiler(program, init, assume, max_depth).run()
+  if style not in ("trans", "assign"):
+    raise ValueError(f"style must be 'trans' or 'assign', not {style!r}")
+  return _Compiler(program, init, assume, max_depth, style).run()
