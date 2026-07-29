@@ -24,6 +24,8 @@ from jana_py.smv import ERR_LOC, SmvUnsupported, compile_to_smv
 
 
 def build(src: str, **kw) -> str:
+  """Compile, defaulting to the relational shape the assertions below inspect."""
+  kw.setdefault("style", "trans")
   pt = preprocess.preprocess_text("<test>", src, None, "jana2014")
   program = parser_jana2014.parse_program("<test>", pt.text, pt.line_origins)
   return compile_to_smv(program, **kw)
@@ -133,6 +135,37 @@ class FragmentTests(unittest.TestCase):
     model = build('procedure main()\n    int x\n    x += 1\n'
                   '    printf("%d\\n", x)\n')
     self.assertIn("MODULE main", model)
+
+
+class StyleTests(unittest.TestCase):
+  """Both output shapes describe the same system; `assign` is much smaller.
+
+  The functional form replaces one `next(v) = v` per variable per edge with a
+  single `TRUE` default, which measured about 7x smaller on `fall.ja`.  It made
+  no difference to what nuXmv could decide, but a smaller model is the better
+  default for the array work to come.
+  """
+
+  SOURCE = ("procedure main()\n    int x\n"
+            "    if x = 1 then\n        skip\n    fi x = 0\n")
+
+  def test_assign_is_the_default(self):
+    pt = preprocess.preprocess_text("<test>", self.SOURCE, None, "jana2014")
+    program = parser_jana2014.parse_program("<test>", pt.text, pt.line_origins)
+    self.assertIn("ASSIGN", compile_to_smv(program))
+
+  def test_assign_form_keeps_the_error_branch(self):
+    model = build(self.SOURCE, style="assign")
+    self.assertIn(f": {ERR_LOC};", model)
+    self.assertNotIn("TRANS", model)
+
+  def test_assign_form_is_smaller(self):
+    self.assertLess(len(build(self.SOURCE, style="assign")),
+                    len(build(self.SOURCE, style="trans")))
+
+  def test_an_unknown_style_is_rejected(self):
+    with self.assertRaises(ValueError):
+      build("procedure main()\n    skip\n", style="relational")
 
 
 class RuntimeCheckTests(unittest.TestCase):

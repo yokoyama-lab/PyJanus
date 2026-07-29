@@ -37,7 +37,7 @@ DEFAULT_GLOBS = [
 ]
 
 
-def classify(path: Path, init: str, timeout: float, binary) -> tuple[str, str]:
+def classify(path: Path, init: str, timeout: float, binary, style: str = "trans") -> tuple[str, str]:
   try:
     text = path.read_text(encoding="utf-8")
     pt = preprocess.preprocess_text(str(path), text, None, "jana2014")
@@ -51,7 +51,7 @@ def classify(path: Path, init: str, timeout: float, binary) -> tuple[str, str]:
     # that does not validate is out of scope rather than "safe".
     return "static-error", type(exc).__name__
   try:
-    model = compile_to_smv(program, init=init)
+    model = compile_to_smv(program, init=init, style=style)
   except SmvUnsupported as exc:
     return "unsupported", str(exc)
   except Exception as exc:
@@ -72,6 +72,7 @@ def main() -> int:
   ap = argparse.ArgumentParser()
   ap.add_argument("--init", choices=["any", "zero"], default="zero")
   ap.add_argument("--timeout", type=float, default=60.0)
+  ap.add_argument("--style", choices=["trans", "assign"], default="trans")
   ap.add_argument("globs", nargs="*", default=None)
   args = ap.parse_args()
 
@@ -84,9 +85,9 @@ def main() -> int:
   paths = sorted({Path(p) for pattern in patterns for p in glob.glob(str(ROOT / pattern))})
   tally: Counter[str] = Counter()
   reasons: Counter[str] = Counter()
-  print(f"init={args.init}  timeout={args.timeout}s  files={len(paths)}\n")
+  print(f"init={args.init}  style={args.style}  timeout={args.timeout}s  files={len(paths)}\n")
   for path in paths:
-    status, detail = classify(path, args.init, args.timeout, binary)
+    status, detail = classify(path, args.init, args.timeout, binary, args.style)
     tally[status] += 1
     if status in ("unsupported", "compile-error"):
       reasons[detail.split(":")[0]] += 1
