@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExtract RevInvert RevStack RevCA RevSmallStep
-               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -35,6 +35,7 @@ Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
 Module JnS := RevJoin.FixJoin RevStack.StackPrim.
+Module SemS := RevSemantics.Semantics RevStack.StackPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
@@ -127,6 +128,18 @@ Print Assumptions decisions_closed_or.
 Print Assumptions dfalse_and.
 Print Assumptions testH_decompose.
 Print Assumptions JnS.Dfix_reversible_via_join.
+(* five semantics of the framework language, and their agreement *)
+Print Assumptions SemS.big_small_iff.
+Print Assumptions SemS.big_den_iff.
+Print Assumptions SemS.big_inv_iff.
+Print Assumptions SemS.small_den_iff.
+Print Assumptions SemS.small_inv_iff.
+Print Assumptions SemS.den_inv_iff.
+Print Assumptions SemS.all_agree4.
+Print Assumptions SemS.big_fix_iff.
+Print Assumptions SemS.big_flat_sound.
+Print Assumptions SemS.flat_inverse_sound.
+Print Assumptions SemS.small_injective.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.

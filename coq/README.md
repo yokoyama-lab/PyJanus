@@ -283,6 +283,14 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
 - `RevSmallStep.v` — a small-step (structural operational) semantics for the
   framework, **proved equivalent** to the big-step `exec`
   (`exec Γ s a b ↔ multistep Γ (embed s) a RSkip b`).
+- `RevCompile.v` — the **compiler-mediated** semantics: structured control flow
+  is erased into labelled code with explicit successor labels, and a machine runs
+  it. `crun_sound` proves the compiled code loses no behaviour; the converse is
+  open (see the note at the end of the file).
+- `RevSemantics.v` — the **hub**: names the five semantics of the framework
+  language and states every pair. All six pairs among big-step, small-step,
+  denotational and inverse-execution are `iff`s; the four involving the compiler
+  are one-directional.
 - `RevPipeline.v`, `RevPipelineArr.v`, `RevGolomb.v`, `RevVarint.v`,
   `RevZigzag.v`, `RevDeltaN.v` — the **verified clean-reversible construction
   pipeline** (see the section above): proven-injective specs compiled to
@@ -512,6 +520,56 @@ is here is that structure put into this model and machine-checked. Vanishing-II
 and dinaturality are still open: the join turns them into re-indexings of the
 family, but the re-indexing is the path surgery itself.
 
+## Five semantics, and what agrees with what (`RevSemantics.v`, `RevCompile.v`)
+
+The framework language has been given several semantics, each proved to agree
+with the big-step one in the file that introduced it. `RevSemantics.v` is the hub
+that names them and states the pairs:
+
+| # | name    | what it is                                  | file             |
+|---|---------|---------------------------------------------|------------------|
+| 1 | `big`   | `L.exec`, the inductive big-step relation   | `RevCore.v`      |
+| 2 | `small` | `multistep` on residual programs            | `RevSmallStep.v` |
+| 3 | `den`   | `denote Dexec`, a relation per statement    | `RevDenote.v`    |
+| 4 | `inv`   | run the *inverted* program backwards        | `RevCore.v`      |
+| 5 | `flat`  | compile to labelled code, run the machine   | `RevCompile.v`   |
+
+(4) is the semantics an inverse interpreter implements — PyJanus `--inverse` and
+`vjanus -inverse` compute an initial store from a final one, and what justifies
+them is that running `invert s` backwards is the same relation as running `s`
+forwards. (5) is the only one that never looks at the syntax tree: `If` becomes a
+branch, `Loop` becomes a backward jump, and all that is left of the structure is
+label arithmetic. Instructions carry their successor label explicitly, so
+`comp s base` occupies `base .. base + csize s - 1` and leaves via
+`base + csize s`; procedure calls stay as instructions whose step runs the
+*compiled* body, which is what a compiler plus a linker gives and avoids
+modelling a return stack.
+
+**All six pairs among (1)–(4) are proved as `iff`s** (`all_agree4`), so anything
+established about one transports to the other three — `small_injective`,
+`den_injective` and `inv_injective` are reversibility arriving in three
+semantics that were never proved reversible directly. `RevFix`'s closed
+least-fixed-point denotation is a further description of the same relation
+(`big_fix_iff`).
+
+**For (5) only one direction is proved**: `big_flat_sound` — the compiled code
+loses no behaviour. The converse is not yet proved, so the four pairs involving
+`flat` are implications, named `*_sound` rather than `*_iff`. The obstacle is
+recorded at the end of `RevCompile.v`: `mrun c l a l' b` says *some* run reaches
+`l'`, not that `l'` is where the run first arrives, and since the code outside a
+fragment is arbitrary a run could pass through a fragment's exit and come back.
+Closing it needs a confinement lemma (compiled fragments only target labels
+inside themselves), a step-counted run relation whose count includes nested
+calls, and a first-arrival splitting lemma. None of that is needed for
+soundness.
+
+> **A module-system note that mattered.** Applying the `RevLang` functor twice
+> yields two *distinct* inductive types, so as long as `RevSmallStep`,
+> `RevDenote` and `RevFix` each said `Module L := RevLang P` their semantics were
+> about different languages and no cross-file agreement was even *statable*. The
+> instantiations are now chained — `RevSmallStep` → `RevDenote` → `RevFix` →
+> `RevCompile` — and `RevSemantics.v` projects all five out of that one chain.
+
 ## Their parametric Janus is one of our instances (`RevPPR.v`)
 
 Paolini et al. abstract Janus over two records (`params`, `sem_params`) whose
@@ -582,6 +640,9 @@ core results) on each build.
 | **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
 | **The exit assertion is the dagger of the entry test** | `if_is_test_sum` | `RevCtrl.v` | none |
 | Reversibility from PInj structure alone | `denote_reversible_structural` | `RevCtrl.v` | none |
+| **Five semantics of one language; all six pairs among big-step / small-step / denotational / inverse-execution** | `all_agree4`, `big_small_iff`, `big_den_iff`, `big_inv_iff`, `small_den_iff`, `small_inv_iff`, `den_inv_iff` | `RevSemantics.v` | none |
+| Compiler-mediated semantics: the compiled code loses no behaviour | `crun_sound`, `big_flat_sound` | `RevCompile.v`, `RevSemantics.v` | none |
+| Reversibility transports to the small-step, denotational and inverse semantics | `small_injective`, `den_injective`, `inv_injective` | `RevSemantics.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |
