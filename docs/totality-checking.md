@@ -242,9 +242,9 @@ IC3 が断念）。`fib.ja` は不変量が2本＝ERR だけでなく **BOUND �
 - **非停止は表明破れではない。** ループが止まらないプログラムは ERR に到達しないので
   「proved」になりうる。全域性は「表明が破れない」であって「停止する」ではない。
   停止性は別テーマ（`~/dev/CLAUDE.md` の TRS ツール群、KoAT2/AProVE/CeTA）。
-- **モデルと解釈器の一致は差分テストで担保**している（`tests/verify/test_smv_nuxmv.py`）が、
-  翻訳の健全性そのものは機械証明されていない。`coq/RevLowerExpr.v` / `RevLowerStmt.v` が
-  vjanus の lowering についてやったことを、この翻訳についてもやるのが筋。
+- **符号化の健全性は、制御フローと ERR については機械証明した**（§8）。ただし
+  **式の扱い（床除算・二ソート・別名）と large-block は未証明**で、そこは差分テスト
+  （`tests/verify/test_smv_nuxmv.py`）に依存している。
 
 ## 7. 次の一手
 
@@ -259,3 +259,63 @@ IC3 が断念）。`fib.ja` は不変量が2本＝ERR だけでなく **BOUND �
    ひとつの体系をなす。対象は `PyJanus2PISA` の peephole と regalloc の translation validation。
 3. **BMC への退避**。IC3 がタイムアウトした場合に `check_invar_bmc` で「深さ k までは
    破れない」を得る。SAT 側の証明ログ（DRAT）まで取れば下界側の主張が認証つきになる。
+
+## 8. 符号化の機械検証（`coq/RevError.v`）
+
+検査器は「ERR に到達しない」を証明して「表明が破れない」と結論する。この推論が正しい
+ためには **表明破れがあれば必ず ERR に到達する**（＝モデルが見落とさない）ことが要る。
+これを Rocq で証明した。
+
+### 8.1 前提として足りていなかったもの
+
+`RevCore.exec` は部分関係なので、**「表明破れ」と「発散」を区別できない**。どちらも
+`exec s a b` が成り立たないだけである。したがって検査器が依拠する主張は、そのままでは
+**記述すらできなかった**。そこで `execE : stmt -> state -> outcome` を導入した
+（`outcome = Ok state | Err`）。
+
+- `execE_ok_iff : exec s a b <-> execE s a (Ok b)` — 成功については既存意味論と一致。
+  つまり `execE` は `exec` に失敗を足しただけで、余計なことをしていない。
+- `ok_not_err : exec s a b -> ~ execE s a Err` — 成功と失敗は排他。
+
+### 8.2 ERR は「行き詰まり」である
+
+`smv.py` が明示的な ERR 辺を持つのは **SMV が全域な遷移関係を要求するから**である
+（`_render` のコメント「halt: every location must be total」がそれ）。Rocq では
+「どの規則も適用できない」を直接書けるので、対応するのは**断片内での行き詰まり**:
+
+```coq
+stuck c l a  := forall m x, ~ mstep G c l a m x
+mfail c base sz a := exists l x, base <= l < base + sz /\ mrun G c base a l x /\ stuck c l x
+```
+
+`l < base + sz` が**厳密に内側**であることが要点で、出口ラベルへの到達は失敗ではない。
+
+### 8.3 証明した定理
+
+```coq
+fail_sound : execE s a Err -> holds c base (comp s base) -> mfail c base (csize s) a
+no_stuck_no_error : ~ mfail (entry_code s) 0 (csize s) a -> ~ execE s a Err
+```
+
+後者が検査器の使う形である: **コンパイル後のコードが断片内で行き詰まらないなら、
+表明は破れない**。`INVARSPEC pc != ERR` の証明からの結論が正当化される。
+
+`Call`/`Uncall` の場合が非自明で、「呼び先が失敗するなら呼び出し命令には遷移が無い」を
+言うために `crun_complete`（コンパイラ完全性）と `ok_not_err` を使う。完全性を先に
+証明しておいたことがここで効いている。
+
+### 8.4 射程（正直に）
+
+- framework の `prim`/`guard` は**抽象**なので、`smv.py` の式レベルの罠（§3.1 床除算、
+  §3.2 二ソート、§3.3 別名）は**この層では扱えない**。それらは Janus の具体的な式に対して
+  `coq/RevLowerExpr.v` / `RevLowerStmt.v` で形式化されている（`floor_division_agrees`、
+  `wf`、`wf_asn_xor`）が、`smv.py` の実装と結線されてはいない。
+- `smv.py` は **large-block 符号化**（直線部を1遷移に畳む）だが、`comp` は1命令1ラベル。
+  両者が同じ関係を定めることは**未証明**。§5.4 のとおり large-block が決定率を左右した
+  ので、ここは次に埋めるべき穴である。
+- 逆向き（行き詰まるなら表明破れがある＝誤検出しない）も未証明。検査器の主張には
+  不要（誤検出は反例を実行すれば分かる）だが、あれば完全な対応になる。
+
+証明は 5つの `REV_PRIM` 実例すべてに落ちる。`audit.sh` は `RevExt.ExtPrim`
+（**配列と `local`/`delocal` を持つ Janus**）での実例を検査しており、
+`functional_extensionality` のみで PASS する。

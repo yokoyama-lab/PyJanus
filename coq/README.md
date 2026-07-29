@@ -582,6 +582,41 @@ smaller statement.
 > instantiations are now chained — `RevSmallStep` → `RevDenote` → `RevFix` →
 > `RevCompile` — and `RevSemantics.v` projects all five out of that one chain.
 
+## What the totality checker rests on (`RevError.v`)
+
+`jana_py/smv.py` compiles a Janus program to a transition system whose ERR
+location is reached when a runtime assertion fails, and the checker
+(`docs/totality-checking.md`) proves ERR unreachable. For that conclusion to be
+warranted, a source assertion failure must *always* reach ERR — otherwise a proof
+of `INVARSPEC pc != ERR` is a lie. Two things were in the way:
+
+- **the source had no notion of failure.** `exec` is a partial relation, so a
+  program that fails an assertion and one that diverges are both simply outside
+  it; the statement the checker needs was not expressible. `execE` adds the
+  outcome `Err` and propagates it, with `execE_ok_iff` (agrees with `exec` on
+  success, so nothing else was smuggled in) and `ok_not_err` (success and failure
+  are exclusive);
+- **the machine had no ERR label.** It does not need one: `smv.py` emits explicit
+  ERR edges only because SMV requires a total transition relation — its own
+  comment says "halt: every location must be total" — whereas in Rocq "no rule
+  applies" is directly expressible. The corresponding notion is getting **stuck
+  strictly inside the fragment** (`stuck`, `mfail`); reaching the exit label is
+  not a failure.
+
+`fail_sound` proves source failure implies machine stuckness, and
+`no_stuck_no_error` is the contrapositive the checker uses. The `Call`/`Uncall`
+case is the interesting one: to know a call instruction has *no* step when the
+callee fails, it needs `crun_complete` (compiler completeness) together with
+`ok_not_err` — the completeness proof pays for itself here.
+
+Not covered, and stated in `docs/totality-checking.md` §8.4: the framework's
+primitives and guards are abstract, so `smv.py`'s *expression*-level traps (floor
+division, two-sorted expressions, aliasing) live in `RevLowerExpr.v` /
+`RevLowerStmt.v` and are not wired to the Python; `smv.py`'s **large-block**
+encoding (straight-line code merged into one transition) is not proved equivalent
+to `comp`'s one-instruction-per-label layout; and the converse of `fail_sound`
+(stuck implies a real failure, i.e. no false alarms) is open.
+
 ## Their parametric Janus is one of our instances (`RevPPR.v`)
 
 Paolini et al. abstract Janus over two records (`params`, `sem_params`) whose
@@ -655,6 +690,8 @@ core results) on each build.
 | **Five semantics of one language, and all ten pairs agree** | `all_agree` (+ the ten `*_iff`s) | `RevSemantics.v` | none |
 | **Compiler correctness both ways**: the compiled code loses no behaviour and invents none | `crun_iff` (`crun_sound` / `crun_complete`) | `RevCompile.v` | none |
 | Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
+| **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |
+| **The totality checker's encoding is sound**: a source assertion failure makes the compiled code get stuck inside the fragment | `fail_sound`, `no_stuck_no_error` | `RevError.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |
