@@ -28,11 +28,20 @@ jobs:
           eval "$(opam env)"
           bash coq/audit.sh
 
-      - name: Build vjanus + conformance vs PyJanus
-        # The standalone verified interpreter (own OCaml parser + extracted run)
-        # must agree with PyJanus on the whole jana2014 corpus.
+      - name: Every extracted interpreter must agree with PyJanus
+        # Four independent interpreters are extracted from the Rocq development
+        # (three evaluation cores plus the standalone vjanus with its own OCaml
+        # parser); each must produce PyJanus's final store on every test program.
+        # tests/conftest.py builds whatever a test needs, so this is just pytest;
+        # build.sh is still run first because it also executes frame_smoke.
         run: |
           eval "$(opam env)"
           bash coq/vjanus/build.sh
           python3 -m pip install -e ".[dev]"
-          python3 -m pytest tests/jana2014/test_vjanus_corpus.py -q
+          python3 -m pytest -q \
+            tests/jana2014/test_verified_corpus.py \
+            tests/jana2014/test_verified_cores_corpus.py \
+            tests/jana2014/test_vjanus_corpus.py \
+            tests/jana2014/test_vjanus_errors.py \
+            tests/jana2014/test_vjanus_inverse.py \
+            tests/jana2014/test_vjanus_features.py

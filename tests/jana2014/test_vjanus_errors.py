@@ -15,11 +15,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 VJANUS = ROOT / "coq" / "vjanus" / "vjanus"
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_vjanus(vjanus_binary):
+  """Build vjanus on demand (tests/conftest.py) and point the helpers at it."""
+  global VJANUS
+  VJANUS = vjanus_binary
+
 ERRORS = ROOT / "tests" / "jana2014" / "fixtures_errors"
 
 
-@pytest.mark.skipif(not VJANUS.exists(),
-                    reason="vjanus not built (run coq/vjanus/build.sh)")
 def test_self_referential_delocal_is_error() -> None:
     """Non-counter-idiom self-referential delocal must be rejected with exit 1."""
     result = subprocess.run(
@@ -36,8 +41,6 @@ def test_self_referential_delocal_is_error() -> None:
     )
 
 
-@pytest.mark.skipif(not VJANUS.exists(),
-                    reason="vjanus not built (run coq/vjanus/build.sh)")
 def test_binary_bitwise_operators_are_supported() -> None:
     """Binary bitwise operators (`^`/`&`/`|`) in expressions are lowered to the
     verified core's BXor/BAnd/BOr (Z.lxor/land/lor) and run directly -- they used

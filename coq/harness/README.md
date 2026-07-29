@@ -6,8 +6,17 @@ on `.ja` programs and checks its final store against the **PyJanus**
 implementation (`pyjanus -s`).
 
 ```
-./run.sh                       # build + test all fixtures/*.ja
+python3 -m pytest tests/jana2014/test_verified_corpus.py \
+                 tests/jana2014/test_verified_cores_corpus.py   # normal route
+./run.sh                       # build + test all fixtures/*.ja (standalone)
 ```
+
+**Prefer pytest.** `tests/conftest.py` extracts and compiles whichever driver a
+test needs, so the comparison runs as part of the ordinary test suite; `run.sh`
+is the standalone equivalent, kept because it is a readable script of exactly
+what the build does. The pytest route also covers every core over the *whole*
+corpus rather than the samples `run.sh` picks, and it exercises `driverp`, which
+`run.sh` builds and then never runs.
 
 `run.sh` (1) extracts `janus_verified.ml` (via `rocq compile RevExtract.v`),
 (2) compiles `driver.ml` against it, (3) runs `differential.py` over the
