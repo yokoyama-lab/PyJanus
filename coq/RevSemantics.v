@@ -24,13 +24,12 @@
     into indexed jumps and run the resulting code.  It is the only one of the
     five that never looks at the syntax tree.
 
-    **State of the agreement.**  Among (1)–(4) all **six** pairs are proved as
-    [iff]s.  For (5) the direction [big -> flat] is proved (the compiler loses no
-    behaviour) and **the converse is not yet proved**, so the four pairs
-    involving [flat] are currently implications and not equivalences.  What is
-    missing is stated precisely in [RevCompile.v]; it is a confinement plus
-    first-arrival argument about machine runs, not a gap in the compiler.  The
-    naming here keeps the distinction visible: [*_iff] versus [*_sound].
+    **State of the agreement.**  All **ten** pairs are proved as [iff]s.  The
+    compiler direction is the one that took work: soundness (the compiled code
+    loses no behaviour) is a straightforward induction, while completeness (the
+    machine invents nothing) needs the fragment-confinement and first-arrival
+    machinery of [RevCompile.v], because "the run reaches the exit label" does
+    not by itself pin the final state down.
 
     **Why all pairs and not just a spanning tree.**  Six [iff]s to [big] would
     imply the rest, but only to a reader who does the composition.  Every pair is
@@ -114,8 +113,7 @@ Proof.
   - exact (proj1 (big_den_iff s a b) (proj2 (big_inv_iff s a b) H)).
 Qed.
 
-(** All six at once.  Anything proved about one of the four transports to the
-    other three. *)
+(** All six at once; [all_agree] below adds the compiler and makes it ten. *)
 Definition agree4 (s : L.stmt) (a b : P.state) : Prop :=
   (big s a b <-> small s a b) /\ (big s a b <-> den s a b)
   /\ (big s a b <-> inv s a b) /\ (small s a b <-> den s a b)
@@ -142,45 +140,72 @@ Proof.
 Qed.
 
 (* ===================================================================== *)
-(** ** The four pairs involving the compiler.
+(** ** The four pairs involving the compiler. *)
 
-    One direction only, for now: everything the source does, the compiled code
-    does.  The converse — that the machine invents nothing — is the open half;
-    see the closing note of [RevCompile.v]. *)
+Theorem big_flat_iff : forall s a b, big s a b <-> flat s a b.
+Proof. intros s a b; apply Cp.crun_iff. Qed.
 
-Theorem big_flat_sound : forall s a b, big s a b -> flat s a b.
-Proof. intros s a b H; exact (Cp.crun_sound G s a b H). Qed.
-
-Theorem small_flat_sound : forall s a b, small s a b -> flat s a b.
+Theorem small_flat_iff : forall s a b, small s a b <-> flat s a b.
 Proof.
-  intros s a b H; exact (big_flat_sound s a b (proj2 (big_small_iff s a b) H)).
+  intros s a b; split; intro H.
+  - exact (proj1 (big_flat_iff s a b) (proj2 (big_small_iff s a b) H)).
+  - exact (proj1 (big_small_iff s a b) (proj2 (big_flat_iff s a b) H)).
 Qed.
 
-Theorem den_flat_sound : forall s a b, den s a b -> flat s a b.
+Theorem den_flat_iff : forall s a b, den s a b <-> flat s a b.
 Proof.
-  intros s a b H; exact (big_flat_sound s a b (proj2 (big_den_iff s a b) H)).
+  intros s a b; split; intro H.
+  - exact (proj1 (big_flat_iff s a b) (proj2 (big_den_iff s a b) H)).
+  - exact (proj1 (big_den_iff s a b) (proj2 (big_flat_iff s a b) H)).
 Qed.
 
-Theorem inv_flat_sound : forall s a b, inv s a b -> flat s a b.
+Theorem inv_flat_iff : forall s a b, inv s a b <-> flat s a b.
 Proof.
-  intros s a b H; exact (big_flat_sound s a b (proj2 (big_inv_iff s a b) H)).
+  intros s a b; split; intro H.
+  - exact (proj1 (big_flat_iff s a b) (proj2 (big_inv_iff s a b) H)).
+  - exact (proj1 (big_inv_iff s a b) (proj2 (big_flat_iff s a b) H)).
+Qed.
+
+(* ===================================================================== *)
+(** ** All ten pairs as one statement. *)
+
+Definition agree (s : L.stmt) (a b : P.state) : Prop :=
+  (big s a b <-> small s a b) /\ (big s a b <-> den s a b)
+  /\ (big s a b <-> inv s a b) /\ (big s a b <-> flat s a b)
+  /\ (small s a b <-> den s a b) /\ (small s a b <-> inv s a b)
+  /\ (small s a b <-> flat s a b) /\ (den s a b <-> inv s a b)
+  /\ (den s a b <-> flat s a b) /\ (inv s a b <-> flat s a b).
+
+Theorem all_agree : forall s a b, agree s a b.
+Proof.
+  intros s a b; unfold agree.
+  exact (conj (big_small_iff s a b)
+         (conj (big_den_iff s a b)
+          (conj (big_inv_iff s a b)
+           (conj (big_flat_iff s a b)
+            (conj (small_den_iff s a b)
+             (conj (small_inv_iff s a b)
+              (conj (small_flat_iff s a b)
+               (conj (den_inv_iff s a b)
+                (conj (den_flat_iff s a b) (inv_flat_iff s a b)))))))))).
 Qed.
 
 (** The compiled code of the *inverted* program runs a source execution
-    backwards — the correctness statement of a compiled inverse interpreter,
-    which is the composition of the pair (4) with the compiler direction. *)
-Theorem flat_inverse_sound : forall s a b, big s a b -> flat (L.invert s) b a.
+    backwards, in both directions: the correctness statement of a compiled
+    inverse interpreter. *)
+Theorem flat_inverse_iff : forall s a b, flat (L.invert s) b a <-> big s a b.
 Proof.
-  intros s a b H.
-  exact (big_flat_sound (L.invert s) b a (proj1 (big_inv_iff s a b) H)).
+  intros s a b; split; intro H.
+  - exact (proj2 (big_inv_iff s a b) (proj2 (big_flat_iff (L.invert s) b a) H)).
+  - exact (proj1 (big_flat_iff (L.invert s) b a) (proj1 (big_inv_iff s a b) H)).
 Qed.
 
 (* ===================================================================== *)
 (** ** What transports.
 
     Reversibility was proved once, on [big]; through the pairs it is a property
-    of the small-step, denotational and inverse semantics as well, none of which
-    was proved reversible directly. *)
+    of all five, including the compiled code and the inverse interpreter, neither
+    of which was proved reversible directly. *)
 
 Theorem small_injective : forall s a a' b, small s a b -> small s a' b -> a = a'.
 Proof.
@@ -206,6 +231,14 @@ Proof.
     | exact (proj2 (big_inv_iff s a' b) H2) ].
 Qed.
 
+Theorem flat_injective : forall s a a' b, flat s a b -> flat s a' b -> a = a'.
+Proof.
+  intros s a a' b H1 H2.
+  eapply L.exec_injective;
+    [ exact (proj2 (big_flat_iff s a b) H1)
+    | exact (proj2 (big_flat_iff s a' b) H2) ].
+Qed.
+
 Theorem small_det : forall s a b b', small s a b -> small s a b' -> b = b'.
 Proof.
   intros s a b b' H1 H2.
@@ -220,6 +253,14 @@ Proof.
   eapply L.exec_det;
     [ exact (proj2 (big_den_iff s a b) H1)
     | exact (proj2 (big_den_iff s a b') H2) ].
+Qed.
+
+Theorem flat_det : forall s a b b', flat s a b -> flat s a b' -> b = b'.
+Proof.
+  intros s a b b' H1 H2.
+  eapply L.exec_det;
+    [ exact (proj2 (big_flat_iff s a b) H1)
+    | exact (proj2 (big_flat_iff s a b') H2) ].
 Qed.
 
 End WithEnv.
