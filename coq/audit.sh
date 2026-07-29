@@ -21,8 +21,8 @@ cleanup() { rm -f "$AUDIT" "$BASE.vo" "$BASE.glob" ".$BASE.aux"; }
 trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
-Require Import Janus RevCore RevExtract RevInvert RevStack RevCA RevSmallStep
-               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevPPR RevBennett.
+Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -36,6 +36,7 @@ Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
 Module JnS := RevJoin.FixJoin RevStack.StackPrim.
 Module SemS := RevSemantics.Semantics RevStack.StackPrim.
+Module ErrE := RevError.ErrSem RevExt.ExtPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
@@ -145,6 +146,11 @@ Print Assumptions SemS.all_agree.
 Print Assumptions SemS.flat_inverse_iff.
 Print Assumptions SemS.small_injective.
 Print Assumptions SemS.flat_injective.
+(* assertion failure as an outcome, and the compiled ERR location *)
+Print Assumptions ErrE.execE_ok_iff.
+Print Assumptions ErrE.ok_not_err.
+Print Assumptions ErrE.fail_sound.
+Print Assumptions ErrE.no_stuck_no_error.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
@@ -221,7 +227,7 @@ Print Assumptions RevExtractSMod.Run8.run_sound.
 Print Assumptions RevExtractSMod.Run8.run_injective.
 EOF
 
-OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"
+OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1 || true)"
 echo "$OUT"
 
 # 3. Verdict.  Print Assumptions lists each axiom's name at column 0 as
