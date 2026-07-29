@@ -27,9 +27,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 VJANUS = ROOT / "coq" / "vjanus" / "vjanus"
 
-pytestmark = pytest.mark.skipif(
-    not VJANUS.exists(), reason="vjanus not built (run coq/vjanus/build.sh)"
-)
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_vjanus(vjanus_binary):
+  """Build vjanus on demand (tests/conftest.py) and point the helpers at it."""
+  global VJANUS
+  VJANUS = vjanus_binary
+
+
 
 
 def _run_vjanus(src: str) -> subprocess.CompletedProcess[str]:

@@ -33,6 +33,13 @@ from jana_py.validate import validate_program
 
 ROOT = Path(__file__).resolve().parents[2]
 VJANUS = ROOT / "coq" / "vjanus" / "vjanus"
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_vjanus(vjanus_binary):
+  """Build vjanus on demand (tests/conftest.py) and point the helpers at it."""
+  global VJANUS
+  VJANUS = vjanus_binary
+
 PROGRAMS = sorted(
     glob.glob(str(ROOT / "tests" / "jana2014" / "fixtures" / "examples" / "*.ja"))
     + glob.glob(str(ROOT / "coq" / "harness" / "fixtures" / "*.ja"))
@@ -47,8 +54,6 @@ def _forward_store(program) -> dict:
   return {k: copy.deepcopy(c.value) for k, c in rt._root_frame.vars.items()}
 
 
-@pytest.mark.skipif(not VJANUS.exists(),
-                    reason="vjanus not built (run coq/vjanus/build.sh)")
 @pytest.mark.parametrize("ja", PROGRAMS, ids=lambda p: Path(p).name)
 def test_vjanus_inverse_matches_pyjanus(ja: str) -> None:
   try:

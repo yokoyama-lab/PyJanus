@@ -332,6 +332,13 @@ rocq compile RevExtractAr.v      # -> janus_arr.ml/.mli    (array core)
 ./harness/run.sh                 # differential-tests the extracted cores vs PyJanus
 ```
 
+**You normally do not need any of this**: `tests/conftest.py` builds whatever an
+extraction-dependent test requires, so `python3 -m pytest tests/` alone runs the
+whole comparison against PyJanus. It skips only when `rocq`/`ocamlc` are genuinely
+absent (or `PYJANUS_SKIP_VERIFIED=1` is set) and *fails* when they are present but
+the build does not work — a green run with everything silently skipped was how the
+comparison used to stop happening without anyone noticing.
+
 Extraction reads the `.vo` files, so it fails with the message above whenever
 they are stale — rebuild first.  `build.sh` only extracts when `janus_frame.ml`
 is missing, so delete it to force a fresh extraction.
