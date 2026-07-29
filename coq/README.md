@@ -309,6 +309,33 @@ development and runs `Print Assumptions` on every headline theorem, failing on a
 axiom beyond `functional_extensionality` or any `Admitted`; it is wired into CI
 (`.github/workflows/coq.yml`), alongside the Python test workflow.
 
+`.vo` files are build products (gitignored) and are only valid for the exact
+toolchain that produced them, so after `rocq` itself is upgraded or rebuilt a
+compile fails with either
+
+```
+The file .../RevFrame.vo was compiled with OCaml 5.4.1
+while this instance of Rocq was compiled with OCaml 5.3.0.
+```
+
+or `inconsistent assumptions over library Corelib.Init.Prelude`.  Both mean the
+same thing and have the same fix: `make clean && make`.  If `make` then asks for
+a `rocqworker` under a path that no longer exists, the stale dependency file is
+to blame — `rm -f .Makefile.d` and regenerate the Makefile.
+
+### Extracting the OCaml interpreters
+
+```bash
+rocq compile RevExtractFrame.v   # -> janus_frame.ml/.mli  (frame-stacked core)
+rocq compile RevExtractAr.v      # -> janus_arr.ml/.mli    (array core)
+./vjanus/build.sh                # extracts if needed, then builds coq/vjanus/vjanus
+./harness/run.sh                 # differential-tests the extracted cores vs PyJanus
+```
+
+Extraction reads the `.vo` files, so it fails with the message above whenever
+they are stale — rebuild first.  `build.sh` only extracts when `janus_frame.ml`
+is missing, so delete it to force a fresh extraction.
+
 ## Trust / axioms
 
 ```coq
