@@ -20,6 +20,8 @@ RevSMC.v
 RevTraced.v
 RevCtrl.v
 RevJoin.v
+RevCompile.v
+RevSemantics.v
 RevPPR.v
 RevBennett.v
 RevProc.v

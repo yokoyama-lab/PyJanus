@@ -36,11 +36,17 @@
     axiom-free. *)
 
 From Stdlib Require Import Bool Setoid.
-Require Import RevCore RevAlgebra.
+Require Import RevCore RevAlgebra RevSmallStep.
 
 Module Denote (P : REV_PRIM).
 Import P.
-Module L := RevLang P.
+(* The language instance is taken from [RevSmallStep] rather than built afresh:
+   applying the [RevLang] functor twice yields two *distinct* inductive types, so
+   two files that each say [Module L := RevLang P] cannot even state that their
+   semantics agree.  Chaining the instantiations makes [RevSemantics.v] possible.
+   Nothing below changes -- [L] still denotes the same language. *)
+Module SSx := RevSmallStep.SmallStep P.
+Module L := SSx.L.
 
 (* ===================================================================== *)
 (** ** Congruence (extensionality) of the combinators in their relations. *)
