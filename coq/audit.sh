@@ -137,9 +137,14 @@ Print Assumptions SemS.small_inv_iff.
 Print Assumptions SemS.den_inv_iff.
 Print Assumptions SemS.all_agree4.
 Print Assumptions SemS.big_fix_iff.
-Print Assumptions SemS.big_flat_sound.
-Print Assumptions SemS.flat_inverse_sound.
+Print Assumptions SemS.big_flat_iff.
+Print Assumptions SemS.small_flat_iff.
+Print Assumptions SemS.den_flat_iff.
+Print Assumptions SemS.inv_flat_iff.
+Print Assumptions SemS.all_agree.
+Print Assumptions SemS.flat_inverse_iff.
 Print Assumptions SemS.small_injective.
+Print Assumptions SemS.flat_injective.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.

@@ -545,23 +545,35 @@ label arithmetic. Instructions carry their successor label explicitly, so
 *compiled* body, which is what a compiler plus a linker gives and avoids
 modelling a return stack.
 
-**All six pairs among (1)–(4) are proved as `iff`s** (`all_agree4`), so anything
-established about one transports to the other three — `small_injective`,
-`den_injective` and `inv_injective` are reversibility arriving in three
-semantics that were never proved reversible directly. `RevFix`'s closed
-least-fixed-point denotation is a further description of the same relation
-(`big_fix_iff`).
+**All ten pairs are proved as `iff`s** (`all_agree`), so anything established
+about one transports to the other four — `small_injective`, `den_injective`,
+`inv_injective` and `flat_injective` are reversibility arriving in four semantics
+that were never proved reversible directly. `RevFix`'s closed least-fixed-point
+denotation is a further description of the same relation (`big_fix_iff`).
 
-**For (5) only one direction is proved**: `big_flat_sound` — the compiled code
-loses no behaviour. The converse is not yet proved, so the four pairs involving
-`flat` are implications, named `*_sound` rather than `*_iff`. The obstacle is
-recorded at the end of `RevCompile.v`: `mrun c l a l' b` says *some* run reaches
-`l'`, not that `l'` is where the run first arrives, and since the code outside a
-fragment is arbitrary a run could pass through a fragment's exit and come back.
-Closing it needs a confinement lemma (compiled fragments only target labels
-inside themselves), a step-counted run relation whose count includes nested
-calls, and a first-arrival splitting lemma. None of that is needed for
-soundness.
+The compiler pair is the one that took work. Soundness (`crun_sound`) is a
+straightforward mutual induction on `exec`/`lp` given a framing predicate that
+reads a fragment out of a larger code. Completeness (`crun_complete`) is harder,
+because `mrun c l a l' b` says *some* run reaches `l'`, not that `l'` is where the
+run first arrives — and the code outside a fragment is arbitrary, so a run could
+pass through a fragment's exit, wander off and come back in a different state.
+Three things close it:
+
+- the entry layout ends in `IHalt` (`entry_halt`), so at the top level and at
+  every procedure's exit no step is possible and "reaches the exit" does pin the
+  final state down;
+- `comp_within` / `confined`: every instruction of `comp s base` targets a label
+  in `base .. base + csize s`, so a run entering a fragment stays inside until it
+  leaves through the top (proved with `Forall` over the emitted list, which makes
+  the induction on the statement routine);
+- `run_split`: a run leaving a confined region is cut at its **first** exit, and
+  the induction statement hands the leftover run back to the caller rather than
+  asserting anything about first arrivals.
+
+The step count includes nested calls (`N_Call` costs `S n`), which is what lets
+the `Call` case appeal to the induction hypothesis at all; `Seq` is the only case
+that recurses at the same count, and there the recursion is on a structurally
+smaller statement.
 
 > **A module-system note that mattered.** Applying the `RevLang` functor twice
 > yields two *distinct* inductive types, so as long as `RevSmallStep`,
@@ -640,9 +652,9 @@ core results) on each build.
 | **The Janus loop *is* a trace** | `loop_is_trace` | `RevTrace.v` | none |
 | **The exit assertion is the dagger of the entry test** | `if_is_test_sum` | `RevCtrl.v` | none |
 | Reversibility from PInj structure alone | `denote_reversible_structural` | `RevCtrl.v` | none |
-| **Five semantics of one language; all six pairs among big-step / small-step / denotational / inverse-execution** | `all_agree4`, `big_small_iff`, `big_den_iff`, `big_inv_iff`, `small_den_iff`, `small_inv_iff`, `den_inv_iff` | `RevSemantics.v` | none |
-| Compiler-mediated semantics: the compiled code loses no behaviour | `crun_sound`, `big_flat_sound` | `RevCompile.v`, `RevSemantics.v` | none |
-| Reversibility transports to the small-step, denotational and inverse semantics | `small_injective`, `den_injective`, `inv_injective` | `RevSemantics.v` | none |
+| **Five semantics of one language, and all ten pairs agree** | `all_agree` (+ the ten `*_iff`s) | `RevSemantics.v` | none |
+| **Compiler correctness both ways**: the compiled code loses no behaviour and invents none | `crun_iff` (`crun_sound` / `crun_complete`) | `RevCompile.v` | none |
+| Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |
