@@ -603,19 +603,38 @@ of `INVARSPEC pc != ERR` is a lie. Two things were in the way:
   strictly inside the fragment** (`stuck`, `mfail`); reaching the exit label is
   not a failure.
 
-`fail_sound` proves source failure implies machine stuckness, and
-`no_stuck_no_error` is the contrapositive the checker uses. The `Call`/`Uncall`
-case is the interesting one: to know a call instruction has *no* step when the
-callee fails, it needs `crun_complete` (compiler completeness) together with
-`ok_not_err` — the completeness proof pays for itself here.
+The correspondence is an **iff**: `fail_iff : execE s a Err <-> failsP s a`, so
+the checker gets both halves — no missed failure (`fails_of_execE`) and no false
+alarm (`failsP_execE`).
+
+Getting there needed the right notion of machine failure. `stuck` ("no rule
+applies") conflates a callee that *fails* with one that *diverges*, because
+`M_Call` is a big-step instruction; with `stuck`, the converse is outright false.
+`localstuck` keeps only what is visible at the instruction — a check whose guard
+does not hold, or a primitive with nowhere to go, which is exhaustive since `INop`
+and `IBr` always step — and `failsP` propagates failure through calls
+inductively. That is also closer to `smv.py`, which inlines calls and so never had
+the conflation.
+
+The `Call`/`Uncall` case is the interesting one in both directions. Forwards, to
+know a call instruction has *no* step when the callee fails, it needs
+`crun_complete` (compiler completeness) together with `ok_not_err`. Backwards it
+needs `reach_bad`, a double induction whose statement is a **disjunction** — "the
+run either fails inside the fragment, or completes it and the bad point comes
+afterwards" — which is what removes any need to reason about *first* arrivals and
+lets a fragment re-entered by a loop back edge be handled by the step count going
+down.
 
 Not covered, and stated in `docs/totality-checking.md` §8.4: the framework's
 primitives and guards are abstract, so `smv.py`'s *expression*-level traps (floor
 division, two-sorted expressions, aliasing) live in `RevLowerExpr.v` /
-`RevLowerStmt.v` and are not wired to the Python; `smv.py`'s **large-block**
+`RevLowerStmt.v` and are not wired to the Python; and `smv.py`'s **large-block**
 encoding (straight-line code merged into one transition) is not proved equivalent
-to `comp`'s one-instruction-per-label layout; and the converse of `fail_sound`
-(stuck implies a real failure, i.e. no false alarms) is open.
+to `comp`'s one-instruction-per-label layout. That last one cannot be done at this
+layer at all: what could go wrong in a large-block encoding is the *composition
+order* of the accumulated updates and the state a path condition is evaluated in,
+and neither is expressible when `prim` and `guard` are abstract. It belongs over
+the concrete expressions of `RevLowerStmt.v`.
 
 ## Their parametric Janus is one of our instances (`RevPPR.v`)
 
@@ -691,7 +710,7 @@ core results) on each build.
 | **Compiler correctness both ways**: the compiled code loses no behaviour and invents none | `crun_iff` (`crun_sound` / `crun_complete`) | `RevCompile.v` | none |
 | Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
 | **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |
-| **The totality checker's encoding is sound**: a source assertion failure makes the compiled code get stuck inside the fragment | `fail_sound`, `no_stuck_no_error` | `RevError.v` | none |
+| **The totality checker's encoding is exactly right**: the compiled program fails iff the source fails an assertion | `fail_iff` (`fails_of_execE` / `failsP_execE`) | `RevError.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |

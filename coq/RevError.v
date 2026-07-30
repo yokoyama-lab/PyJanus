@@ -23,22 +23,25 @@
       - [exec_execE] / [execE_exec] — the two semantics agree on success, so
         [execE] really is [exec] plus failure and nothing else;
       - [ok_not_err] — success and failure are exclusive;
-      - [fail_sound] — **a source failure makes the compiled code get stuck
-        inside the fragment**.  This is the direction the checker's claim rests
-        on: it is what rules out a failure the model does not see, i.e. a proof
-        of [ERR]-unreachability that is a lie.  "Failure" covers both a guard
-        that does not hold and a *primitive with nowhere to go* ([X_PrimErr]):
-        [pstep] is not required to be total, and that is exactly how [smv.py]
-        treats `x *= 0`, `x /= 0`, an inexact `/=` and division by zero.
+      - [fail_iff] — **the compiled program fails exactly when the source fails
+        an assertion**, so a proof of [ERR]-unreachability really does mean "no
+        assertion can fail": no missed failure ([fails_of_execE]) and no false
+        alarm ([failsP_execE]).  "Failure" covers both a guard that does not hold
+        and a *primitive with nowhere to go* ([X_PrimErr]): [pstep] is not
+        required to be total, and that is exactly how [smv.py] treats `x *= 0`,
+        `x /= 0`, an inexact `/=` and division by zero.
 
     Scope, honestly.  The framework's primitives and guards are abstract, so the
     *expression-level* traps of [smv.py] (floor division, two-sorted
     expressions, aliasing) are out of reach here; those are formalized against
     Janus's concrete expressions in [RevLowerExpr.v]/[RevLowerStmt.v].  And
     [smv.py] emits a **large-block** encoding, merging straight-line runs into a
-    single transition, whereas [comp] emits one instruction per label; that
-    those two describe the same relation is not proved here.  What is aligned is
-    the control-flow skeleton and the meaning of ERR. *)
+    single transition, whereas [comp] emits one instruction per label; that those
+    two describe the same relation is not proved here, and cannot be at this
+    layer: what could go wrong in a large-block encoding is the composition order
+    of the accumulated updates and the state a path condition is evaluated in,
+    neither of which is expressible while [prim] and [guard] are abstract.  What
+    is aligned is the control-flow skeleton and the meaning of ERR. *)
 
 From Stdlib Require Import List Bool Arith Lia.
 Import ListNotations.
@@ -246,6 +249,68 @@ Proof.
   destruct Hsc as [_ [_ [_ Hg]]]; congruence.
 Qed.
 
+(** *** Stuck for a *local* reason.
+
+    [stuck] is "no rule applies", which at a call instruction conflates a callee
+    that fails with one that diverges.  [localstuck] is the part that is visible
+    at the instruction itself: a check whose guard does not hold, or a primitive
+    with nowhere to go.  [INop] and [IBr] are never locally stuck ([gtest] is a
+    function), so those are the only two ways. *)
+
+Definition localstuck (c : Cp.code) (l : nat) (a : P.state) : Prop :=
+  (exists g v nxt, Cp.get c l = Cp.IChk g v nxt /\ P.gtest g a <> v)
+  \/ (exists p nxt, Cp.get c l = Cp.IPrim p nxt /\ forall b, ~ P.pstep p a b).
+
+(** The machine-only notion of failure: the run reaches a label strictly inside
+    the program whose instruction is locally stuck, or a call whose callee fails.
+    Nothing here mentions the source — this is what a model checker observes. *)
+Inductive failsP : stmt -> P.state -> Prop :=
+| FP_local : forall s a l x,
+    Cp.mrun G (Cp.entry_code s) 0 a l x -> l < Cp.csize s ->
+    localstuck (Cp.entry_code s) l x -> failsP s a
+| FP_call : forall s a l x p nxt,
+    Cp.mrun G (Cp.entry_code s) 0 a l x -> l < Cp.csize s ->
+    Cp.get (Cp.entry_code s) l = Cp.ICall p nxt -> failsP (G p) x -> failsP s a
+| FP_uncall : forall s a l x p nxt,
+    Cp.mrun G (Cp.entry_code s) 0 a l x -> l < Cp.csize s ->
+    Cp.get (Cp.entry_code s) l = Cp.IUncall p nxt ->
+    failsP (invert (G p)) x -> failsP s a.
+
+(** The same, relative to a fragment placed at [base] in a larger code. *)
+Definition badpointP (c : Cp.code) (l : nat) (a : P.state) : Prop :=
+  localstuck c l a
+  \/ (exists p nxt, Cp.get c l = Cp.ICall p nxt /\ failsP (G p) a)
+  \/ (exists p nxt, Cp.get c l = Cp.IUncall p nxt /\ failsP (invert (G p)) a).
+
+Definition failsAtP (c : Cp.code) (start lo sz : nat) (a : P.state) : Prop :=
+  exists l x, lo <= l /\ l < lo + sz /\ Cp.mrun G c start a l x /\ badpointP c l x.
+
+Lemma failsAtP_top : forall s a,
+  failsAtP (Cp.entry_code s) 0 0 (Cp.csize s) a -> failsP s a.
+Proof.
+  intros s a [l [x [_ [Hb [Hr Hbp]]]]].
+  destruct Hbp as [Hls | [[p [nxt [Hi Hf]]] | [p [nxt [Hi Hf]]]]].
+  - eapply FP_local; [ exact Hr | lia | exact Hls ].
+  - eapply FP_call; [ exact Hr | lia | exact Hi | exact Hf ].
+  - eapply FP_uncall; [ exact Hr | lia | exact Hi | exact Hf ].
+Qed.
+
+Lemma failsAtP_widen : forall c start lo sz lo' sz' a,
+  lo <= lo' -> lo' + sz' <= lo + sz ->
+  failsAtP c start lo' sz' a -> failsAtP c start lo sz a.
+Proof.
+  intros c start lo sz lo' sz' a H1 H2 [l [x [Ha [Hb [Hr Hbp]]]]].
+  exists l, x; repeat split; try lia; assumption.
+Qed.
+
+Lemma failsAtP_prefix : forall c start mid lo sz a y,
+  Cp.mrun G c start a mid y -> failsAtP c mid lo sz y -> failsAtP c start lo sz a.
+Proof.
+  intros c start mid lo sz a y Hpre [l [x [Ha [Hb [Hr Hbp]]]]].
+  exists l, x; repeat split; try assumption.
+  eapply Cp.mrun_trans; eassumption.
+Qed.
+
 (** A primitive with nowhere to go has no step. *)
 Lemma stuck_prim : forall c l p nxt a,
   Cp.get c l = Cp.IPrim p nxt -> (forall b, ~ P.pstep p a b) -> stuck c l a.
@@ -293,13 +358,17 @@ Qed.
 
 Definition Pfail (s : stmt) (a : P.state) (o : outcome) : Prop :=
   o = Err -> forall c base,
-    Cp.holds c base (Cp.comp s base) -> mfail c base (Cp.csize s) a.
+    Cp.holds c base (Cp.comp s base) -> failsAtP c base base (Cp.csize s) a.
 
 Definition Qfail (g1 : P.guard) (s1 s2 : stmt) (g2 : P.guard)
                  (a : P.state) (o : outcome) : Prop :=
   o = Err -> forall c base,
     Cp.holds c base (Cp.comp (Loop g1 s1 s2 g2) base) ->
-    mfailf c (S base) base (Cp.csize (Loop g1 s1 s2 g2)) a.
+    failsAtP c (S base) base (Cp.csize (Loop g1 s1 s2 g2)) a.
+
+(** Witness builders, one per way of being a bad point. *)
+Ltac bad_chk H := left; left; do 3 eexists; split; [ exact H | ].
+Ltac bad_prim H := left; right; do 2 eexists; split; [ exact H | ].
 
 Lemma fail_sound : forall s a o, execE s a o -> Pfail s a o.
 Proof.
@@ -309,31 +378,36 @@ Proof.
     unfold Pfail, Qfail in *; intros Heq c base Hh; try discriminate.
   (* X_Seq with an error in the second half *)
   - apply Cp.holds_app in Hh as [Hh1 Hh2]; rewrite Cp.comp_length in Hh2.
-    eapply mfailf_widen; [ | | eapply mfailf_prefix ].
+    eapply failsAtP_widen; [ | | eapply failsAtP_prefix ].
     + instantiate (1 := base + Cp.csize s1). lia.
     + instantiate (1 := Cp.csize s2). simpl; lia.
     + apply (Cp.comp_sound G s1 a m (execE_ok_exec s1 a m H) c base Hh1).
     + apply (IHexecE2 Heq c (base + Cp.csize s1) Hh2).
   (* X_Loop with an error inside the iteration *)
   - assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [Hck [_ [_ [_ _]]]].
-    destruct (IHexecE Heq c base Hh) as [ll [xx [Ha [Hb [Hr Hst]]]]].
+    destruct (IHexecE Heq c base Hh) as [ll [xx [Ha [Hb [Hr Hbp]]]]].
     exists ll, xx; repeat split; try lia; try assumption.
     eapply Cp.MR_step; [ eapply Cp.M_Chk; [ exact Hck | exact e ] | exact Hr ].
   (* X_Call *)
   - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _]. subst o.
     exists base, a; repeat split; [ lia | simpl; lia | apply Cp.MR_refl | ].
-    eapply stuck_call; [ exact Hi | assumption ].
+    right; left; exists p, (S base); split; [ exact Hi | ].
+    apply failsAtP_top.
+    apply (IHexecE eq_refl (Cp.entry_code (G p)) 0 (Cp.holds_entry (G p))).
   (* X_Uncall *)
   - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _]. subst o.
     exists base, a; repeat split; [ lia | simpl; lia | apply Cp.MR_refl | ].
-    eapply stuck_uncall; [ exact Hi | assumption ].
+    right; right; exists p, (S base); split; [ exact Hi | ].
+    apply failsAtP_top.
+    apply (IHexecE eq_refl (Cp.entry_code (invert (G p))) 0
+             (Cp.holds_entry (invert (G p)))).
   (* X_SeqErr *)
   - apply Cp.holds_app in Hh as [Hh1 _].
-    eapply mfailf_widen; [ | | apply (IHexecE eq_refl c base Hh1) ];
+    eapply failsAtP_widen; [ | | apply (IHexecE eq_refl c base Hh1) ];
       [ lia | simpl; lia ].
   (* X_IfTBodyErr *)
   - apply Cp.holds_if in Hh as [Hbr [Hh1 [_ [_ _]]]].
-    destruct (IHexecE eq_refl c (S base) Hh1) as [ll [xx [Ha [Hb [Hr Hst]]]]].
+    destruct (IHexecE eq_refl c (S base) Hh1) as [ll [xx [Ha [Hb [Hr Hbp]]]]].
     exists ll, xx; repeat split; try (simpl; lia); try assumption.
     eapply Cp.MR_step; [ eapply Cp.M_BrT; [ exact Hbr | exact e ] | exact Hr ].
   (* X_IfTExitErr: the exit assertion fails *)
@@ -341,11 +415,11 @@ Proof.
     exists (S base + Cp.csize s1), b; repeat split; try (simpl; lia).
     + eapply Cp.MR_step; [ eapply Cp.M_BrT; [ exact Hbr | exact e ] | ].
       apply (Cp.comp_sound G s1 a b (execE_ok_exec s1 a b H) c (S base) Hh1).
-    + eapply stuck_chk; [ exact Hck1 | rewrite e0; discriminate ].
+    + bad_chk Hck1. rewrite e0; discriminate.
   (* X_IfFBodyErr *)
   - apply Cp.holds_if in Hh as [Hbr [_ [_ [Hh2 _]]]].
     destruct (IHexecE eq_refl c (S base + Cp.csize s1 + 1) Hh2)
-      as [ll [xx [Ha [Hb [Hr Hst]]]]].
+      as [ll [xx [Ha [Hb [Hr Hbp]]]]].
     exists ll, xx; repeat split; try (simpl; lia); try assumption.
     eapply Cp.MR_step; [ eapply Cp.M_BrF; [ exact Hbr | exact e ] | exact Hr ].
   (* X_IfFExitErr *)
@@ -354,20 +428,20 @@ Proof.
     + eapply Cp.MR_step; [ eapply Cp.M_BrF; [ exact Hbr | exact e ] | ].
       apply (Cp.comp_sound G s2 a b (execE_ok_exec s2 a b H) c
                (S base + Cp.csize s1 + 1) Hh2).
-    + eapply stuck_chk; [ exact Hck2 | rewrite e0; discriminate ].
+    + bad_chk Hck2. rewrite e0; discriminate.
   (* X_LoopEntryErr: the entry assertion fails *)
   - apply Cp.holds_loop in Hh as [Hck [_ [_ [_ _]]]].
     exists base, a; repeat split; try (simpl; lia).
     + apply Cp.MR_refl.
-    + eapply stuck_chk; [ exact Hck | rewrite e; discriminate ].
+    + bad_chk Hck. rewrite e; discriminate.
   (* X_PrimErr: the primitive has nowhere to go *)
   - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
     exists base, a; repeat split; try (simpl; lia).
     + apply Cp.MR_refl.
-    + eapply stuck_prim; [ exact Hi | exact n ].
-  (* LE_more with an error further round *)
+    + bad_prim Hi. exact n.
+  (* LE_more with an error a further round in *)
   - assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [_ [Hh1 [Hbr [Hh2 Hck]]]].
-    destruct (IHexecE3 Heq c base Hh) as [ll [xx [Ha [Hb [Hr Hst]]]]].
+    destruct (IHexecE3 Heq c base Hh) as [ll [xx [Ha [Hb [Hr Hbp]]]]].
     exists ll, xx; repeat split; try lia; try assumption.
     eapply Cp.mrun_trans;
       [ apply (Cp.comp_sound G s1 a a1 (execE_ok_exec s1 a a1 H) c (S base) Hh1) | ].
@@ -378,12 +452,12 @@ Proof.
     eapply Cp.MR_step; [ eapply Cp.M_Chk; [ exact Hck | exact e0 ] | exact Hr ].
   (* LE_doErr *)
   - apply Cp.holds_loop in Hh as [_ [Hh1 [_ [_ _]]]].
-    eapply mfailf_widen; [ | | apply (IHexecE eq_refl c (S base) Hh1) ];
+    eapply failsAtP_widen; [ | | apply (IHexecE eq_refl c (S base) Hh1) ];
       [ lia | simpl; lia ].
   (* LE_loopErr *)
   - assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [_ [Hh1 [Hbr [Hh2 _]]]].
     destruct (IHexecE2 eq_refl c (S base + Cp.csize s1 + 1) Hh2)
-      as [ll [xx [Ha [Hb [Hr Hst]]]]].
+      as [ll [xx [Ha [Hb [Hr Hbp]]]]].
     exists ll, xx; repeat split; try (simpl; lia); try assumption.
     eapply Cp.mrun_trans;
       [ apply (Cp.comp_sound G s1 a a1 (execE_ok_exec s1 a a1 H) c (S base) Hh1) | ].
@@ -396,47 +470,302 @@ Proof.
       eapply Cp.MR_step; [ eapply Cp.M_BrF; [ exact Hbr | exact e ] | ].
       apply (Cp.comp_sound G s2 a1 a2 (execE_ok_exec s2 a1 a2 H0) c
                (S base + Cp.csize s1 + 1) Hh2).
-    + eapply stuck_chk; [ exact Hck | rewrite e0; discriminate ].
+    + bad_chk Hck. rewrite e0; discriminate.
 Qed.
 
-(** The form the checker uses: no reachable stuck state inside the compiled
-    program means no assertion can fail. *)
-Corollary no_stuck_no_error : forall s a,
-  ~ mfail (Cp.entry_code s) 0 (Cp.csize s) a -> ~ execE s a Err.
+(** Half of the correspondence: a source failure is a machine failure. *)
+Corollary fails_of_execE : forall s a, execE s a Err -> failsP s a.
 Proof.
-  intros s a Hno He; apply Hno.
+  intros s a He; apply failsAtP_top.
   apply (fail_sound s a Err He eq_refl (Cp.entry_code s) 0 (Cp.holds_entry s)).
 Qed.
 
+(* ===================================================================== *)
+(** ** The converse: a machine failure is a source failure.
+
+    [badpoint] is the source-side reading of a bad point: locally stuck, or a
+    call whose callee fails *in the source*.  The outer induction on [failsP]
+    turns the machine-side callee failure into that, so the two notions meet. *)
+
+Definition badpoint (c : Cp.code) (l : nat) (a : P.state) : Prop :=
+  localstuck c l a
+  \/ (exists p nxt, Cp.get c l = Cp.ICall p nxt /\ execE (G p) a Err)
+  \/ (exists p nxt, Cp.get c l = Cp.IUncall p nxt /\ execE (invert (G p)) a Err).
+
+Lemma badpoint_nop : forall c l nxt a, Cp.get c l = Cp.INop nxt -> ~ badpoint c l a.
+Proof.
+  intros c l nxt a Hi [[[g [v [n [Hj _]]]] | [p [n [Hj _]]]]
+                     | [[p [n [Hj _]]] | [p [n [Hj _]]]]]; congruence.
+Qed.
+
+Lemma badpoint_br : forall c l g lt lf a,
+  Cp.get c l = Cp.IBr g lt lf -> ~ badpoint c l a.
+Proof.
+  intros c l g lt lf a Hi [[[g' [v [n [Hj _]]]] | [p [n [Hj _]]]]
+                          | [[p [n [Hj _]]] | [p [n [Hj _]]]]]; congruence.
+Qed.
+
+Lemma badpoint_chk : forall c l g v nxt a,
+  Cp.get c l = Cp.IChk g v nxt -> badpoint c l a -> P.gtest g a <> v.
+Proof.
+  intros c l g v nxt a Hi [[[g' [v' [n [Hj Hne]]]] | [p [n [Hj _]]]]
+                          | [[p [n [Hj _]]] | [p [n [Hj _]]]]];
+    congruence.   (* the good case too: congruence chains g'=g, v'=v with Hne *)
+Qed.
+
+Lemma badpoint_prim : forall c l p nxt a,
+  Cp.get c l = Cp.IPrim p nxt -> badpoint c l a -> forall b, ~ P.pstep p a b.
+Proof.
+  intros c l p nxt a Hi [[[g [v [n [Hj _]]]] | [p' [n [Hj Hno]]]]
+                        | [[p' [n [Hj _]]] | [p' [n [Hj _]]]]];
+    try congruence.
+  assert (p' = p) by congruence; subst; exact Hno.
+Qed.
+
+Lemma badpoint_call : forall c l p nxt a,
+  Cp.get c l = Cp.ICall p nxt -> badpoint c l a -> execE (G p) a Err.
+Proof.
+  intros c l p nxt a Hi [[[g [v [n [Hj _]]]] | [p' [n [Hj _]]]]
+                        | [[p' [n [Hj He]]] | [p' [n [Hj _]]]]];
+    congruence.
+Qed.
+
+Lemma badpoint_uncall : forall c l p nxt a,
+  Cp.get c l = Cp.IUncall p nxt -> badpoint c l a -> execE (invert (G p)) a Err.
+Proof.
+  intros c l p nxt a Hi [[[g [v [n [Hj _]]]] | [p' [n [Hj _]]]]
+                        | [[p' [n [Hj _]]] | [p' [n [Hj He]]]]];
+    congruence.
+Qed.
+
+(** "A run from a fragment's entry that ends at a bad point either fails inside
+    the fragment, or completes it and the bad point comes afterwards."  The
+    disjunction is what makes this compose: no statement about *first* arrivals
+    is needed, and a fragment re-entered by a loop back edge is handled by the
+    step count going down. *)
+Definition Rc (n : nat) : Prop :=
+  forall s c base a l x,
+    Cp.holds c base (Cp.comp s base) ->
+    Cp.mrunn G n c base a l x -> badpoint c l x ->
+    execE s a Err
+    \/ (exists y n2, exec G s a y
+          /\ Cp.mrunn G n2 c (base + Cp.csize s) y l x /\ n2 < n).
+
+Definition Rlp (n : nat) : Prop :=
+  forall g1 s1 s2 g2 c base a l x,
+    Cp.holds c base (Cp.comp (Loop g1 s1 s2 g2) base) ->
+    Cp.mrunn G n c (S base) a l x -> badpoint c l x ->
+    lpE g1 s1 s2 g2 a Err
+    \/ (exists y n2, lp G g1 s1 s2 g2 a y
+          /\ Cp.mrunn G n2 c (base + Cp.csize (Loop g1 s1 s2 g2)) y l x /\ n2 < n).
+
+Lemma reach_bad : forall n, Rc n /\ Rlp n.
+Proof.
+  intro n; induction n as [n IH] using (well_founded_induction lt_wf).
+  assert (IHc : forall m, m < n -> Rc m) by (intros m Hm; apply (IH m Hm)).
+  assert (IHl : forall m, m < n -> Rlp m) by (intros m Hm; apply (IH m Hm)).
+  clear IH.
+  assert (Hc : Rc n).
+  { unfold Rc; induction s; intros c base a l x Hh Hr Hbp.
+    (* Skip *)
+    - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + subst; exfalso; eapply badpoint_nop; eassumption.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hi in Hsc; simpl in Hsc; destruct Hsc as [Hk1 [Hm Hx]]; subst.
+        right; exists a, k2; repeat split; [ apply E_Skip | | lia ].
+        replace (base + Cp.csize Skip) with (S base) by (simpl; lia). exact Hrest.
+    (* Prim *)
+    - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + subst; left; apply X_PrimErr; eapply badpoint_prim; eassumption.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hi in Hsc; simpl in Hsc; destruct Hsc as [Hk1 [Hm Hps]]; subst.
+        right; exists yy, k2; repeat split; [ apply E_Prim; exact Hps | | lia ].
+        replace (base + Cp.csize (Prim p)) with (S base) by (simpl; lia). exact Hrest.
+    (* Seq *)
+    - simpl in Hh; apply Cp.holds_app in Hh as [Hh1 Hh2];
+        rewrite Cp.comp_length in Hh2.
+      destruct (IHs1 c base a l x Hh1 Hr Hbp) as [Herr | [y [n2 [Hex1 [Hr2 Hlt2]]]]].
+      + left; apply X_SeqErr; exact Herr.
+      + destruct (IHc n2 Hlt2 s2 c (base + Cp.csize s1) y l x Hh2 Hr2 Hbp)
+          as [Herr | [z [n3 [Hex2 [Hr3 Hlt3]]]]].
+        * left; eapply X_Seq; [ apply exec_execE; exact Hex1 | exact Herr ].
+        * right; exists z, n3; repeat split; [ eapply E_Seq; eassumption | | lia ].
+          replace (base + Cp.csize (Seq s1 s2))
+            with (base + Cp.csize s1 + Cp.csize s2) by (simpl; lia). exact Hr3.
+    (* If *)
+    - assert (Hif := Hh); apply Cp.holds_if in Hif as [Hbr [Hh1 [Hck1 [Hh2 Hck2]]]].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + subst; exfalso; eapply badpoint_br; eassumption.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hbr in Hsc; simpl in Hsc;
+          destruct Hsc as [Hk1 [Hx [[Hg Hm] | [Hg Hm]]]]; subst.
+        (* then-branch *)
+        * destruct (IHc k2 (ltac:(lia)) s1 c (S base) a l x Hh1 Hrest Hbp)
+            as [Herr | [y [n3 [Hex [Hr3 Hlt3]]]]].
+          -- left; eapply X_IfTBodyErr; [ exact Hg | exact Herr ].
+          -- destruct (Cp.run_cases G n3 c (S base + Cp.csize s1) y l x Hr3)
+               as [[Hz' [Hl' Hb']] | [q1 [q2 [m1 [y1 [Hq [Hs1' Hrest1]]]]]]].
+             ++ rewrite Hl', Hb' in Hbp; left; eapply X_IfTExitErr;
+                  [ exact Hg | apply exec_execE; exact Hex | ].
+                destruct (P.gtest g2 y) eqn:Hgy; [ | reflexivity ].
+                exfalso; eapply (badpoint_chk c (S base + Cp.csize s1) g2 true
+                                   (base + (Cp.csize s1 + Cp.csize s2 + 3)) y Hck1 Hbp).
+                exact Hgy.
+             ++ pose proof (Cp.step_cases G q1 c (S base + Cp.csize s1) y m1 y1 Hs1')
+                  as Hsc1; rewrite Hck1 in Hsc1; simpl in Hsc1;
+                  destruct Hsc1 as [Hq1 [Hm1 [Hy1 Hg2]]]; subst.
+                right; exists y, q2; repeat split;
+                  [ eapply E_IfT; eassumption | | lia ].
+                replace (base + Cp.csize (If g1 s1 s2 g2))
+                  with (base + (Cp.csize s1 + Cp.csize s2 + 3)) by (simpl; lia).
+                exact Hrest1.
+        (* else-branch *)
+        * destruct (IHc k2 (ltac:(lia)) s2 c (S base + Cp.csize s1 + 1) a l x
+                        Hh2 Hrest Hbp)
+            as [Herr | [y [n3 [Hex [Hr3 Hlt3]]]]].
+          -- left; eapply X_IfFBodyErr; [ exact Hg | exact Herr ].
+          -- destruct (Cp.run_cases G n3 c (S base + Cp.csize s1 + 1 + Cp.csize s2)
+                         y l x Hr3)
+               as [[Hz' [Hl' Hb']] | [q1 [q2 [m1 [y1 [Hq [Hs1' Hrest1]]]]]]].
+             ++ rewrite Hl', Hb' in Hbp; left; eapply X_IfFExitErr;
+                  [ exact Hg | apply exec_execE; exact Hex | ].
+                destruct (P.gtest g2 y) eqn:Hgy; [ reflexivity | ].
+                exfalso; eapply (badpoint_chk c
+                                   (S base + Cp.csize s1 + 1 + Cp.csize s2) g2 false
+                                   (base + (Cp.csize s1 + Cp.csize s2 + 3)) y Hck2 Hbp).
+                exact Hgy.
+             ++ pose proof (Cp.step_cases G q1 c
+                              (S base + Cp.csize s1 + 1 + Cp.csize s2) y m1 y1 Hs1')
+                  as Hsc1; rewrite Hck2 in Hsc1; simpl in Hsc1;
+                  destruct Hsc1 as [Hq1 [Hm1 [Hy1 Hg2]]]; subst.
+                right; exists y, q2; repeat split;
+                  [ eapply E_IfF; eassumption | | lia ].
+                replace (base + Cp.csize (If g1 s1 s2 g2))
+                  with (base + (Cp.csize s1 + Cp.csize s2 + 3)) by (simpl; lia).
+                exact Hrest1.
+    (* Loop *)
+    - assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [Hck [_ [_ [_ _]]]].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + rewrite Hl, Hb in Hbp; left; apply X_LoopEntryErr.
+        destruct (P.gtest g1 a) eqn:Hga; [ | reflexivity ].
+        exfalso; eapply (badpoint_chk c base g1 true (S base) a Hck Hbp); exact Hga.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hck in Hsc; simpl in Hsc;
+          destruct Hsc as [Hk1 [Hm [Hx Hg]]]; subst.
+        destruct (IHl k2 (ltac:(lia)) g1 s1 s2 g2 c base a l x Hh Hrest Hbp)
+          as [Herr | [y [n3 [Hlp [Hr3 Hlt3]]]]].
+        * left; eapply X_Loop; [ exact Hg | exact Herr ].
+        * right; exists y, n3; repeat split; [ eapply E_Loop; eassumption | | lia ].
+          exact Hr3.
+    (* Call *)
+    - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + subst; left; apply X_Call; eapply badpoint_call; eassumption.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hi in Hsc; simpl in Hsc;
+          destruct Hsc as [Hm [k [Hk Hsub]]]; subst.
+        right; exists yy, k2; repeat split; [ | | lia ].
+        * apply E_Call; eapply Cp.crun_complete; exists k; exact Hsub.
+        * replace (base + Cp.csize (Call p)) with (S base) by (simpl; lia).
+          exact Hrest.
+    (* Uncall *)
+    - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
+      destruct (Cp.run_cases G n c base a l x Hr)
+        as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+      + subst; left; apply X_Uncall; eapply badpoint_uncall; eassumption.
+      + pose proof (Cp.step_cases G k1 c base a mm yy Hs) as Hsc;
+          rewrite Hi in Hsc; simpl in Hsc;
+          destruct Hsc as [Hm [k [Hk Hsub]]]; subst.
+        right; exists yy, k2; repeat split; [ | | lia ].
+        * apply E_Uncall; eapply Cp.crun_complete; exists k; exact Hsub.
+        * replace (base + Cp.csize (Uncall p)) with (S base) by (simpl; lia).
+          exact Hrest. }
+  split; [ exact Hc | ].
+  unfold Rlp; intros g1 s1 s2 g2 c base a l x Hh Hr Hbp.
+  assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [_ [Hh1 [Hbr [Hh2 Hck]]]].
+  destruct (Hc s1 c (S base) a l x Hh1 Hr Hbp) as [Herr | [y [n2 [Hex1 [Hr2 Hlt2]]]]].
+  - left; apply LE_doErr; exact Herr.
+  - destruct (Cp.run_cases G n2 c (S base + Cp.csize s1) y l x Hr2)
+      as [[Hz [Hl Hb]] | [k1 [k2 [mm [yy [Hn [Hs Hrest]]]]]]].
+    + subst; exfalso; eapply badpoint_br; eassumption.
+    + pose proof (Cp.step_cases G k1 c (S base + Cp.csize s1) y mm yy Hs) as Hsc;
+        rewrite Hbr in Hsc; simpl in Hsc;
+        destruct Hsc as [Hk1 [Hy [[Hg Hm] | [Hg Hm]]]]; subst.
+      (* exit on this round *)
+      * right; exists y, k2; repeat split;
+          [ apply L_one; assumption | | lia ].
+        replace (base + Cp.csize (Loop g1 s1 s2 g2))
+          with (base + (Cp.csize s1 + Cp.csize s2 + 3)) by (simpl; lia). exact Hrest.
+      (* another round *)
+      * destruct (IHc k2 (ltac:(lia)) s2 c (S base + Cp.csize s1 + 1) y l x
+                      Hh2 Hrest Hbp)
+          as [Herr | [z [n4 [Hex2 [Hr4 Hlt4]]]]].
+        -- left; eapply LE_loopErr;
+             [ apply exec_execE; exact Hex1 | exact Hg | exact Herr ].
+        -- destruct (Cp.run_cases G n4 c
+                       (S base + Cp.csize s1 + 1 + Cp.csize s2) z l x Hr4)
+             as [[Hz' [Hl' Hb']] | [q1 [q2 [m1 [z1 [Hq [Hs1' Hrest1]]]]]]].
+           ++ rewrite Hl', Hb' in Hbp; left; eapply LE_backErr;
+                [ apply exec_execE; exact Hex1 | exact Hg
+                | apply exec_execE; exact Hex2 | ].
+              destruct (P.gtest g1 z) eqn:Hgz; [ reflexivity | ].
+              exfalso; eapply (badpoint_chk c
+                                 (S base + Cp.csize s1 + 1 + Cp.csize s2) g1 false
+                                 (S base) z Hck Hbp); exact Hgz.
+           ++ pose proof (Cp.step_cases G q1 c
+                            (S base + Cp.csize s1 + 1 + Cp.csize s2) z m1 z1 Hs1')
+                as Hsc1; rewrite Hck in Hsc1; simpl in Hsc1;
+                destruct Hsc1 as [Hq1 [Hm1 [Hz1 Hg1']]]; subst.
+              destruct (IHl q2 (ltac:(lia)) g1 s1 s2 g2 c base z l x Hh Hrest1 Hbp)
+                as [Herr | [w [n6 [Hlp [Hr6 Hlt6]]]]].
+              ** left; eapply LE_more;
+                   [ apply exec_execE; exact Hex1 | exact Hg
+                   | apply exec_execE; exact Hex2 | exact Hg1' | exact Herr ].
+              ** right; exists w, n6; repeat split; [ | | lia ].
+                 --- eapply L_more; eassumption.
+                 --- exact Hr6.
+Qed.
+
+(** The converse of [fail_sound], and with it the correspondence. *)
+Lemma failsP_execE : forall s a, failsP s a -> execE s a Err.
+Proof.
+  intros s a H; induction H as
+    [ s a l x Hr Hlt Hls | s a l x p nxt Hr Hlt Hi Hf IH
+    | s a l x p nxt Hr Hlt Hi Hf IH ];
+    destruct Hr as [n Hr];
+    [ assert (Hbp : badpoint (Cp.entry_code s) l x) by (left; exact Hls)
+    | assert (Hbp : badpoint (Cp.entry_code s) l x)
+        by (right; left; exists p, nxt; split; [ exact Hi | exact IH ])
+    | assert (Hbp : badpoint (Cp.entry_code s) l x)
+        by (right; right; exists p, nxt; split; [ exact Hi | exact IH ]) ];
+    (destruct (proj1 (reach_bad n) s (Cp.entry_code s) 0 a l x
+                 (Cp.holds_entry s) Hr Hbp) as [Herr | [y [n2 [Hex [Hr2 _]]]]];
+     [ exact Herr | ];
+     rewrite Nat.add_0_l in Hr2;
+     destruct (Cp.halt_run_refl G n2 (Cp.entry_code s) (Cp.csize s) y l x
+                 (Cp.entry_halt s) Hr2) as [Hl _]; lia).
+Qed.
+
+(** **The** correspondence: the compiled program fails exactly when the source
+    fails an assertion.  This is what makes a proof of [ERR]-unreachability mean
+    "no assertion can fail", in both directions — no missed failure, and no false
+    alarm. *)
+Theorem fail_iff : forall s a, execE s a Err <-> failsP s a.
+Proof.
+  intros s a; split; intro H.
+  - apply fails_of_execE; exact H.
+  - apply failsP_execE; exact H.
+Qed.
+
+Corollary no_fail_no_error : forall s a, ~ failsP s a -> ~ execE s a Err.
+Proof. intros s a Hno He; apply Hno, fails_of_execE; exact He. Qed.
+
 End Sem.
 End ErrSem.
-
-(* ===================================================================== *)
-(** ** Why the converse is not here, and what it would take.
-
-    [fail_sound] is one direction.  The converse — the compiled code gets stuck
-    inside the fragment only when the source really fails — is **false for this
-    machine**, and the reason is a design choice rather than an oversight.
-
-    [M_Call] is a *big-step* instruction: its premise is a completed run of the
-    callee.  So the call instruction has no step whenever the callee fails **and
-    also whenever the callee diverges**, while the source in the diverging case
-    neither succeeds nor fails.  A diverging callee therefore gives a stuck
-    machine and no [execE _ _ Err] derivation.
-
-    [smv.py] does not have this problem because it *inlines* calls: a diverging
-    callee shows up there as an infinite run, not as a state with no successor.
-    Matching that in Rocq means either giving the machine a return stack, or
-    making failure an inductive relation that propagates through calls
-    explicitly, e.g.
-
-<<
-      Inductive fails G : code -> nat -> nat -> state -> Prop :=
-      | F_local : ... reaches a label whose instruction cannot step locally ...
-      | F_call  : ... reaches an ICall whose callee fails ...
->>
-
-    with a *local* notion of stuckness (a check that does not hold, or a
-    primitive with nowhere to go) instead of the global "no step applies".  Then
-    [fails] and [execE _ _ Err] should coincide.  Nothing here depends on it: the
-    checker needs only [no_stuck_no_error]. *)
