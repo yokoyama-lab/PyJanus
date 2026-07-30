@@ -23,10 +23,13 @@
       - [exec_execE] / [execE_exec] — the two semantics agree on success, so
         [execE] really is [exec] plus failure and nothing else;
       - [ok_not_err] — success and failure are exclusive;
-      - [fail_sound] — **a source assertion failure makes the compiled code get
-        stuck inside the fragment**.  This is the direction the checker's claim
-        rests on: it is what rules out a failure the model does not see, i.e. a
-        proof of [ERR]-unreachability that is a lie.
+      - [fail_sound] — **a source failure makes the compiled code get stuck
+        inside the fragment**.  This is the direction the checker's claim rests
+        on: it is what rules out a failure the model does not see, i.e. a proof
+        of [ERR]-unreachability that is a lie.  "Failure" covers both a guard
+        that does not hold and a *primitive with nowhere to go* ([X_PrimErr]):
+        [pstep] is not required to be total, and that is exactly how [smv.py]
+        treats `x *= 0`, `x /= 0`, an inexact `/=` and division by zero.
 
     Scope, honestly.  The framework's primitives and guards are abstract, so the
     *expression-level* traps of [smv.py] (floor division, two-sorted
@@ -87,6 +90,14 @@ Inductive execE : stmt -> P.state -> outcome -> Prop :=
     execE (If g1 s1 s2 g2) a Err
 | X_LoopEntryErr : forall g1 s1 s2 g2 a,
     P.gtest g1 a = false -> execE (Loop g1 s1 s2 g2) a Err
+(* [pstep] is only required to be deterministic and reversible, not total, so a
+   primitive can simply have nowhere to go.  That is not a corner case: it is how
+   [smv.py] treats `x *= 0`, `x /= 0`, an inexact `/=` and division by zero in an
+   expression -- all of them get an ERR edge.  Without this rule [fail_sound]
+   would not cover them and the checker's conclusion would not be justified for
+   any program using a partial primitive. *)
+| X_PrimErr : forall p a,
+    (forall b, ~ P.pstep p a b) -> execE (Prim p) a Err
 
 with lpE : P.guard -> stmt -> stmt -> P.guard -> P.state -> outcome -> Prop :=
 | LE_one : forall g1 s1 s2 g2 a b,
@@ -186,7 +197,11 @@ Proof.
   induction H using L.exec_mut
     with (P0 := fun g1 s1 s2 g2 a b (_ : lp G g1 s1 s2 g2 a b) =>
                   ~ lpE g1 s1 s2 g2 a Err);
-    intro Hbad; inversion Hbad; subst; pin; try congruence; eauto.
+    intro Hbad; inversion Hbad; subst; pin; try congruence;
+    try (match goal with
+         | Hn : forall _, ~ P.pstep _ _ _ |- _ => exfalso; eapply Hn; eassumption
+         end);
+    eauto.
 Qed.
 
 (* ===================================================================== *)
@@ -229,6 +244,15 @@ Proof.
   intros c l g v nxt a Hi Hne m x [n Hs].
   pose proof (Cp.step_cases G n c l a m x Hs) as Hsc; rewrite Hi in Hsc; simpl in Hsc.
   destruct Hsc as [_ [_ [_ Hg]]]; congruence.
+Qed.
+
+(** A primitive with nowhere to go has no step. *)
+Lemma stuck_prim : forall c l p nxt a,
+  Cp.get c l = Cp.IPrim p nxt -> (forall b, ~ P.pstep p a b) -> stuck c l a.
+Proof.
+  intros c l p nxt a Hi Hno m x [n Hs].
+  pose proof (Cp.step_cases G n c l a m x Hs) as Hsc; rewrite Hi in Hsc; simpl in Hsc.
+  destruct Hsc as [_ [_ Hp]]; eapply Hno; exact Hp.
 Qed.
 
 (** A call has no step when the callee cannot reach its own exit — which is the
@@ -336,6 +360,11 @@ Proof.
     exists base, a; repeat split; try (simpl; lia).
     + apply Cp.MR_refl.
     + eapply stuck_chk; [ exact Hck | rewrite e; discriminate ].
+  (* X_PrimErr: the primitive has nowhere to go *)
+  - simpl in Hh; apply Cp.holds_cons in Hh as [Hi _].
+    exists base, a; repeat split; try (simpl; lia).
+    + apply Cp.MR_refl.
+    + eapply stuck_prim; [ exact Hi | exact n ].
   (* LE_more with an error further round *)
   - assert (Hlo := Hh); apply Cp.holds_loop in Hlo as [_ [Hh1 [Hbr [Hh2 Hck]]]].
     destruct (IHexecE3 Heq c base Hh) as [ll [xx [Ha [Hb [Hr Hst]]]]].
@@ -381,3 +410,33 @@ Qed.
 
 End Sem.
 End ErrSem.
+
+(* ===================================================================== *)
+(** ** Why the converse is not here, and what it would take.
+
+    [fail_sound] is one direction.  The converse — the compiled code gets stuck
+    inside the fragment only when the source really fails — is **false for this
+    machine**, and the reason is a design choice rather than an oversight.
+
+    [M_Call] is a *big-step* instruction: its premise is a completed run of the
+    callee.  So the call instruction has no step whenever the callee fails **and
+    also whenever the callee diverges**, while the source in the diverging case
+    neither succeeds nor fails.  A diverging callee therefore gives a stuck
+    machine and no [execE _ _ Err] derivation.
+
+    [smv.py] does not have this problem because it *inlines* calls: a diverging
+    callee shows up there as an infinite run, not as a state with no successor.
+    Matching that in Rocq means either giving the machine a return stack, or
+    making failure an inductive relation that propagates through calls
+    explicitly, e.g.
+
+<<
+      Inductive fails G : code -> nat -> nat -> state -> Prop :=
+      | F_local : ... reaches a label whose instruction cannot step locally ...
+      | F_call  : ... reaches an ICall whose callee fails ...
+>>
+
+    with a *local* notion of stuckness (a check that does not hold, or a
+    primitive with nowhere to go) instead of the global "no step applies".  Then
+    [fails] and [execE _ _ Err] should coincide.  Nothing here depends on it: the
+    checker needs only [no_stuck_no_error]. *)
