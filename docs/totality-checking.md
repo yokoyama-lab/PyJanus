@@ -295,19 +295,42 @@ mfail c base sz a := exists l x, base <= l < base + sz /\ mrun G c base a l x /\
 
 `l < base + sz` が**厳密に内側**であることが要点で、出口ラベルへの到達は失敗ではない。
 
-### 8.3 証明した定理
+### 8.3 証明した定理 — **両方向**
+
+`stuck`（どの規則も適用できない）は call 命令で「呼び先が失敗した」と「呼び先が発散した」を
+混同するので、命令自身に見える部分だけを取り出す:
 
 ```coq
-fail_sound : execE s a Err -> holds c base (comp s base) -> mfail c base (csize s) a
-no_stuck_no_error : ~ mfail (entry_code s) 0 (csize s) a -> ~ execE s a Err
+localstuck c l a := (get c l = IChk g v nxt /\ gtest g a <> v)
+                 \/ (get c l = IPrim p nxt /\ forall b, ~ pstep p a b)
 ```
 
-後者が検査器の使う形である: **コンパイル後のコードが断片内で行き詰まらないなら、
-表明は破れない**。`INVARSPEC pc != ERR` の証明からの結論が正当化される。
+`INop` と `IBr` は（`gtest` が関数なので）決して局所的に行き詰まらないから、この2通りで尽きる。
+そのうえで、**機械側だけで書ける**失敗関係を帰納的に定める（call を跨いで伝播する）:
 
-`Call`/`Uncall` の場合が非自明で、「呼び先が失敗するなら呼び出し命令には遷移が無い」を
-言うために `crun_complete`（コンパイラ完全性）と `ok_not_err` を使う。完全性を先に
-証明しておいたことがここで効いている。
+```coq
+Inductive failsP : stmt -> state -> Prop :=
+| FP_local  : mrun (entry_code s) 0 a l x -> l < csize s -> localstuck ... -> failsP s a
+| FP_call   : ... get (entry_code s) l = ICall p nxt -> failsP (G p) x -> failsP s a
+| FP_uncall : ... IUncall ... -> failsP (invert (G p)) x -> failsP s a
+```
+
+これで**対応が iff になる**:
+
+```coq
+fail_iff : execE s a Err <-> failsP s a
+```
+
+つまり **ERR に到達することと、ソースが表明を破ることは同値**。検査器にとっては
+「見落としが無い」（`fails_of_execE`）と「誤検出が無い」（`failsP_execE`）の両方が言えたことになる。
+
+`Call`/`Uncall` の扱いが両方向で非自明:
+- 順方向は「呼び先が失敗するなら呼び出し命令には遷移が無い」を `crun_complete`
+  （コンパイラ完全性）と `ok_not_err` から得る。
+- 逆方向は `reach_bad`（`Rc`/`Rlp` の二重帰納法）を使う。要点は主張を
+  **「断片内で失敗する、または断片を完走して不良点はその後」という選言**にしたことで、
+  これにより「最初到達」の議論が一切不要になり、ループの後退辺で断片が再入されるケースも
+  段数の減少だけで処理できる。
 
 ### 8.4 射程（正直に）
 
@@ -318,14 +341,11 @@ no_stuck_no_error : ~ mfail (entry_code s) 0 (csize s) a -> ~ execE s a Err
 - `smv.py` は **large-block 符号化**（直線部を1遷移に畳む）だが、`comp` は1命令1ラベル。
   両者が同じ関係を定めることは**未証明**。§5.4 のとおり large-block が決定率を左右した
   ので、ここは次に埋めるべき穴である。
-- 逆向き（行き詰まるなら表明破れがある＝誤検出しない）は、**この機械では成り立たない**。
-  理由は設計上のもので、`M_Call` が大ステップ命令（前提が呼び先の完了実行）なので、
-  呼び出し命令は**呼び先が失敗したときも発散したときも**遷移を持たない。一方ソースは
-  発散の場合、成功も失敗もしない。`smv.py` は call を**インライン展開**するのでこの問題が
-  無い（発散は無限実行として現れ、後続の無い状態にはならない）。合わせるには機械に
-  復帰スタックを持たせるか、失敗を call を跨いで伝播する帰納的関係として定義し、
-  「どの規則も適用できない」ではなく**局所的な**行き詰まり（成り立たない検査、または
-  進めない原始）を使う必要がある。`coq/RevError.v` 末尾に設計案を記した。
+- 逆向きは **§8.3 で閉じた**。当初は「`stuck`（どの規則も適用できない）では偽」であった —
+  `M_Call` が大ステップ命令なので呼び出し命令は呼び先が失敗したときも**発散したときも**
+  遷移を持たず、ソースは発散の場合成功も失敗もしないから。`localstuck` と call を跨いで
+  伝播する `failsP` に置き換えることで解消した（`smv.py` は call をインライン展開するので
+  そもそもこの混同が無く、`failsP` の方が smv.py に近い）。
 
 証明は 5つの `REV_PRIM` 実例すべてに落ちる。`audit.sh` は `RevExt.ExtPrim`
 （**配列と `local`/`delocal` を持つ Janus**）での実例を検査しており、

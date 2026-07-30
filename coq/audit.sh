@@ -150,7 +150,10 @@ Print Assumptions SemS.flat_injective.
 Print Assumptions ErrE.execE_ok_iff.
 Print Assumptions ErrE.ok_not_err.
 Print Assumptions ErrE.fail_sound.
-Print Assumptions ErrE.no_stuck_no_error.
+Print Assumptions ErrE.fails_of_execE.
+Print Assumptions ErrE.failsP_execE.
+Print Assumptions ErrE.fail_iff.
+Print Assumptions ErrE.no_fail_no_error.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
