@@ -334,10 +334,8 @@ fail_iff : execE s a Err <-> failsP s a
 
 ### 8.4 射程（正直に）
 
-- framework の `prim`/`guard` は**抽象**なので、`smv.py` の式レベルの罠（§3.1 床除算、
-  §3.2 二ソート、§3.3 別名）は**この層では扱えない**。それらは Janus の具体的な式に対して
-  `coq/RevLowerExpr.v` / `RevLowerStmt.v` で形式化されている（`floor_division_agrees`、
-  `wf`、`wf_asn_xor`）が、`smv.py` の実装と結線されてはいない。
+- framework の `prim`/`guard` は**抽象**なので、式レベルの罠は §8 の層では扱えない。
+  → **§9 で別ファイル（`coq/RevSmvExpr.v`）として結線した。**
 - `smv.py` は **large-block 符号化**（直線部を1遷移に畳む）だが、`comp` は1命令1ラベル。
   両者が同じ関係を定めることは**未証明**。§5.4 のとおり large-block が決定率を左右した
   ので、ここは次に埋めるべき穴である。
@@ -350,3 +348,66 @@ fail_iff : execE s a Err <-> failsP s a
 証明は 5つの `REV_PRIM` 実例すべてに落ちる。`audit.sh` は `RevExt.ExtPrim`
 （**配列と `local`/`delocal` を持つ Janus**）での実例を検査しており、
 `functional_extensionality` のみで PASS する。
+
+## 9. 式の符号化の機械検証（`coq/RevSmvExpr.v`）
+
+§8 は制御フローと ERR の対応だった。式レベルの罠（§3.1 床除算、§3.2 二ソート）は
+framework の抽象 `prim`/`guard` では扱えないので、`RevLowerExpr.v` の**具体的な式**
+（`sexpr` / `seval`。vjanus の lowering が使っているのと同じもの）に対して別に証明した。
+
+### 9.1 nuXmv の式言語をモデル化する
+
+`sm` は smv.py が出す SMV 項の断片で、**二ソート**（整数と真偽値、取り違えは値なし）。
+要点は `MQuot` を **Rocq の `Z.quot`**（0方向切り捨て）で解釈することで、これは
+nuXmv の実際の挙動であり、**Janus の挙動ではない**。
+
+### 9.2 床除算マクロが正しいことの証明
+
+`_div_defines` が出す4つの DEFINE をそのまま項として書き（`mtq` / `mtr` / `mfdiv` /
+`mfmod`）、次を証明した。
+
+```coq
+floor_from_trunc : b <> 0 ->
+  (let q := Z.quot a b in let r := a - b * q in
+   if r =? 0 then q else if Bool.eqb (r <? 0) (b <? 0) then q else q - 1) = a / b
+mfdiv_correct : y <> 0 -> ⟦mfdiv a b⟧ = ⟦a⟧ / ⟦b⟧      (Rocq の `/` は床除算)
+mfmod_correct : y <> 0 -> ⟦mfmod a b⟧ = ⟦a⟧ mod ⟦b⟧
+```
+
+罠そのものも反例として機械化した:
+
+```coq
+naive_division_is_wrong : ⟦MQuot (-7) 2⟧ = -3  /\  (-7) / 2 = -4
+```
+
+**§3.1 で4通りの符号の組で試験したものが、全整数について証明になった。**
+
+### 9.3 二ソートの翻訳
+
+`tri`（整数位置）と `trb`（真偽値位置）は `_iexpr` / `_bexpr` の写しで、定義される所では
+`seval` と一致する（`tri_sound` / `trb_sound`）。拒否が空虚でないことも定理にした:
+
+```coq
+comparison_is_not_an_integer : tri (SBin SLt a b) = None   (* x += (y > 0) の拒否 *)
+variable_is_not_a_condition  : trb (SVar n) = None
+bitwise_is_refused           : tri (SBin SXorB a b) = None
+```
+
+### 9.4 Python 実装との結線
+
+定理が**実際に動くコードについての主張であり続ける**ように、
+`tests/verify/test_smv_expr.py` が smv.py の出力を読み戻して固定する:
+
+- 4つの DEFINE が**検証済みの構造**をしていること（正規表現で形を固定）
+- その式を**切り捨て除算で解釈**すると Python の `//` と `%` に一致すること
+  （符号の4通りと境界を含む格子上で。`mfdiv_correct` の実行版）
+
+証明は全整数を、テストは**コンパイラが実際に出す文字列**を担保する。
+nuXmv 自身との一致は `tests/verify/test_smv_nuxmv.py` が別途閉じている。
+
+### 9.5 まだ結線していないもの
+
+- **別名検査**（§3.3）。`smv.py` はインライン展開後に環境を解決して構文的に判定するが、
+  `RevLowerStmt.v` の `wf_asn_xor` とは繋がっていない。
+- **large-block**（§5.4）。累積更新の合成順と経路条件の評価状態が本質的リスクで、
+  `sstmt` / `sexec` の層に記号実行アキュムレータを定義する独立した作業になる。

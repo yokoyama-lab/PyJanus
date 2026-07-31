@@ -625,10 +625,20 @@ afterwards" — which is what removes any need to reason about *first* arrivals 
 lets a fragment re-entered by a loop back edge be handled by the step count going
 down.
 
-Not covered, and stated in `docs/totality-checking.md` §8.4: the framework's
-primitives and guards are abstract, so `smv.py`'s *expression*-level traps (floor
-division, two-sorted expressions, aliasing) live in `RevLowerExpr.v` /
-`RevLowerStmt.v` and are not wired to the Python; and `smv.py`'s **large-block**
+The framework's primitives and guards are abstract, so the *expression*-level
+traps cannot be reached from that file. `RevSmvExpr.v` handles them separately,
+over `RevLowerExpr.v`'s concrete `sexpr`/`seval` — the same expressions the vjanus
+lowering uses. It models the fragment of SMV `smv.py` emits, with nuXmv's `/` as
+`Z.quot` (truncation), transcribes `_div_defines` as a term, and proves
+`mfdiv_correct` / `mfmod_correct`: the macro denotes Rocq's flooring `/` and
+`mod`. `naive_division_is_wrong` mechanizes the trap itself. What was a test on
+four sign combinations is now a theorem for every integer, and
+`tests/verify/test_smv_expr.py` reads the emitted DEFINEs back to pin the
+compiler to the shape that was proved, so the theorem stays about the code that
+runs.
+
+Still not wired: `smv.py`'s aliasing check against `RevLowerStmt.v`'s
+`wf_asn_xor`; and `smv.py`'s **large-block**
 encoding (straight-line code merged into one transition) is not proved equivalent
 to `comp`'s one-instruction-per-label layout. That last one cannot be done at this
 layer at all: what could go wrong in a large-block encoding is the *composition
@@ -711,6 +721,8 @@ core results) on each build.
 | Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
 | **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |
 | **The totality checker's encoding is exactly right**: the compiled program fails iff the source fails an assertion | `fail_iff` (`fails_of_execE` / `failsP_execE`) | `RevError.v` | none |
+| **The checker's floor-division macro is correct** for every integer, and the naive translation demonstrably is not | `mfdiv_correct`, `mfmod_correct`, `naive_division_is_wrong` | `RevSmvExpr.v` | none |
+| The two-sorted expression translation agrees with `seval`, and its refusals are not vacuous | `tri_sound`, `trb_sound`, `comparison_is_not_an_integer` | `RevSmvExpr.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |

@@ -25,7 +25,7 @@ Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmall
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
-Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
@@ -154,6 +154,13 @@ Print Assumptions ErrE.fails_of_execE.
 Print Assumptions ErrE.failsP_execE.
 Print Assumptions ErrE.fail_iff.
 Print Assumptions ErrE.no_fail_no_error.
+(* the checker's expression encoding *)
+Print Assumptions RevSmvExpr.floor_from_trunc.
+Print Assumptions RevSmvExpr.mfdiv_correct.
+Print Assumptions RevSmvExpr.mfmod_correct.
+Print Assumptions RevSmvExpr.tri_sound.
+Print Assumptions RevSmvExpr.trb_sound.
+Print Assumptions RevSmvExpr.naive_division_is_wrong.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
