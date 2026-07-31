@@ -23,6 +23,7 @@ RevJoin.v
 RevCompile.v
 RevSemantics.v
 RevError.v
+RevSmvExpr.v
 RevPPR.v
 RevBennett.v
 RevProc.v
