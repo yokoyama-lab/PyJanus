@@ -42,7 +42,11 @@ into and the first two of which would silently turn a proof into a lie:
   `validate_program` and is rejected only when PyJanus reaches it, so the
   obvious translation `next(x) = x + x` would model a non-injective program as
   a safe one.  After inlining resolves parameters the alias is syntactic, so
-  reaching such a statement is itself the error.
+  reaching such a statement is itself the error.  The same holds for `x <=> x`,
+  whose symbolic execution is the *identity*; and because the check is per
+  statement, two formals resolving to one variable is not itself an error.
+  `coq/RevSmvAlias.v` proves this decision exactly matches the reference
+  semantics in both directions.
 * **Sort confusion.**  Janus comparisons yield integers, so `x += (y > 0)` is
   legal.  The translation is two-sorted and *refuses* such expressions rather
   than guessing — the same discipline `coq/RevLowerExpr.v` formalizes as `wf`.
@@ -319,6 +323,14 @@ class _Compiler:
     if isinstance(s, SwapStmt):
       left = self._lval_name(s.left, env)
       right = self._lval_name(s.right, env)
+      if left == right:
+        # The same run-time check as an assignment's, and the same reason it
+        # cannot be skipped: symbolic execution of `x <=> x` exchanges one
+        # pending entry with itself, i.e. models as the *identity* a statement
+        # PyJanus rejects (`_check_alias_swap`).  Reaching it is the error.
+        self._err("TRUE")
+        self._enter(self._loc())  # the continuation is unreachable
+        return
       before_left, before_right = self._val(left), self._val(right)
       self.pending[left], self.pending[right] = before_right, before_left
       return
@@ -438,12 +450,12 @@ class _Compiler:
         raise SmvUnsupported("non-scalar parameter")
       if not isinstance(arg, LvalExpr) or arg.lval.selectors:
         raise SmvUnsupported("argument is not a plain variable")
-      resolved = self._lookup(arg.lval.ident.name, env)
-      if resolved in inner.values():
-        self._err("TRUE")  # two parameters bound to the same variable
-        self._enter(self._loc())
-        return
-      inner[param.ident.name] = resolved
+      # Two formals may resolve to one variable.  That is not itself an error:
+      # PyJanus checks each statement as it reaches it, so a body that never
+      # brings them together runs fine, and rejecting the call outright would
+      # be a false alarm.  The per-statement checks in `_assign` and the swap
+      # case above catch the bodies that do bring them together.
+      inner[param.ident.name] = self._lookup(arg.lval.ident.name, env)
     body = invert_stmts(proc.body, False) if invert else proc.body
     self._stmts(body, inner, depth + 1)
 
