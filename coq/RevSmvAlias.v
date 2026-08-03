@@ -229,22 +229,25 @@ Qed.
     The source semantics is unambiguous here, and so is the core: [S_Swap]
     requires [x <> y] because the XOR triple that implements the swap zeroes the
     cell otherwise ([RevLowerStmt.self_swap_would_zero],
-    [RevLowerStmt.self_swap_has_no_step]). *)
+    [RevLowerStmt.self_swap_has_no_step]).
+
+    That the unchecked symbolic execution really does produce the identity -- so
+    the model had a run where the source has none -- is
+    [RevSmvBlock.the_unchecked_swap_is_the_identity], which needs the pending
+    map to state. *)
 
 Example self_swap_has_no_run : forall x g h, ~ sexec (TSwap x x) g h.
 Proof. intros x g h H; inversion H; congruence. Qed.
 
-Example self_swap_gap : forall x,
+Example self_swap_gap : forall x env,
   (* the source cannot run it ... *)
   (forall g h, ~ sexec (TSwap x x) g h)
-  (* ... so the checker must flag it, for any resolution *)
-  /\ (forall env, env x = env x -> alias_ok env (TSwap x x) = false)
-  (* ... whereas modelling it as a no-op relates every store to itself *)
-  /\ (forall g : sstore, g = g).
+  (* ... so the checker must flag it, under any resolution *)
+  /\ alias_ok env (TSwap x x) = false.
 Proof.
-  intros x; repeat split.
+  intros x env; split.
   - intros g h; apply self_swap_has_no_run.
-  - intros env _; simpl; now rewrite Nat.eqb_refl.
+  - simpl; now rewrite Nat.eqb_refl.
 Qed.
 
 (** And the same through a call, which is how it arises in practice

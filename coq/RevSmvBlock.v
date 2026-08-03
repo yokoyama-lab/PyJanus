@@ -293,6 +293,39 @@ Example the_sequential_swap_is_not_reversible : forall g : sstore,
   seval g (swap_sequentially pid 0 1 0%nat) = seval g (swap_sequentially pid 0 1 1%nat).
 Proof. intros g; reflexivity. Qed.
 
+(** **The unsoundness [RevSmvAlias.v] found, stated where it can be stated.**
+
+    Before the fix, [smv.py]'s swap case had no aliasing test: it exchanged the
+    two pending entries unconditionally.  [swap_unchecked] is that code.  When
+    both sides resolve to one slot the exchange is a *no-op* -- the pending map
+    comes back unchanged, so [_edge] emits no update and no ERR edge, and nuXmv
+    proves [INVARSPEC pc != ERR].  Meanwhile the source has no run at all.  A
+    model with a transition where the source has none is exactly a proof that is
+    a lie. *)
+Definition swap_unchecked (p : pmap) (x y : nat) : pmap :=
+  pupd (pupd p x (p y)) y (p x).
+
+Example the_unchecked_swap_is_the_identity : forall p x n,
+  swap_unchecked p x x n = p n.
+Proof.
+  intros p x n; unfold swap_unchecked, pupd.
+  destruct (Nat.eqb n x) eqn:E; [ apply Nat.eqb_eq in E; now subst | reflexivity ].
+Qed.
+
+Example the_unchecked_swap_models_a_run_the_source_has_not : forall x g,
+  (* the emitted transition would take the store to itself ... *)
+  (forall n, seval g (swap_unchecked pid x x n) = Some (g n))
+  (* ... while the source semantics has no run whatsoever *)
+  /\ (forall h, ~ sexec (TSwap x x) g h)
+  (* ... which is why [sx] must refuse it, as it now does *)
+  /\ sx pid (TSwap x x) = None.
+Proof.
+  intros x g; repeat split.
+  - intro n; rewrite the_unchecked_swap_is_the_identity; reflexivity.
+  - intros h H; inversion H; congruence.
+  - simpl; now rewrite Nat.eqb_refl.
+Qed.
+
 (* ===================================================================== *)
 (** ** Where the block stops.
 
