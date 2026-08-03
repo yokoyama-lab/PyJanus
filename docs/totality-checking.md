@@ -109,6 +109,21 @@ procedure main()
 
 **この3点はいずれもコーパス実験が炙り出した。** 単体テストだけでは 3.3 は出なかった。
 
+**さらに 3.3 には取りこぼしが2つ残っていた**（§10 の機械検証で発覚）。どちらも
+コーパスには現れない形だったので、実験でも見つからなかった。
+
+- **`x <=> x` に別名検査が無かった。** 代入には付けたが swap には付けていなかった。
+  swap の記号実行は pending 写像の2項を同時交換するだけなので、両辺が同じ変数に解決
+  されると**恒等写像**になる。モデルに ERR 辺が1本も立たず、nuXmv は
+  `INVARSPEC pc != ERR` を**証明してしまう**——PyJanus は "Identifiers `x' and `x' are
+  aliases" で落ちるのに。3.3 と同じ不健全性が swap に残っていた。
+- **仮引数の二重束縛それ自体をエラーにしていた。** 呼び出し時に「2つの仮引数が同じ
+  変数に解決される」だけで ERR にしていたが、PyJanus は**文単位**で検査するので、
+  本体がその2つを同じ文に持ち込まなければ普通に走る。健全side だが誤検出になる。
+
+いずれも「検査は文ごと、対象は代入と swap の2つ」に揃えて修正した。`_call` の一括
+拒否は削除し、swap に代入と同じ無条件 ERR 辺を追加した。
+
 ## 4. 断片とその被覆率（実測）
 
 対象は**スカラー断片**（int 変数のみ、配列・スタック・構造体なし）。
@@ -242,9 +257,11 @@ IC3 が断念）。`fib.ja` は不変量が2本＝ERR だけでなく **BOUND �
 - **非停止は表明破れではない。** ループが止まらないプログラムは ERR に到達しないので
   「proved」になりうる。全域性は「表明が破れない」であって「停止する」ではない。
   停止性は別テーマ（`~/dev/CLAUDE.md` の TRS ツール群、KoAT2/AProVE/CeTA）。
-- **符号化の健全性は、制御フローと ERR については機械証明した**（§8）。ただし
-  **式の扱い（床除算・二ソート・別名）と large-block は未証明**で、そこは差分テスト
-  （`tests/verify/test_smv_nuxmv.py`）に依存している。
+- **符号化の健全性は、制御フロー・ERR・式・別名・large-block について機械証明した**
+  （§8〜§11）。残るのは**それらの接合**——`RevError.v` の抽象 `prim`/`guard` 層と
+  `RevSmvBlock.v` の具体的な `sstmt` 層は、`RevLowerStmt.lower_stmt_iff` を経由して
+  繋がってはいるが、CFG 全体を1つの Coq モデルにまとめた形にはなっていない。
+  そこは差分テスト（`tests/verify/test_smv_nuxmv.py`）に依存している。
 
 ## 7. 次の一手
 
@@ -407,7 +424,128 @@ nuXmv 自身との一致は `tests/verify/test_smv_nuxmv.py` が別途閉じて�
 
 ### 9.5 まだ結線していないもの
 
-- **別名検査**（§3.3）。`smv.py` はインライン展開後に環境を解決して構文的に判定するが、
-  `RevLowerStmt.v` の `wf_asn_xor` とは繋がっていない。
-- **large-block**（§5.4）。累積更新の合成順と経路条件の評価状態が本質的リスクで、
-  `sstmt` / `sexec` の層に記号実行アキュムレータを定義する独立した作業になる。
+- **別名検査**（§3.3）→ **§10 で結線した。**
+- **large-block**（§5.4）→ **§11 で結線した。**
+
+## 10. 別名検査の機械検証（`coq/RevSmvAlias.v`）
+
+§3.3 の別名は「実行時検査を静的に写す」という他の2つと質が違う罠で、
+`docs/totality-checking.md` が最も危ないと書いていたものである。これを結線した。
+
+### 10.1 インライン展開＝改名
+
+判定が**そもそも記述できる**理由は、`smv.py` が呼び出しをインライン展開するので、文を
+出す時点で全ての名前が環境 `env` を通して SMV 変数に解決済みだからである。別名（2つの
+ソース名が1つのスロットを指す）はそこで構文的になる。この解決は**改名**であり、本ファイル
+はそれが導く1つの可換図式についてのものである。
+
+```coq
+aoccurs env t e                                  (* smv.py が計算するもの（未改名の式に対して） *)
+  = soccurs t (rn env e)                         (* sexec が課す側条件（インライン後のプログラムに対して） *)
+  = reads 0 (enc lv g) (sloc lv t) (lower lv (rn env e))   (* frame core の実行時検査 *)
+```
+
+3つの層——模型検査器のフロントエンド・参照意味論・検証済みコア——で「右辺が左辺の対象を
+読むか」が一致する（`aoccurs_rn` / `alias_three_ways`）。
+
+### 10.2 証明した定理 — 両方向
+
+`RevError.fail_iff` と同じ形にした。
+
+```coq
+step_alias_ok        : sexec (rn_stmt env s) g h -> alias_ok env s = true
+alias_flagged_no_step: alias_ok env s = false -> ~ sexec (rn_stmt env s) g h
+alias_check_is_exact : （上の2つの連言）
+swap_alias_iff       : alias_ok env (TSwap x y) = false <-> (forall g h, ~ sexec ...)
+```
+
+- 前者が **`proved` を支える**: ソースが1歩進めるなら検査器はその文を弾いていない
+  ＝別名違反を通常の更新として黙って模型化していない。
+- 後者が **`refuted` を支える**: 弾いた文は本当に進めない＝無条件 ERR 辺は誤検出でない。
+- swap は失敗経路が別名しかないので、対応が**完全な同値**になる。
+
+`alias_ok` は文ごとの述語で、代入は `negb (aoccurs env (env x) e)`、swap は
+`negb (env x =? env y)`、それ以外は `true`。これは PyJanus の `_check_alias_assign` /
+`_check_alias_swap` の写しである。
+
+### 10.3 見つかった2つの穴
+
+機械化の産物として §3.3 の追記2件（`self_swap_gap` と
+`double_binding_is_not_itself_an_error`）が定理として残っている。前者は
+「ソースは走れない」と「no-op 模型は走れる」を並べたもので、後者は
+「二重束縛下でも `a += 1` は走る」ことを `sexec` の導出で示したものである。
+
+### 10.4 なぜ検査は pending 代入の**前**でなければならないか
+
+`smv.py` は `_occurs` をその文自身のソース式に対して掛ける。ブロックの pending 写像を
+代入した後の式ではない。これは実装の都合ではない: `x += y` の後、`x` の pending 値は
+`x + y` であり、続く `y += x` は「`y` が出現する項」を読むことになるが、この文は完全に
+合法である。代入後の形で検査すると**これを誤って弾く**
+（`the_check_is_on_the_source_expression`）。
+
+### 10.5 Python 実装との結線
+
+`tests/verify/test_smv_alias.py` が、別名を持つ7本と持たない4本について
+**PyJanus の終了状態**と**モデルが ERR に到達しうるか**が一致することを固定する。
+nuXmv があれば `refuted` / `proved` の判定まで突き合わせる（`test_smv_expr.py` が
+床除算についてやったのと同じ二段構え）。上の2つの穴はこのファイルの回帰テストになっている。
+
+## 11. large-block 符号化の機械検証（`coq/RevSmvBlock.v`）
+
+§5.4 のとおり、決定率を動かした唯一の要因が large-block である。したがって符号化の中で
+**未検証部分として最も大きい**のがここだった。§8.4 が「この層ではできない」と書いた理由は
+2つあり、どちらも framework の抽象 `prim` / `guard` では表現できない:
+
+- 累積更新の**合成順**——`v += g` の後の `h -= v` は、`v` の入口値を引くのか累積値を引くのか
+- 経路条件を**どの状態で評価するか**——ブロックの途中で現れたガードは入口値上の項として出る
+
+どちらも `RevLowerStmt.v` の具体的な `sstmt` / `sexec` の上では表現できる。そこで書いた。
+
+### 11.1 pending 写像の形式化
+
+`smv.py` の `self.pending` は「SMV 変数 → ブロック入口の値で書いた式」で、`_val` がそれを
+読む（未書き込みなら変数自身）。これを `pmap := nat -> sexpr` とし、`_iexpr` が変数位置で
+`_val` を呼ぶことを `subst : pmap -> sexpr -> sexpr` として写した。`sx : pmap -> sstmt ->
+option pmap` が `_stmt` の直線部の転写である（`None` は「通常の遷移を出さない」＝
+別名フラグ・断片外の演算子・位置を切る文）。
+
+### 11.2 証明した定理
+
+```coq
+seval_subst   : describes g0 p g -> seval g0 (subst p e) = seval g e
+guard_at_entry: （同上。経路条件が入口値で書けることそのもの）
+block_sound   : sx p s = Some p' -> describes g0 p g -> sexec s g h -> describes g0 p' h
+block_from_entry : sx pid s = Some p' -> sexec s g h -> forall x, seval g (p' x) = Some (h x)
+block_is_functional : （同じブロックの2つのソース実行は一致する＝遷移が well-defined）
+```
+
+**`block_sound` が large-block の同値そのもの**である: 変数ごとの `next(x) := p' x` を
+**入口ストア上で同時に**適用した結果が、ソース意味論を1文ずつ走らせた結果に一致する。
+`seval_subst` が `option` の等式であることが効いていて、**未定義性も転送される**——
+0除算は入口値で書いても0除算になる。だから可除性等の義務を別の ERR 辺として切り出せる。
+
+### 11.3 罠2つ（どちらも1位置1文の符号化では起きない）
+
+- **合成順**（`composition_order_is_observable`）。文書 §2 が引用しているブロック
+  `v += g; h -= v; h += halfg; t += 1` について、`h` の累積項が
+  `((h - (v + g)) + halfg)` になることを `documented_block_accumulates` で固定した
+  （**文字列まで一致**）。入口の `v` を読む素朴な形とは
+  `v = g = h = 1, halfg = 0` で −1 と 0 に分かれる。
+- **同時性**（`a_swap_must_be_simultaneous`）。swap は pending の2項を**同時に**交換する
+  （Python の `p[l], p[r] = before_r, before_l` は右辺タプルを先に評価する）。順に書くと
+  2番目が1番目の書いた写像を読んでしまい、**両方の項が `y` になる**。これは単射ですらない
+  （`the_sequential_swap_is_not_reversible`）。
+
+### 11.4 射程（正直に）
+
+直線部（`TSkip` / `TAsn` / `TSwap` / `TSeq`）のみ。`smv.py` が1遷移に畳むのはまさにここで、
+位置を切る所（`_if` / `_from` / `_seal`）から先は通常の制御フロー符号化＝§8 の対象である。
+文ごとの**義務**（`*=` `/=` の `aok`、非零除数）は更新式ではなく別の ERR 辺として出るので、
+これも §8 / §9 の対象。ここでは `sexec` の前提として現れる。
+
+### 11.5 Python 実装との結線
+
+`tests/verify/test_smv_block.py` が、4文が**1遷移1位置**になること、`h` の更新式が
+上の文字列そのものであること、書かれない変数には `next(...)` が出ないこと（フレーム条件を
+`TRUE` 既定が吸収する）、ブロック途中の `assert` が `(x + 1) = 1` と入口値で出ることを固定する。
+さらに `h` の累積項を格子上で評価して逐次実行と突き合わせる（`block_sound` の実行版）。

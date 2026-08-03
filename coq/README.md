@@ -276,6 +276,14 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   the real fixtures it covers — recursive reference procedures (`fib.ja`),
   arrays, and arrays passed by reference; `local`/`delocal`, `for`-loops, value
   arguments, stacks, `/` and `>=` are skipped.
+- `RevSmvAlias.v` — the totality checker's **aliasing** decision: inlining as a
+  renaming, the checker's test proved to be the reference semantics' side
+  condition and the core's run-time test, in both directions. Found the missing
+  swap check and the spurious call-site refusal (see the section above).
+- `RevSmvBlock.v` — the totality checker's **large-block** encoding: the pending
+  map as symbolic execution over source expressions, proved to denote the
+  sequential source semantics (composition order, simultaneity, guards read at
+  the block's entry).
 - `RevAlgebra.v` — reversibility as an open algebra of relational combinators
   (Seq/If/Loop become closure theorems); the syntax is one instance.
 - `RevNecessity.v` — the three `REV_PRIM` laws are necessary (tight): they force
@@ -637,14 +645,96 @@ four sign combinations is now a theorem for every integer, and
 compiler to the shape that was proved, so the theorem stays about the code that
 runs.
 
-Still not wired: `smv.py`'s aliasing check against `RevLowerStmt.v`'s
-`wf_asn_xor`; and `smv.py`'s **large-block**
-encoding (straight-line code merged into one transition) is not proved equivalent
-to `comp`'s one-instruction-per-label layout. That last one cannot be done at this
-layer at all: what could go wrong in a large-block encoding is the *composition
-order* of the accumulated updates and the state a path condition is evaluated in,
-and neither is expressible when `prim` and `guard` are abstract. It belongs over
-the concrete expressions of `RevLowerStmt.v`.
+## The checker's aliasing decision is exact — and had two holes (`RevSmvAlias.v`)
+
+The third trap of `docs/totality-checking.md` §3 is that **aliasing is a run-time
+check, not a static one**: `x += x` passes `validate_program` and is rejected only
+when PyJanus reaches it, so translating it as `next(x) = x + x` proves a
+non-injective program safe. What makes the check statable is that `smv.py`
+*inlines* calls, so every name is already resolved to a slot; that resolution is a
+**renaming**, and the file is about the one square it induces —
+
+```
+aoccurs env t e                        (what smv.py computes, un-renamed)
+  = soccurs t (rn env e)               (the side condition `sexec` imposes)
+  = reads _ _ (sloc _ t) (lower _ (rn env e))   (the frame core's run-time test)
+```
+
+— three notions of "the right-hand side reads the target", in the model checker's
+front end, the reference semantics and the verified core, proved to coincide
+(`aoccurs_rn`, `alias_three_ways`). On top of that the two directions the checker
+needs, in the shape `fail_iff` fixed: `step_alias_ok` (a statement that runs is one
+the checker let through — what a `proved` verdict rests on) and
+`alias_flagged_no_step` (a flagged statement really cannot run — what a `refuted`
+verdict rests on). For the swap the correspondence is an outright `iff`
+(`swap_alias_iff`), aliasing being a swap's only way to fail.
+
+Mechanizing it found **two real gaps in `smv.py`**, both now regression-tested:
+
+- **the swap had no aliasing check at all.** Symbolic execution of `x <=> x`
+  exchanges one pending entry with itself, i.e. models as the *identity* a
+  statement PyJanus rejects — the model had no ERR edge, and nuXmv **proved**
+  `INVARSPEC pc != ERR` of a failing program. The §3.3 unsoundness, fixed for
+  assignments and still present for swaps (`self_swap_gap`).
+- **a double binding was treated as an error by itself.** The call site refused
+  any two formals resolving to one variable, whether or not the body ever brings
+  them together; PyJanus checks per statement and runs such a program, so that was
+  a false alarm (`double_binding_is_not_itself_an_error`).
+
+`the_check_is_on_the_source_expression` records why the test must run *before* the
+block's pending substitution: after `x += y` the pending value of `x` is `x + y`,
+so a subsequent legal `y += x` reads a term mentioning `y` — testing the
+substituted form would reject it.
+
+## The large-block encoding is the source semantics (`RevSmvBlock.v`)
+
+`docs/totality-checking.md` §5.4 records the one change that moved the checker's
+decision rate: **large-block encoding**. A statement does not get its own program
+location; straight-line code is executed *symbolically* into a pending map
+(variable → an expression over the block's entry values) plus a path condition,
+and a location is cut only where control actually branches. Going from 36
+locations to 8 on `fall.ja` turned 2/8 proved into 5/8 with the same solver and
+the same time limit — which also made it the largest unverified part of the
+encoding.
+
+§8.4 said why it could not be verified where the rest was. What can go wrong in a
+large-block encoding is the **composition order** of the accumulated updates —
+after `v += g`, does `h -= v` subtract the entry value of `v` or the accumulated
+one? — and the **state a path condition is evaluated in**; neither is expressible
+while `prim` and `guard` are abstract. Both are expressible over
+`RevLowerStmt.v`'s concrete `sstmt`/`sexec`, and that is where this file works.
+`sx` transcribes `_stmt`'s accumulation, `subst` transcribes `_iexpr` reading the
+pending map, and
+
+```coq
+block_sound : sx p s = Some p' -> describes g0 p g -> sexec s g h -> describes g0 p' h
+```
+
+is the equivalence itself: applying the per-variable updates `next(x) := p' x`
+**simultaneously**, each read at the entry store, gives exactly the store the
+source semantics reaches after running the block one statement at a time. The
+path-condition question is `guard_at_entry`, an instance of `seval_subst` — and
+because that lemma is an equality of `option`s it transports *undefinedness* too,
+which is what lets the divisibility obligations be split off into their own ERR
+edges.
+
+Two traps, both invisible in a one-location-per-statement encoding:
+
+- **composition order** — the block `v += g; h -= v; h += halfg; t += 1` that §2
+  quotes accumulates `((h - (v + g)) + halfg)` for `h`, pinned character for
+  character in `documented_block_accumulates`; reading the entry `v` instead
+  gives a different value already at `v = g = h = 1, halfg = 0`.
+- **simultaneity** — a swap exchanges the two pending entries at once. Written as
+  two successive updates, the second reads the map the first left and both
+  entries end up holding `y` — a map that is not even injective
+  (`a_swap_must_be_simultaneous`, `the_sequential_swap_is_not_reversible`).
+
+Scope: the straight-line fragment, which is exactly what `smv.py` folds into one
+transition; where it cuts a location the ordinary control-flow encoding takes over
+and that is `RevError.v`'s subject. What is still not a single Coq model is the
+*junction* of the two — the abstract `prim`/`guard` layer of `RevError.v` and the
+concrete `sstmt` layer here are related through `RevLowerStmt.lower_stmt_iff`, but
+the whole CFG has not been assembled into one statement.
 
 ## Their parametric Janus is one of our instances (`RevPPR.v`)
 
@@ -723,6 +813,10 @@ core results) on each build.
 | **The totality checker's encoding is exactly right**: the compiled program fails iff the source fails an assertion | `fail_iff` (`fails_of_execE` / `failsP_execE`) | `RevError.v` | none |
 | **The checker's floor-division macro is correct** for every integer, and the naive translation demonstrably is not | `mfdiv_correct`, `mfmod_correct`, `naive_division_is_wrong` | `RevSmvExpr.v` | none |
 | The two-sorted expression translation agrees with `seval`, and its refusals are not vacuous | `tri_sound`, `trb_sound`, `comparison_is_not_an_integer` | `RevSmvExpr.v` | none |
+| **The checker's aliasing decision is exactly the reference semantics'** — it flags a statement iff the statement cannot run | `alias_check_is_exact` (`step_alias_ok` / `alias_flagged_no_step`), `swap_alias_iff` | `RevSmvAlias.v` | none |
+| The checker's alias test, the source side condition and the core's run-time test are one predicate | `aoccurs_rn`, `alias_three_ways` | `RevSmvAlias.v` | funext |
+| **The large-block encoding denotes the source semantics**: one transition of simultaneous updates over entry values = the block run statement by statement | `block_sound`, `block_from_entry`, `block_is_functional` | `RevSmvBlock.v` | none |
+| A path condition met mid-block may be evaluated at the block's entry | `guard_at_entry`, `seval_subst` | `RevSmvBlock.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |

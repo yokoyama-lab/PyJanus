@@ -24,6 +24,8 @@ RevCompile.v
 RevSemantics.v
 RevError.v
 RevSmvExpr.v
+RevSmvAlias.v
+RevSmvBlock.v
 RevPPR.v
 RevBennett.v
 RevProc.v

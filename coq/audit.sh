@@ -25,7 +25,7 @@ Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmall
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
-Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
@@ -161,6 +161,19 @@ Print Assumptions RevSmvExpr.mfmod_correct.
 Print Assumptions RevSmvExpr.tri_sound.
 Print Assumptions RevSmvExpr.trb_sound.
 Print Assumptions RevSmvExpr.naive_division_is_wrong.
+(* the checker's aliasing decision *)
+Print Assumptions RevSmvAlias.aoccurs_rn.
+Print Assumptions RevSmvAlias.alias_three_ways.
+Print Assumptions RevSmvAlias.step_alias_ok.
+Print Assumptions RevSmvAlias.alias_flagged_no_step.
+Print Assumptions RevSmvAlias.alias_check_is_exact.
+Print Assumptions RevSmvAlias.swap_alias_iff.
+(* the checker's large-block encoding *)
+Print Assumptions RevSmvBlock.seval_subst.
+Print Assumptions RevSmvBlock.guard_at_entry.
+Print Assumptions RevSmvBlock.block_sound.
+Print Assumptions RevSmvBlock.block_from_entry.
+Print Assumptions RevSmvBlock.block_is_functional.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
