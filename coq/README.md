@@ -722,7 +722,9 @@ Mechanizing it found **two real gaps in `smv.py`**, both now regression-tested:
   exchanges one pending entry with itself, i.e. models as the *identity* a
   statement PyJanus rejects — the model had no ERR edge, and nuXmv **proved**
   `INVARSPEC pc != ERR` of a failing program. The §3.3 unsoundness, fixed for
-  assignments and still present for swaps (`self_swap_gap`).
+  assignments and still present for swaps (`self_swap_gap`, and
+  `RevSmvBlock.the_unchecked_swap_models_a_run_the_source_has_not`, which
+  exhibits the emitted transition where the source has no run).
 - **a double binding was treated as an error by itself.** The call site refused
   any two formals resolving to one variable, whether or not the body ever brings
   them together; PyJanus checks per statement and runs such a program, so that was

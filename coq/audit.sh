@@ -184,6 +184,7 @@ Print Assumptions RevSmvBlock.guard_at_entry.
 Print Assumptions RevSmvBlock.block_sound.
 Print Assumptions RevSmvBlock.block_from_entry.
 Print Assumptions RevSmvBlock.block_is_functional.
+Print Assumptions RevSmvBlock.the_unchecked_swap_models_a_run_the_source_has_not.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
