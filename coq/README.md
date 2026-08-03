@@ -295,6 +295,9 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   is erased into labelled code with explicit successor labels, and a machine runs
   it. `crun_sound` proves the compiled code loses no behaviour; the converse is
   open (see the note at the end of the file).
+- `RevSteps.v` — the **cost** of the compiler-mediated semantics: a counted
+  big-step semantics, proved to be realized by exactly that many machine steps,
+  and proved invariant under `invert` (running backwards costs the same).
 - `RevSemantics.v` — the **hub**: names the five semantics of the framework
   language and states every pair. All six pairs among big-step, small-step,
   denotational and inverse-execution are `iff`s; the four involving the compiler
@@ -590,6 +593,50 @@ smaller statement.
 > instantiations are now chained — `RevSmallStep` → `RevDenote` → `RevFix` →
 > `RevCompile` — and `RevSemantics.v` projects all five out of that one chain.
 
+## What compilation costs, and what running backwards costs (`RevSteps.v`)
+
+`crun_iff` says the compiled code computes the same relation as the source. It
+says nothing about **how long** it takes — and the machine was already counted
+(`mstepn`/`mrunn` carry the number of instructions, nested calls included); what
+was missing was a count on the source side to compare against.
+
+`execn n s a b` supplies one: the big-step semantics charging exactly the
+run-time actions a Janus program performs — one per primitive (and per `Skip`),
+one per **guard test** and one per **exit assertion**, one per call or uncall
+instruction *plus* the callee's own count, and **nothing** for sequencing, which
+is not a run-time action. It is the same relation as `exec` (`execn_exec`,
+`exec_execn`). Two results follow:
+
+| | |
+|---|---|
+| `compilation_is_step_exact` | a source derivation charging `n` becomes a machine run of **exactly** `n` steps |
+| `execn_rev` | `execn n s a b -> execn n (invert s) b a` — **running backwards costs exactly as much as running forwards** |
+
+The first says flattening structured control flow into indexed jumps costs
+nothing: the factor is 1, not a constant above 1. That is not automatic — a
+compiler with implicit fall-through, or one emitting a jump to join the arms of a
+conditional, would pay for it; here instructions carry their successor label
+explicitly, `Seq` emits no glue, and each test or assertion of the big-step rules
+becomes exactly one `IBr` or `IChk`.
+
+The second is the reversible-computing-specific one, and it is not visible in
+`exec_rev`: `invert` *rebuilds* the control flow — it swaps an `If`'s entry test
+with its exit assertion, swaps a `Loop`'s two guards, and reverses the order of
+both a `Seq`'s halves and the loop's rounds. The count survives because the
+multiset of actions does, even though their order does not; the proof carries the
+count through the same open-iteration (`opnn`) reassembly `exec_rev` uses for the
+relation. With `csize_invert` (the inverted program occupies the *same number of
+labels*) this gives `inverse_costs_the_same`: **the compiled inverse runs in the
+same number of instructions, out of the same amount of code.** That is the
+quantitative content of "an inverse interpreter is not an approximation" —
+`RevSemantics.inv` is not merely the same relation as `big`, it is the same
+relation at the same cost.
+
+Step count and code size are different measures: a loop running `Skip` once costs
+3 (entry assertion, body, exit test) while occupying 5 labels
+(`a_one_round_skip_loop_costs_three`). What relates them is the derivation, which
+is what the theorem above does.
+
 ## What the totality checker rests on (`RevError.v`)
 
 `jana_py/smv.py` compiles a Janus program to a transition system whose ERR
@@ -809,6 +856,9 @@ core results) on each build.
 | **Five semantics of one language, and all ten pairs agree** | `all_agree` (+ the ten `*_iff`s) | `RevSemantics.v` | none |
 | **Compiler correctness both ways**: the compiled code loses no behaviour and invents none | `crun_iff` (`crun_sound` / `crun_complete`) | `RevCompile.v` | none |
 | Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
+| **Compilation is step-exact**: a source derivation charging `n` actions becomes a machine run of exactly `n` instructions | `compilation_is_step_exact`, `comp_cost` | `RevSteps.v` | none |
+| **Running backwards costs exactly as much as running forwards**, out of the same amount of code | `execn_rev`, `execn_iff`, `csize_invert`, `inverse_costs_the_same` | `RevSteps.v` | none |
+| The counted semantics is the big-step one | `execn_exec`, `exec_execn` | `RevSteps.v` | none |
 | **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |
 | **The totality checker's encoding is exactly right**: the compiled program fails iff the source fails an assertion | `fail_iff` (`fails_of_execE` / `failsP_execE`) | `RevError.v` | none |
 | **The checker's floor-division macro is correct** for every integer, and the naive translation demonstrably is not | `mfdiv_correct`, `mfmod_correct`, `naive_division_is_wrong` | `RevSmvExpr.v` | none |

@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep
-               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevError RevPPR RevBennett.
+               RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevSteps RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -36,6 +36,7 @@ Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
 Module JnS := RevJoin.FixJoin RevStack.StackPrim.
 Module SemS := RevSemantics.Semantics RevStack.StackPrim.
+Module StpS := RevSteps.Steps RevStack.StackPrim.
 Module ErrE := RevError.ErrSem RevExt.ExtPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
 (* core reversibility *)
@@ -146,6 +147,15 @@ Print Assumptions SemS.all_agree.
 Print Assumptions SemS.flat_inverse_iff.
 Print Assumptions SemS.small_injective.
 Print Assumptions SemS.flat_injective.
+(* the cost of compiling, and the cost of running backwards *)
+Print Assumptions StpS.execn_exec.
+Print Assumptions StpS.exec_execn.
+Print Assumptions StpS.comp_cost.
+Print Assumptions StpS.compilation_is_step_exact.
+Print Assumptions StpS.csize_invert.
+Print Assumptions StpS.execn_rev.
+Print Assumptions StpS.execn_iff.
+Print Assumptions StpS.inverse_costs_the_same.
 (* assertion failure as an outcome, and the compiled ERR location *)
 Print Assumptions ErrE.execE_ok_iff.
 Print Assumptions ErrE.ok_not_err.
