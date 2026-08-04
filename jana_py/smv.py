@@ -144,7 +144,7 @@ class _Trans:
 
 class _Compiler:
   def __init__(self, program: Program, init: str, assume: str | None, max_depth: int,
-               style: str = "trans"):
+               style: str = "trans", arrays: str = "native"):
     if program.main is None:
       raise SmvUnsupported("no main procedure")
     self.program = program
@@ -153,6 +153,11 @@ class _Compiler:
     self.assume = assume
     self.max_depth = max_depth
     self.style = style
+    self.arrays_mode = arrays
+    #: `(name, size)` for every array declared with nuXmv's own array type.
+    self.array_decls: list[tuple[str, int]] = []
+    #: cell name -> the array it belongs to, so a read can use `a[i]` directly.
+    self.array_of: dict[str, str] = {}
     self.varnames: list[str] = []
     self.var_init: dict[str, str | None] = {}
     self.defines: list[tuple[str, str]] = []
@@ -475,7 +480,16 @@ class _Compiler:
     return idx
 
   def _read_at(self, entry: tuple, idx: str) -> str:
-    """The value of the selected element, as a `case` over the pending map."""
+    """The value of the selected element.
+
+    With nuXmv's array type this is just `a[i]` — one token — provided no
+    element is still pending in this block.  Otherwise, and always in the
+    expanded encoding, it is a `case` over the elements, which copies every
+    element's pending term and is where the model size comes from (§5.6).
+    """
+    base = self.array_of.get(entry[0])
+    if base is not None and not any(name in self.pending for name in entry):
+      return f"{base}[{idx}]"
     if len(entry) == 1:
       return self._val(entry[0])
     branches = "".join(f"{idx} = {i} : {self._val(entry[i])}; "
@@ -643,6 +657,12 @@ class _Compiler:
       before = [self._val(name) for name in entry]
       for k, name in enumerate(entry):
         self.pending[name] = f"(case {tidx} = {k} : {new}; TRUE : {before[k]}; esac)"
+      if self.arrays_mode == "native":
+        # Commit now, so a later read is `a[i]` rather than a case over the
+        # pending terms.  Trades locations for term size -- the tradeoff §5.4
+        # measured, in the direction §5.6 says matters here.
+        self._seal()
+        return
     self._maybe_seal()
 
   def _swap_cells(self, s, env: _Env, left: tuple, right: tuple) -> None:
@@ -853,6 +873,20 @@ class _Compiler:
         raise SmvUnsupported("division in a declaration initializer")
     else:
       raise SmvUnsupported(f"array initializer outside the fragment: {decl.ident.name}")
+    if self.arrays_mode == "native":
+      # nuXmv has its own array type, and a *read* at a variable index is
+      # allowed on it (`a[i]`), which is what removes the case that copies every
+      # element's pending term.  A *write* at a variable index is not
+      # ("Expressions not allowed in array subscripts on left hand side of
+      # assignments"), so the per-element conditional update stays.
+      base = self._uniq(decl.ident.name)
+      self.array_decls.append((base, size))
+      cells = tuple(f"{base}[{i}]" for i in range(size))
+      for i, cell in enumerate(cells):
+        self.varnames.append(cell)
+        self.var_init[cell] = inits[i]
+        self.array_of[cell] = base
+      return cells
     return tuple(self._declare(f"{decl.ident.name}_{i}", inits[i]) for i in range(size))
 
   def run(self) -> str:
@@ -895,8 +929,11 @@ class _Compiler:
         self.trans.append(_Trans(BOUND_LOC, "TRUE", (), BOUND_LOC))
 
     lines = ["MODULE main", "VAR", f"  pc : {ERR_LOC}..{self._next_loc - 1};"]
+    for base, size in self.array_decls:
+      lines.append(f"  {base} : array 0..{size - 1} of integer;")
     for name in self.varnames:
-      lines.append(f"  {name} : integer;")
+      if name not in self.array_of:
+        lines.append(f"  {name} : integer;")
     lines.append("")
     lines.append(f"-- pc = {ERR_LOC} : a Janus runtime assertion failed (ERR)")
     if self.uses_bound:
@@ -953,6 +990,11 @@ class _Compiler:
         writes = [(t, dict(t.updates)[name]) for t in self.trans
                   if any(n == name for n, _ in t.updates)]
         if not writes:
+          # A variable with no `next` at all is **unconstrained** in SMV, not
+          # frozen: it may take any value at every step.  A read-only variable
+          # would then wander, refuting programs that run.  (The relational form
+          # is immune, since it restates `next(v) = v` on every edge.)
+          lines.append(f"  next({name}) := {name};")
           continue
         lines.append(f"  next({name}) := case")
         for t, update in writes:
@@ -971,6 +1013,7 @@ class _Compiler:
 
 def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = None,
                    max_depth: int = 16, style: str = "assign",
+                   arrays: str = "native",
                    mod_bits: int | str | None = None,
                    mod_prime: int | str | None = None) -> str:
   """Compile `program` to an nuXmv model asserting that no assertion can fail.
@@ -984,6 +1027,11 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
   depth n".  Proving `pc != BOUND` as well says no run reaches it, which makes
   the ERR proof unconditional.
   `style` selects the relational (`"trans"`) or functional (`"assign"`) shape.
+  `arrays` selects how an array is carried: `"native"` (default) uses nuXmv's own
+  `array 0..n-1 of integer`, so a read at a variable index is one term; `"expand"`
+  gives every element its own integer variable and reads become a `case` over
+  them.  The two decide the same programs (measured on the corpus), but `expand`
+  grows super-linearly in the array length while `native` grows linearly.
   """
   if mod_bits not in (None, "") or mod_prime not in (None, ""):
     # The modular modes change what *every* operation computes, and this
@@ -1000,4 +1048,6 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
     raise ValueError(f"init must be 'any' or 'zero', not {init!r}")
   if style not in ("trans", "assign"):
     raise ValueError(f"style must be 'trans' or 'assign', not {style!r}")
-  return _Compiler(program, init, assume, max_depth, style).run()
+  if arrays not in ("expand", "native"):
+    raise ValueError(f"arrays must be 'expand' or 'native', not {arrays!r}")
+  return _Compiler(program, init, assume, max_depth, style, arrays).run()

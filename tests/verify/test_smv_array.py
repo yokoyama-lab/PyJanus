@@ -102,25 +102,31 @@ class ReferenceBehaviourTests(unittest.TestCase):
 
 
 class ExpansionTests(unittest.TestCase):
+  """The `arrays="expand"` encoding, which is no longer the default.
+
+  It is kept and kept tested: it needs nothing of nuXmv beyond integers, and it
+  is the reference the native encoding was measured against.
+  """
+
   def test_a_declaration_becomes_one_variable_per_element(self):
     # `pc` is declared as a range, not an integer, so it is not in this list.
-    self.assertEqual(declared_vars(model_of(FIXED, init="zero")),
+    self.assertEqual(declared_vars(model_of(FIXED, init="zero", arrays="expand")),
                      ["a_0", "a_1", "a_2"])
 
   def test_a_constant_index_names_the_element(self):
-    model = model_of(FIXED, init="zero")
+    model = model_of(FIXED, init="zero", arrays="expand")
     self.assertEqual([v for _, v in next_branches(model, "a_1")], ["(a_1 + 2)"])
     # the untouched elements get no next-state function at all
     self.assertNotIn("next(a_0) := case", model)
     self.assertNotIn("next(a_2) := case", model)
 
   def test_an_initialiser_lands_element_by_element(self):
-    model = model_of(INITIALISED, init="zero")
+    model = model_of(INITIALISED, init="zero", arrays="expand")
     self.assertIn("init(b_0) := 7;", model)
     self.assertIn("init(b_1) := 8;", model)
 
   def test_cells_can_be_swapped(self):
-    model = model_of(SWAP_CELLS, init="zero")
+    model = model_of(SWAP_CELLS, init="zero", arrays="expand")
     self.assertEqual([v for _, v in next_branches(model, "a_0")], ["a_2"])
     self.assertEqual([v for _, v in next_branches(model, "a_2")], ["(a_0 + 1)"])
 
@@ -153,7 +159,7 @@ class DynamicReadTests(unittest.TestCase):
   """
 
   def test_the_read_is_a_case_over_the_elements(self):
-    model = model_of(DYN_READ, init="zero")
+    model = model_of(DYN_READ, init="zero", arrays="expand")
     self.assertIn("(i + 1) = 0 : a_0", model)
     self.assertIn("(i + 1) = 1 : a_1", model)
     # the last element is the `TRUE` default rather than its own branch
@@ -168,15 +174,16 @@ class DynamicReadTests(unittest.TestCase):
     self.assertRegex(model, r"\(+i \+ 1\)+ < 3")
 
   def test_a_one_element_array_needs_no_case(self):
-    model = model_of(DYN_READ_ONE, init="zero")
+    model = model_of(DYN_READ_ONE, init="zero", arrays="expand")
     self.assertNotIn("case (i)", model)
     self.assertTrue(has_err_edge(model))
 
   def test_the_index_is_read_through_the_pending_map(self):
     # `i += 1` precedes the read, so the index term is the accumulated `(i + 1)`,
     # not the entry value — the large-block discipline of RevSmvBlock.v.
-    self.assertIn("(i + 1)", model_of(DYN_READ, init="zero"))
-    self.assertNotIn("case (i) = 0", model_of(DYN_READ, init="zero"))
+    self.assertIn("(i + 1)", model_of(DYN_READ, init="zero", arrays="expand"))
+    self.assertNotIn("case (i) = 0",
+                     model_of(DYN_READ, init="zero", arrays="expand"))
 
 
 DYN_WRITE = ("procedure main()\n    int a[3]\n    int i\n"
@@ -196,7 +203,7 @@ class DynamicWriteTests(unittest.TestCase):
   """`a[i] += e` updates every element conditionally on the index."""
 
   def test_every_element_gets_a_conditional_update(self):
-    model = model_of(DYN_WRITE, init="zero")
+    model = model_of(DYN_WRITE, init="zero", arrays="expand")
     for k in range(3):
       with self.subTest(k):
         branches = next_branches(model, f"a_{k}")
@@ -211,7 +218,7 @@ class DynamicWriteTests(unittest.TestCase):
     # one per element: the elements that are *not* selected are never divided,
     # so per-element obligations would be false alarms.
     import re
-    model = model_of(DYN_DIV, init="zero")
+    model = model_of(DYN_DIV, init="zero", arrays="expand")
     self.assertEqual(len(re.findall(r"__fr\d+ :=", model)), 1)
 
 
@@ -284,13 +291,13 @@ class ArrayParameterTests(unittest.TestCase):
   """
 
   def test_a_write_through_the_parameter_reaches_the_caller(self):
-    model = model_of(BY_REF, init="zero")
+    model = model_of(BY_REF, init="zero", arrays="expand")
     self.assertEqual([v for _, v in next_branches(model, "x_0")], ["(x_0 + 1)"])
 
   def test_one_procedure_two_lengths(self):
     # The same body is inlined twice, against arrays of different sizes, so the
     # bounds obligation differs between the two call sites.
-    model = model_of(TWO_LENGTHS, init="zero")
+    model = model_of(TWO_LENGTHS, init="zero", arrays="expand")
     self.assertRegex(model, r"\(+k\)+ < 2")
     self.assertRegex(model, r"\(+k\)+ < 4")
 
@@ -350,10 +357,9 @@ class StillRefusedTests(unittest.TestCase):
       model_of("procedure main()\n    int a[3]\n    int x\n    x += a\n", init="zero")
 
 
-@unittest.skipIf(BINARY is None, "nuXmv not installed")
-class AgreementTests(unittest.TestCase):
-  def test_the_model_checker_agrees_with_the_interpreter(self):
-    for name, src, fails in (("in-bounds", FIXED, False),
+#: Every program in this file that has a definite outcome, so both encodings can
+#: be held to the same standard.
+CASES = (("in-bounds", FIXED, False),
                              ("initialised", INITIALISED, False),
                              ("swap-cells", SWAP_CELLS, False),
                              ("out-of-bounds", OOB, True),
@@ -372,10 +378,67 @@ class AgreementTests(unittest.TestCase):
                              ("swap-index-alias", SWAP_INDEX_ALIAS, True),
                              ("by-ref", BY_REF, False),
                              ("two-lengths", TWO_LENGTHS, False),
-                             ("by-ref-oob", BY_REF_OOB, True)):
+                             ("by-ref-oob", BY_REF_OOB, True))
+
+
+class NativeArrayTests(unittest.TestCase):
+  """The `arrays="native"` encoding must model the same programs.
+
+  It carries reads on nuXmv's own array type, which is where the model size
+  comes from (§5.6): `a[i]` is one token instead of a `case` copying every
+  element's pending term.  Writes stay per-element — nuXmv rejects a variable
+  index on the left of an assignment — and the block is sealed after each one so
+  the next read sees committed state.
+  """
+
+  def test_the_declaration_uses_the_array_type(self):
+    model = model_of(FIXED, init="zero", arrays="native")
+    self.assertIn("a : array 0..2 of integer;", model)
+    self.assertNotIn("a_0 : integer;", model)
+
+  def test_a_dynamic_read_is_a_single_term(self):
+    model = model_of(DYN_READ, init="zero", arrays="native")
+    self.assertIn("a[(i + 1)]", model)
+    self.assertNotIn("(i + 1) = 0 : a_0", model)
+
+  def test_it_is_much_smaller(self):
+    big = ("procedure main()\n    int a[8]\n    int i\n"
+           + "".join(f"    a[i] += {k + 1}\n" for k in range(4)))
+    self.assertLess(len(model_of(big, init="zero", arrays="native")),
+                    len(model_of(big, init="zero", arrays="expand")) // 2)
+
+  def test_a_read_only_variable_is_frozen(self):
+    # Found by this step: `assign` style emitted no `next` at all for a variable
+    # that is never written, and in SMV that means *unconstrained*, not frozen.
+    # Such a variable wanders and refutes programs that run — which is what
+    # sealing after a dynamic write first exposed.
+    model = model_of("procedure main()\n    int x\n    int y\n    y += x\n",
+                     init="zero")
+    self.assertIn("next(x) := x;", model)
+
+  def test_the_two_encodings_agree_on_reachability(self):
+    # Same ERR-edge answer for every case in this file, whichever encoding.
+    for name, src, _fails in CASES:
+      with self.subTest(name):
+        self.assertEqual(has_err_edge(model_of(src, init="zero")),
+                         has_err_edge(model_of(src, init="zero", arrays="native")))
+
+
+@unittest.skipIf(BINARY is None, "nuXmv not installed")
+class AgreementTests(unittest.TestCase):
+  def test_the_model_checker_agrees_with_the_interpreter(self):
+    for name, src, fails in CASES:
       with self.subTest(name):
         self.assertEqual(interpreter_fails(src), fails)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
+        self.assertEqual(result.status, "refuted" if fails else "proved",
+                         result.output[-2000:])
+
+  def test_the_native_encoding_agrees_too(self):
+    for name, src, fails in CASES:
+      with self.subTest(name):
+        result = nuxmv.check(model_of(src, init="zero", arrays="native"),
+                             binary=BINARY)
         self.assertEqual(result.status, "refuted" if fails else "proved",
                          result.output[-2000:])
 
