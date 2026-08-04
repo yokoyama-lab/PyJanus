@@ -369,7 +369,7 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 ---
 
-### [ ] 18. `verify_corpus.py` の既定を `assign` に揃えて測り直す
+### [x] 18. `verify_corpus.py` の既定を `assign` に揃えて測り直す
 
 **なぜ**: ライブラリ `compile_to_smv` の既定は `style="assign"`、ツール
 `verify_corpus.py` の既定は `trans` で食い違っている。§5 の表は後者で測っており、

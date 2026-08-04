@@ -159,16 +159,16 @@ procedure main()
 | 判定 | 本数 | 意味 |
 |---|---:|---|
 | `refuted` | 17 | 表明破れへ到達する初期ストアを提示 |
-| `proved` | 10 | 帰納的不変量で到達不能を証明 |
-| `unknown` | 12 | 120秒でタイムアウト、または IC3 が断念 |
+| `proved` | 11 | 帰納的不変量で到達不能を証明 |
+| `unknown` | 11 | 120秒でタイムアウト、または IC3 が断念 |
 | `unsupported` | 96 | 断片外（うち44本が stack・struct の宣言） |
 | `parse-error` | 7 | 構文エラー（error fixture として想定内） |
 | `static-error` | 7 | `validate_program` が弾く（模型検査の対象外） |
 
-> **測定条件**: `tools/verify_corpus.py` の既定、すなわち `style=trans` /
-> `arrays=native`。`arrays` を `expand` に変えても**この表は変わらない**（2026-08-05 に
-> 両方で測って一致を確認。§5.7）。`style` は変わりうる——`assign` にすると
-> `base_convert.ja` が proved に転じるので、下の `proved` は**下限**である（§5.4 の追記）。
+> **測定条件**: `tools/verify_corpus.py` の既定、すなわち `style=assign` /
+> `arrays=native`（2026-08-05 にライブラリ側と揃えた。§5.4 の追記）。`arrays` を
+> `expand` に変えても**この表は変わらない**（両方で測って一致を確認。§5.7）。`style` を
+> `trans` に落とすと `base_convert.ja` が unknown に戻り proved は 10 になる。
 
 **配列対応（2026-08-04）による差分**: unsupported 110 → 96（14本が断片内に入った）、
 refuted 12 → 17（+5、すべて error fixture）、unknown 3 → 12（+9、すべて examples）、
@@ -201,11 +201,13 @@ refuted 12 → 17（+5、すべて error fixture）、unknown 3 → 12（+9、�
 最後の3本（`alias-1` / `var-modified-on-rhs` / `delocal-wrong-name`）は §3.3 の修正で
 初めて検出できるようになったもので、修正前は逆に「安全」と**誤って証明**していた。
 
-### 5.2 証明側 — 5/17
+### 5.2 証明側 — 6/17
 
-examples 97本のうち断片内は**17本**（配列対応前は8本）。**証明できたのは5本のまま**
-（`cantor_pair`, `fall`, `fib`, `injective_basics`, `zagier`）で、残る12本は未決
-（`sqrt` は IC3 が断念、他はタイムアウト）。`fib.ja` は不変量が2本＝ERR だけでなく
+examples 97本のうち断片内は**17本**（配列対応前は8本）。**証明できたのは6本**
+（`base_convert`, `cantor_pair`, `fall`, `fib`, `injective_basics`, `zagier`）で、
+残る11本は未決（`injective_bwt_inverse` / `knapsack` / `sqrt` は IC3 が断念、
+他はタイムアウト）。6本目の `base_convert` は符号化形式を `assign` に揃えて得たもので、
+アルゴリズムの改善ではない（§5.4 の追記）。`fib.ja` は不変量が2本＝ERR だけでなく
 **BOUND も証明**しており、インライン深さ16で再帰が尽きることまで示せている。
 
 **配列で入った9本は1本も決着していない。** これは能力の問題ではなく規模の問題で、
@@ -269,7 +271,8 @@ examples 97本のうち断片内は**17本**（配列対応前は8本）。**証
   `trans` で unknown、`assign` で **proved** である（120秒・`--init zero`）。断片が広がると
   形式の差が効き始めた、ということになる。§5 の表は `tools/verify_corpus.py` の既定
   （`trans`）で測っているので、**そこに出ている `proved` の数は下限**である。
-  ライブラリ側 `compile_to_smv` の既定は `assign` で、両者はまだ揃っていない（§7-4）。
+  **2026-08-05 に `verify_corpus.py` の既定も `assign` に揃えた**ので、上の表はその条件で
+  測り直してある（proved 10 → 11、下がった本は無し）。
 - **効いたのは large-block だけだった。** 位置数が 36 → 8 に落ちたことで、IC3 が
   探す不変量が「各 pc での条件」ではなく「ループ頭での条件」だけになる。
   タイムアウトしていた `fall` / `fib` / `injective_basics` がすべて証明に転じた。
@@ -449,9 +452,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
    ひとつの体系をなす。対象は `PyJanus2PISA` の peephole と regalloc の translation validation。
 3. **BMC への退避**。IC3 がタイムアウトした場合に `check_invar_bmc` で「深さ k までは
    破れない」を得る。SAT 側の証明ログ（DRAT）まで取れば下界側の主張が認証つきになる。
-4. **`verify_corpus.py` の既定を `assign` に揃える**。ライブラリの既定は `assign`、
-   ツールの既定は `trans` で食い違っており、`assign` の方が少なくとも1本多く証明する
-   （§5.4 の追記）。揃えたうえで149本を測り直せば §5 の表が上がる。
+4. ~~`verify_corpus.py` の既定を揃える~~ → **2026-08-05 に実施**（proved 10 → 11）。
 5. **符号化ではなく問題の与え方を変える**（§5.7 末尾）。位置数・block 閾値・モデルサイズは
    3つとも判定を動かさないことが測定で分かったので、次は `--smv-assume` による事前条件、
    配列長を固定してのスケール観察、性質の分割（ERR の種類ごとに INVARSPEC を分ける）。
