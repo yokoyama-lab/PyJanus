@@ -111,8 +111,18 @@ class FragmentTests(unittest.TestCase):
     with self.assertRaises(SmvUnsupported):
       build(src)
 
-  def test_arrays_are_refused(self):
-    self._refuses("procedure main()\n    int a[4]\n    a[0] += 1\n")
+  def test_arrays_of_unspecified_length_are_refused(self):
+    # A fixed-length array at a constant index is now expanded to scalars
+    # (`tests/verify/test_smv_array.py`).  What is still outside the fragment is
+    # everything the expansion cannot resolve on its own.
+    self._refuses("procedure f(int a[])\n    a[0] += 1\n\n"
+                  "procedure main()\n    int a[4]\n    call f(a)\n")
+
+  def test_a_variable_array_index_is_refused(self):
+    self._refuses("procedure main()\n    int a[4]\n    int i\n    a[i] += 1\n")
+
+  def test_multi_dimensional_arrays_are_refused(self):
+    self._refuses("procedure main()\n    int a[2][2]\n    a[0][0] += 1\n")
 
   def test_stacks_are_refused(self):
     self._refuses("procedure main()\n    int x\n    stack s\n    push(x, s)\n")

@@ -76,7 +76,9 @@ from .ast import DeclType
 from .ast import FromStmt
 from .ast import IfStmt
 from .ast import LocalStmt
+from .ast import ArrayExpr
 from .ast import LvalExpr
+from .ast import LvalIndex
 from .ast import ModOp
 from .ast import Number
 from .ast import PrintsStmt
@@ -97,6 +99,14 @@ _FIRST_LOC = 2
 #: Cut a block once its pending expressions get this large, so that a long
 #: straight-line stretch cannot blow the term size up.
 _BLOCK_CHARS = 4000
+
+#: An array becomes one SMV variable per element, so a very long one would blow
+#: the model up rather than fail; refuse instead of emitting it.
+_MAX_ARRAY = 256
+
+#: A source name resolves either to one SMV variable (a scalar) or, for an
+#: expanded array, to the tuple of its elements' variables.
+_Env = dict  # dict[str, str | tuple[str, ...]]
 
 #: Reserved in SMV (plus `pc`, which names the program counter).  A Janus
 #: variable with one of these names is renamed, the way `c_codegen.py` renames
@@ -207,6 +217,18 @@ class _Compiler:
       self._err(f"!({obligation})")
       self.path.append(obligation)
 
+  def _unconditional_error(self) -> None:
+    """Reaching this statement is itself the error.
+
+    Three run-time checks land here — an aliasing violation, a `local`/`delocal`
+    name mismatch, and an out-of-bounds constant index.  None of them is a gap in
+    the translation: PyJanus executes the statement and raises.  So the edge to
+    ERR is unconditional and the continuation is emitted at a location nothing
+    enters.
+    """
+    self._err("TRUE")
+    self._enter(self._loc())
+
   def _enter(self, dst: int) -> None:
     self.loc = dst
     self.pending = {}
@@ -267,9 +289,7 @@ class _Compiler:
     if isinstance(e, (Number, Boolean)):
       return False
     if isinstance(e, LvalExpr):
-      if e.lval.selectors:
-        raise SmvUnsupported("array/struct l-value in an aliasing check")
-      return self._lookup(e.lval.ident.name, env) == name
+      return self._lval_name(e.lval, env) == name
     if isinstance(e, BinExpr):
       return self._occurs(name, e.left, env) or self._occurs(name, e.right, env)
     if isinstance(e, UnaryExpr):
@@ -282,10 +302,58 @@ class _Compiler:
       raise SmvUnsupported(f"variable out of the fragment: {name}")
     return env[name]
 
-  def _lval_name(self, lval, env: dict[str, str]) -> str:
-    if lval.selectors:
-      raise SmvUnsupported("array/struct l-value")
-    return self._lookup(lval.ident.name, env)
+  def _lval_name(self, lval, env: _Env) -> str:
+    """The SMV variable an l-value denotes.
+
+    A scalar denotes its own variable; an expanded array denotes one element,
+    named by a **constant** index.  A variable index needs a `case` over the
+    elements and is not translated yet.
+    """
+    entry = self._lookup(lval.ident.name, env)
+    if not lval.selectors:
+      if isinstance(entry, tuple):
+        raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
+      return entry
+    if not isinstance(entry, tuple):
+      raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
+    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
+      raise SmvUnsupported("struct field or multi-dimensional l-value")
+    index = lval.selectors[0].expr
+    if not isinstance(index, Number):
+      raise SmvUnsupported("variable array index")
+    if not 0 <= index.value < len(entry):
+      # The caller checks bounds first, so this is defensive only.
+      raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
+    return entry[index.value]
+
+  def _oob_lval(self, lval, env: _Env) -> bool:
+    """Is this a *constant* index outside its array?
+
+    PyJanus raises "Array index `[5]' was out of bounds" when it reaches such a
+    statement, so reaching it is the error.  A variable index is not decided
+    here — it is refused by `_lval_name` until the `case` encoding exists.
+    """
+    entry = env.get(lval.ident.name)
+    if not isinstance(entry, tuple) or not lval.selectors:
+      return False
+    selector = lval.selectors[0]
+    if not isinstance(selector, LvalIndex) or not isinstance(selector.expr, Number):
+      return False
+    return not 0 <= selector.expr.value < len(entry)
+
+  def _oob(self, e, env: _Env) -> bool:
+    """The same question for every l-value in an expression.  Fail-closed on a
+    node outside the fragment, so this and `_iexpr` refuse the same set."""
+    if isinstance(e, (Number, Boolean)):
+      return False
+    if isinstance(e, LvalExpr):
+      return self._oob_lval(e.lval, env)
+    if isinstance(e, BinExpr):
+      return self._oob(e.left, env) or self._oob(e.right, env)
+    if isinstance(e, UnaryExpr):
+      return self._oob(e.expr, env)
+    raise SmvUnsupported(
+        f"expression outside the fragment in a bounds check: {type(e).__name__}")
 
   def _iexpr(self, e, env: dict[str, str], obl: list[str]) -> str:
     """Translate an integer-sorted expression, appending safety obligations."""
@@ -347,8 +415,12 @@ class _Compiler:
         raise SmvUnsupported("reversible read/write")
       return  # printing does not touch the store
     if isinstance(s, AssignStmt):
+      if self._oob_lval(s.lval, env) or self._oob(s.expr, env):
+        return self._unconditional_error()
       return self._assign(s, env)
     if isinstance(s, SwapStmt):
+      if self._oob_lval(s.left, env) or self._oob_lval(s.right, env):
+        return self._unconditional_error()
       left = self._lval_name(s.left, env)
       right = self._lval_name(s.right, env)
       if left == right:
@@ -356,13 +428,14 @@ class _Compiler:
         # cannot be skipped: symbolic execution of `x <=> x` exchanges one
         # pending entry with itself, i.e. models as the *identity* a statement
         # PyJanus rejects (`_check_alias_swap`).  Reaching it is the error.
-        self._err("TRUE")
-        self._enter(self._loc())  # the continuation is unreachable
+        self._unconditional_error()
         return
       before_left, before_right = self._val(left), self._val(right)
       self.pending[left], self.pending[right] = before_right, before_left
       return
     if isinstance(s, AssertStmt):
+      if self._oob(s.expr, env):
+        return self._unconditional_error()
       self._check([self._cond(s.expr, env)])
       return
     if isinstance(s, IfStmt):
@@ -381,8 +454,7 @@ class _Compiler:
       # `x += x` is not injective, and Janus rejects it *at run time* — after
       # inlining, `call bar(x, x); a += b` resolves to exactly this.  Reaching
       # the statement is the error, so it becomes an unconditional edge to ERR.
-      self._err("TRUE")
-      self._enter(self._loc())  # the continuation is unreachable
+      self._unconditional_error()
       return
     obl: list[str] = []
     rhs = self._iexpr(s.expr, env, obl)
@@ -444,8 +516,7 @@ class _Compiler:
         raise SmvUnsupported("constant local")
     if enter.ident.name != leave.ident.name:
       # Another run-time check: PyJanus raises when it reaches the `delocal`.
-      self._err("TRUE")
-      self._enter(self._loc())
+      self._unconditional_error()
       return
     obl: list[str] = []
     init = self._iexpr(enter.init_expr, env, obl) if enter.init_expr is not None else "0"
@@ -488,19 +559,58 @@ class _Compiler:
       # brings them together runs fine, and rejecting the call outright would
       # be a false alarm.  The per-statement checks in `_assign` and the swap
       # case above catch the bodies that do bring them together.
-      inner[param.ident.name] = self._lookup(arg.lval.ident.name, env)
+      resolved = self._lookup(arg.lval.ident.name, env)
+      if isinstance(resolved, tuple):
+        raise SmvUnsupported("array argument")
+      inner[param.ident.name] = resolved
     body = invert_stmts(proc.body, False) if invert else proc.body
     self._stmts(body, inner, depth + 1)
 
   # -- driver ----------------------------------------------------------
 
+  def _declare_array(self, decl, env: _Env) -> tuple[str, ...]:
+    """One SMV variable per element, named `a_0`, `a_1`, ...
+
+    `_uniq` deduplicates, so a source variable that happens to be called `a_0`
+    does not collide.  Only a single constant dimension: an unspecified length
+    needs the call site to supply it, and a second dimension needs an index fold.
+    """
+    if len(decl.dimensions) != 1:
+      raise SmvUnsupported(f"multi-dimensional array: {decl.ident.name}")
+    dim = decl.dimensions[0]
+    if not isinstance(dim, Number):
+      raise SmvUnsupported(f"array of unspecified length: {decl.ident.name}")
+    size = dim.value
+    if size < 1:
+      # PyJanus rejects the declaration outright ("Array size must be greater
+      # than or equal to one"), so the program never runs.  Emitting a model
+      # anyway would prove a program safe that cannot even start.
+      raise SmvUnsupported(f"array size must be at least one: {decl.ident.name}[{size}]")
+    if size > _MAX_ARRAY:
+      raise SmvUnsupported(f"array too large to expand: {decl.ident.name}[{size}]")
+    if decl.init_expr is None:
+      inits: list[str | None] = [("0" if self.init_mode == "zero" else None)] * size
+    elif isinstance(decl.init_expr, ArrayExpr):
+      if len(decl.init_expr.items) != size:
+        raise SmvUnsupported(f"array initializer length mismatch: {decl.ident.name}")
+      obl: list[str] = []
+      inits = [self._iexpr(item, env, obl) for item in decl.init_expr.items]
+      if obl:
+        raise SmvUnsupported("division in a declaration initializer")
+    else:
+      raise SmvUnsupported(f"array initializer outside the fragment: {decl.ident.name}")
+    return tuple(self._declare(f"{decl.ident.name}_{i}", inits[i]) for i in range(size))
+
   def run(self) -> str:
     main = self.program.main
     assert main is not None
-    env: dict[str, str] = {}
+    env: _Env = {}
     for decl in main.vdecls:
-      if decl.dimensions or decl.typ.kind != "int":
+      if decl.typ.kind != "int":
         raise SmvUnsupported(f"non-scalar declaration: {decl.ident.name}")
+      if decl.dimensions:
+        env[decl.ident.name] = self._declare_array(decl, env)
+        continue
       if decl.init_expr is not None:
         obl: list[str] = []
         init = self._iexpr(decl.init_expr, env, obl)
