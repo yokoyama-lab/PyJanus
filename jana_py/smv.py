@@ -247,14 +247,35 @@ class _Compiler:
     return fq, fr
 
   def _occurs(self, name: str, e, env: dict[str, str]) -> bool:
-    """Does the SMV variable `name` occur in `e` after resolving through `env`?"""
+    """Does the SMV variable `name` occur in `e` after resolving through `env`?
+
+    **Fail-closed.**  A node this does not understand raises rather than
+    answering "no".  The set accepted here is exactly the set `_iexpr` and
+    `_bexpr` accept, so the aliasing check and the translation refuse together.
+
+    That lockstep is the point.  The swap gap had this shape: `_stmt` grew a
+    case, the aliasing check did not, and the model silently said "no alias
+    here".  Ending in `return False` reproduces it one level down — a ternary or
+    a stack `top` would read as "the target does not occur", and the only reason
+    that was harmless is that `_iexpr` happens to refuse those nodes a moment
+    later.  Safety must not rest on the order two unrelated functions fail in.
+
+    `or` short-circuits, so a `True` on the left returns without examining the
+    right.  That is safe: `True` is already the conservative answer and it is
+    also the faithful one, since PyJanus reports the alias at this statement.
+    """
+    if isinstance(e, (Number, Boolean)):
+      return False
     if isinstance(e, LvalExpr):
-      return not e.lval.selectors and env.get(e.lval.ident.name) == name
+      if e.lval.selectors:
+        raise SmvUnsupported("array/struct l-value in an aliasing check")
+      return self._lookup(e.lval.ident.name, env) == name
     if isinstance(e, BinExpr):
       return self._occurs(name, e.left, env) or self._occurs(name, e.right, env)
     if isinstance(e, UnaryExpr):
       return self._occurs(name, e.expr, env)
-    return False
+    raise SmvUnsupported(
+        f"expression outside the fragment in an aliasing check: {type(e).__name__}")
 
   def _lookup(self, name: str, env: dict[str, str]) -> str:
     if name not in env:

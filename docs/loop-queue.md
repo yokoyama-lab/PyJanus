@@ -101,7 +101,7 @@ PyJanus `-m 8` は失敗する（x が -56 に巻き込む）が、`--smv -m 8` 
 
 ---
 
-### [ ] 3. `smv.py` の `_occurs` を fail-closed にする
+### [x] 3. `smv.py` の `_occurs` を fail-closed にする
 
 **なぜ**: `_occurs` は知らないノード型で `return False`（`smv.py` 末尾）。今日は
 無害だが——ternary は `_iexpr` が先に `SmvUnsupported` を投げるので `unsupported` 止まり
@@ -282,3 +282,9 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
   （`validate_args` がそう扱っているため）。`tests/verify/test_smv_modular.py` 10本、
   うち1本は nuXmv で「無限領域モデルは proved／`-m 8` の実行は失敗」を固定＝拒否の根拠が
   黙って偽になるのを防ぐ。docs §6 に限界として追記。次は項目3（`_occurs` fail-closed）。
+- 2026-08-04 項目3 完了。`_occurs` が受理する節点集合を `_iexpr`/`_bexpr` と**同一**にした
+  （`Number`/`Boolean`/選択子なし `LvalExpr`/`BinExpr`/`UnaryExpr` 以外は raise、未束縛名も
+  `_lookup` 経由で raise）。149本の分類は完全に不変（supported 25 / unsupported 110 /
+  parse 7 / static 7）で、`type-error-{empty,top}.ja` の2本が別の関数で拒否されるように
+  なっただけ——どちらも元から断片外。`or` の短絡は残した（True は保守側かつ PyJanus 忠実）。
+  次は項目4（段数の両方向化。まず (a) 機械決定性を試し、詰まれば (b) 表現限定）。
