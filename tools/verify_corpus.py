@@ -37,7 +37,7 @@ DEFAULT_GLOBS = [
 ]
 
 
-def classify(path: Path, init: str, timeout: float, binary, style: str = "trans") -> tuple[str, str]:
+def classify(path: Path, init: str, timeout: float, binary, style: str = "assign") -> tuple[str, str]:
   try:
     text = path.read_text(encoding="utf-8")
     pt = preprocess.preprocess_text(str(path), text, None, "jana2014")
@@ -72,7 +72,11 @@ def main() -> int:
   ap = argparse.ArgumentParser()
   ap.add_argument("--init", choices=["any", "zero"], default="zero")
   ap.add_argument("--timeout", type=float, default=60.0)
-  ap.add_argument("--style", choices=["trans", "assign"], default="trans")
+  # Match `compile_to_smv`'s own default.  The two disagreed, and the
+  # functional form is not merely smaller: with arrays in the fragment it
+  # decides at least one more program (`base_convert.ja`), so measuring at
+  # `trans` reported a lower bound.  See `docs/totality-checking.md` §5.4.
+  ap.add_argument("--style", choices=["trans", "assign"], default="assign")
   ap.add_argument("globs", nargs="*", default=None)
   args = ap.parse_args()
 
