@@ -118,12 +118,10 @@ class FragmentTests(unittest.TestCase):
     self._refuses("procedure f(int a[])\n    a[0] += 1\n\n"
                   "procedure main()\n    int a[4]\n    call f(a)\n")
 
-  def test_a_variable_index_swap_is_refused(self):
-    # Reads and writes at a variable index are translated
-    # (`tests/verify/test_smv_array.py`); a swap still needs the index-precise
-    # aliasing test, since `a[i] <=> a[j]` fails exactly when i = j.
-    self._refuses("procedure main()\n    int a[4]\n    int i\n    int j\n"
-                  "    a[i] <=> a[j]\n")
+  def test_a_swap_between_a_scalar_and_a_cell_is_refused(self):
+    # Cells swap with cells (`tests/verify/test_smv_array.py`); mixing a scalar
+    # with an array cell is not something the expansion resolves.
+    self._refuses("procedure main()\n    int a[4]\n    int x\n    a[0] <=> x\n")
 
   def test_multi_dimensional_arrays_are_refused(self):
     self._refuses("procedure main()\n    int a[2][2]\n    a[0][0] += 1\n")
