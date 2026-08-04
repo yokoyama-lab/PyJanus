@@ -765,8 +765,15 @@ after `v += g`, does `h -= v` subtract the entry value of `v` or the accumulated
 one? — and the **state a path condition is evaluated in**; neither is expressible
 while `prim` and `guard` are abstract. Both are expressible over
 `RevLowerStmt.v`'s concrete `sstmt`/`sexec`, and that is where this file works.
-`sx` transcribes `_stmt`'s accumulation, `subst` transcribes `_iexpr` reading the
-pending map, and
+`sx` transcribes `_stmt`'s accumulation and returns **four** outcomes, because
+that is how many `smv.py` has: `Ok p` (the block accumulates), `Flagged` (an
+unconditional ERR edge — a model *is* produced), `Refused` (`SmvUnsupported` —
+no model at all) and `Cut` (the block ends and the control-flow encoding takes
+over, which is not a failure). Collapsing three of those into one `None`, as an
+earlier version did, cost precision: the aliasing lemma had to carry an
+`op2bin o <> None` side condition purely to exclude `^=`, which is a gap in the
+translation and not an aliasing verdict. Separated, `sx_flagged_iff` is an `iff`
+with no side condition. `subst` transcribes `_iexpr` reading the pending map, and
 
 ```coq
 block_sound : sx p s = Some p' -> describes g0 p g -> sexec s g h -> describes g0 p' h
@@ -883,6 +890,7 @@ core results) on each build.
 | The checker's alias test, the source side condition and the core's run-time test are one predicate | `aoccurs_rn`, `alias_three_ways` | `RevSmvAlias.v` | funext |
 | **The large-block encoding denotes the source semantics**: one transition of simultaneous updates over entry values = the block run statement by statement | `block_sound`, `block_from_entry`, `block_is_functional` | `RevSmvBlock.v` | none |
 | A path condition met mid-block may be evaluated at the block's entry | `guard_at_entry`, `seval_subst` | `RevSmvBlock.v` | none |
+| The block compiler flags a statement **iff** the aliasing check rejects it, with no side condition | `sx_flagged_iff` (+ `sx_refused_iff`, `swap_is_never_refused`) | `RevSmvBlock.v` | none |
 | **The join of a compatible family of partial injections is a partial injection** | `pinj_join`, `pinj_join_chain` | `RevJoin.v` | none |
 | The execution formula **is** a countable join; the trace closure is an instance | `traceH_is_join_fam`, `compatH_tracefam`, `pinj_traceH_via_join` | `RevJoin.v` | none |
 | **Decisions are closed under ¬, ∧, ∨** (∨ needs a compatible join) | `decisions_closed_neg`, `_and`, `_or`, `testH_decompose`, `dfalse_and` | `RevJoin.v` | none |

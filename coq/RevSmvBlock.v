@@ -88,26 +88,43 @@ Definition op2bin (o : aop) : option sbin :=
   | OXor => None
   end.
 
-(** Symbolic execution of straight-line code, transcribed from [_stmt].
+(** What [_stmt] does with a statement, as four distinct outcomes.
 
-    [None] is "the block compiler does not emit an ordinary transition here",
-    which covers both refusals ([SmvUnsupported]: `^=`, and any statement that
-    cuts a location) and the aliasing flags of [RevSmvAlias.v] (an unconditional
-    edge to ERR, after which the continuation is unreachable). *)
-Fixpoint sx (p : pmap) (s : sstmt) : option pmap :=
+    An earlier version returned [option pmap], which put three unrelated things
+    under [None] -- and they behave differently in [smv.py], so conflating them
+    made the lemmas below weaker than they needed to be (the aliasing one had to
+    carry an [op2bin o <> None] side condition just to exclude a case that has
+    nothing to do with aliasing).
+
+      - [Ok p]        the block accumulates; [p] is the pending map so far.
+      - [Flagged]     an *unconditional edge to ERR* is emitted and the
+                      continuation is unreachable -- this is [RevSmvAlias.v]'s
+                      decision, and a model **is** produced.
+      - [Refused]     [SmvUnsupported]: no model is produced at all.  In this
+                      fragment that is `^=`, which [_assign] does not translate.
+      - [Cut]         the block ends and the ordinary control-flow encoding
+                      takes over ([_if] / [_from] seal and continue).  Not a
+                      failure of any kind; simply outside this file. *)
+Inductive block :=
+| Ok (p : pmap)
+| Flagged
+| Refused
+| Cut.
+
+Fixpoint sx (p : pmap) (s : sstmt) : block :=
   match s with
-  | TSkip => Some p
+  | TSkip => Ok p
   | TAsn x o e =>
-      if soccurs x e then None                      (* the aliasing flag *)
+      if soccurs x e then Flagged                   (* the aliasing flag *)
       else match op2bin o with
-           | Some bo => Some (pupd p x (SBin bo (p x) (subst p e)))
-           | None => None
+           | Some bo => Ok (pupd p x (SBin bo (p x) (subst p e)))
+           | None => Refused                        (* `^=` is not translated *)
            end
   | TSwap x y =>
-      if Nat.eqb x y then None                      (* the aliasing flag *)
-      else Some (pupd (pupd p x (p y)) y (p x))
-  | TSeq a b => match sx p a with Some p1 => sx p1 b | None => None end
-  | TIf _ _ _ _ | TLoop _ _ _ _ => None             (* the block is cut here *)
+      if Nat.eqb x y then Flagged                   (* the aliasing flag *)
+      else Ok (pupd (pupd p x (p y)) y (p x))
+  | TSeq a b => match sx p a with Ok p1 => sx p1 b | r => r end
+  | TIf _ _ _ _ | TLoop _ _ _ _ => Cut
   end.
 
 (** The block's exit edge writes every changed entry **simultaneously**
@@ -155,7 +172,7 @@ Proof. intros; apply seval_subst; assumption. Qed.
     statement starts from the map the first left. *)
 
 Theorem block_sound : forall s p p' g0 g h,
-  sx p s = Some p' -> describes g0 p g -> sexec s g h -> describes g0 p' h.
+  sx p s = Ok p' -> describes g0 p g -> sexec s g h -> describes g0 p' h.
 Proof.
   induction s as [ | x o e | x y | a IHa b IHb | | ];
     intros p p' g0 g h Hsx Hd Hex; simpl in Hsx.
@@ -193,7 +210,7 @@ Proof.
       * subst n; rewrite pupd_eq, supd_eq; apply Hd.
       * rewrite (pupd_neq _ n x _ Hnx), (supd_neq _ n x _ Hnx); apply Hd.
   - (* TSeq *)
-    destruct (sx p a) as [p1|] eqn:Ha; [ | discriminate ].
+    destruct (sx p a) as [p1| | |] eqn:Ha; [ | discriminate | discriminate | discriminate ].
     inversion Hex; subst.
     match goal with Hm : sexec a g ?m |- _ =>
       apply (IHb p1 p' g0 m h Hsx (IHa p p1 g0 g m Ha Hd Hm)) end;
@@ -207,7 +224,7 @@ Qed.
     store the block starts from, produces exactly the store the source semantics
     reaches after running the whole block statement by statement. *)
 Corollary block_from_entry : forall s p' g h,
-  sx pid s = Some p' -> sexec s g h -> forall x, seval g (p' x) = Some (h x).
+  sx pid s = Ok p' -> sexec s g h -> forall x, seval g (p' x) = Some (h x).
 Proof.
   intros s p' g h Hsx Hex; apply (block_sound s pid p' g g h Hsx (describes_pid g) Hex).
 Qed.
@@ -217,7 +234,7 @@ Qed.
     well defined.  (Determinism of [sexec] itself comes from the core through
     [RevLowerStmt.lower_stmt_correct]; this is the statement the model needs.) *)
 Corollary block_is_functional : forall s p' g h h',
-  sx pid s = Some p' -> sexec s g h -> sexec s g h' -> forall x, h x = h' x.
+  sx pid s = Ok p' -> sexec s g h -> sexec s g h' -> forall x, h x = h' x.
 Proof.
   intros s p' g h h' Hsx H1 H2 x.
   pose proof (block_from_entry s p' g h Hsx H1 x) as E1.
@@ -247,7 +264,7 @@ Definition documented_block : sstmt :=
 
 Example documented_block_accumulates :
   match sx pid documented_block with
-  | Some p =>
+  | Ok p =>
       (* h reads the accumulated v, not the entry v *)
       p 2%nat = SBin SAdd (SBin SSub (SVar 2) (SBin SAdd (SVar 0) (SVar 1))) (SVar 3)
       (* the counter is its own one-line update *)
@@ -255,7 +272,7 @@ Example documented_block_accumulates :
       (* and the variables the block never writes stay identities, which is what
          lets [_edge] drop them and the [TRUE] default absorb their frames *)
       /\ p 1%nat = SVar 1 /\ p 3%nat = SVar 3
-  | None => False
+  | _ => False
   end.
 Proof. repeat split. Qed.
 
@@ -279,8 +296,8 @@ Definition swap_sequentially (p : pmap) (x y : nat) : pmap :=
 
 Example a_swap_must_be_simultaneous :
   match sx pid (TSwap 0 1) with
-  | Some p => p 0%nat = SVar 1 /\ p 1%nat = SVar 0    (* correct: exchanged *)
-  | None => False
+  | Ok p => p 0%nat = SVar 1 /\ p 1%nat = SVar 0      (* correct: exchanged *)
+  | _ => False
   end
   /\ swap_sequentially pid 0 1 0%nat = SVar 1
   /\ swap_sequentially pid 0 1 1%nat = SVar 1.        (* wrong: [x]'s value is gone *)
@@ -318,7 +335,7 @@ Example the_unchecked_swap_models_a_run_the_source_has_not : forall x g,
   (* ... while the source semantics has no run whatsoever *)
   /\ (forall h, ~ sexec (TSwap x x) g h)
   (* ... which is why [sx] must refuse it, as it now does *)
-  /\ sx pid (TSwap x x) = None.
+  /\ sx pid (TSwap x x) = Flagged.
 Proof.
   intros x g; repeat split.
   - intro n; rewrite the_unchecked_swap_is_the_identity; reflexivity.
@@ -327,42 +344,110 @@ Proof.
 Qed.
 
 (* ===================================================================== *)
-(** ** Where the block stops.
+(** ** Where the block stops, and why.
 
-    [sx] returns [None] exactly at the points [smv.py] leaves the accumulation:
-    a flagged alias (an unconditional edge to ERR -- [RevSmvAlias.alias_ok]), an
-    operator outside the fragment, or a statement that cuts a location.  The
-    aliasing cases agree with the previous file's decision, so a block that
-    accumulates is one whose statements all pass the check. *)
+    Each of the three non-[Ok] outcomes is now characterised on its own, which is
+    the point of separating them: [smv.py] does something different in each case,
+    and the previous [option] version could only say "not [Some]".
 
-Lemma sx_atomic_alias : forall p x o e,
-  sx p (TAsn x o e) = None -> op2bin o <> None -> alias_ok (fun n => n) (TAsn x o e) = false.
+    The identity resolution below is the right one at this layer: a block is
+    compiled *after* inlining has resolved every name, so [RevSmvAlias.v]'s
+    environment has already done its work. *)
+
+Definition idenv : renv := fun n => n.
+
+Lemma rn_id : forall e, rn idenv e = e.
 Proof.
-  intros p x o e H Hop; simpl in H |- *.
-  destruct (soccurs x e) eqn:Hoc.
-  - rewrite aoccurs_rn; simpl.
-    replace (rn (fun n : nat => n) e) with e; [ now rewrite Hoc | ].
-    clear; induction e as [z | n | e1 IH1 | o' a IHa b IHb]; simpl;
-      [ reflexivity | reflexivity | now rewrite <- IH1 | now rewrite <- IHa, <- IHb ].
-  - destruct (op2bin o); [ discriminate | contradiction ].
+  induction e as [z | n | e1 IH1 | o a IHa b IHb]; simpl;
+    [ reflexivity | reflexivity | now rewrite IH1 | now rewrite IHa, IHb ].
 Qed.
 
-Lemma sx_swap_alias : forall p x y,
-  sx p (TSwap x y) = None -> alias_ok (fun n => n) (TSwap x y) = false.
+Lemma rn_stmt_id : forall s, rn_stmt idenv s = s.
 Proof.
-  intros p x y H; simpl in H |- *.
-  destruct (Nat.eqb x y) eqn:E; [ reflexivity | discriminate ].
+  induction s as [ | x o e | x y | a IHa b IHb
+                 | e1 a IHa b IHb e2 | e1 a IHa b IHb e2 ]; simpl;
+    rewrite ?rn_id, ?IHa, ?IHb; reflexivity.
+Qed.
+
+Definition atomic (s : sstmt) : bool :=
+  match s with TAsn _ _ _ | TSwap _ _ => true | _ => false end.
+
+(** **Both directions, and with no side condition**: an atomic statement is
+    flagged exactly when [RevSmvAlias.alias_ok] rejects it.  Splitting [Refused]
+    off from [Flagged] is what removes the [op2bin o <> None] hypothesis the
+    previous one-directional version had to carry -- `^=` is a gap in the
+    translation, not an aliasing verdict, and conflating them forced the lemma to
+    exclude by hand a case that has nothing to do with aliasing. *)
+Theorem sx_flagged_iff : forall p s, atomic s = true ->
+  (sx p s = Flagged <-> alias_ok idenv s = false).
+Proof.
+  intros p [ | x o e | x y | a b | e1 a b e2 | e1 a b e2 ] Hat;
+    simpl in Hat; try discriminate.
+  - (* TAsn *)
+    unfold alias_ok; rewrite aoccurs_rn, rn_id; unfold idenv; simpl.
+    destruct (soccurs x e) eqn:Hoc; simpl.
+    + split; intro; reflexivity.
+    + destruct (op2bin o); split; intro H; discriminate.
+  - (* TSwap *)
+    unfold alias_ok, idenv; simpl.
+    destruct (Nat.eqb x y) eqn:E; simpl; split; intro H;
+      solve [ reflexivity | discriminate ].
+Qed.
+
+(** The direction the previous, one-directional lemmas stated -- kept under a
+    name so it is visible that nothing was lost when they were replaced.  What
+    *is* gone is their side condition: [sx_atomic_alias] had to assume
+    [op2bin o <> None] only because [None] also meant "`^=`", which is not an
+    aliasing verdict. *)
+Corollary sx_flagged_alias : forall p s, atomic s = true ->
+  sx p s = Flagged -> alias_ok idenv s = false.
+Proof. intros p s Hat H; apply (sx_flagged_iff p s Hat); exact H. Qed.
+
+(** [Refused] is a *translation* gap: it happens exactly at `^=`, on a statement
+    the aliasing check passes.  A swap is never refused -- the frame core has no
+    swap primitive, but [smv.py] does not need one, since a swap is two
+    simultaneous pending updates. *)
+Theorem sx_refused_iff : forall p x o e,
+  sx p (TAsn x o e) = Refused <-> (soccurs x e = false /\ op2bin o = None).
+Proof.
+  intros p x o e; simpl.
+  destruct (soccurs x e) eqn:Hoc; simpl.
+  - split; [ discriminate | intros [H _]; discriminate ].
+  - destruct (op2bin o) eqn:Ho.
+    + split; [ discriminate | intros [_ H]; discriminate ].
+    + split; [ intros _; split; reflexivity | reflexivity ].
+Qed.
+
+Theorem swap_is_never_refused : forall p x y, sx p (TSwap x y) <> Refused.
+Proof.
+  intros p x y; simpl; destruct (Nat.eqb x y); discriminate.
+Qed.
+
+(** [Cut] is not a failure at all: it is where [_if] / [_from] seal the block and
+    the ordinary control-flow encoding takes over. *)
+Theorem sx_cut_iff : forall p s,
+  sx p s = Cut <-> (exists e1 a b e2, s = TIf e1 a b e2 \/ s = TLoop e1 a b e2)
+                   \/ (exists a b, sx p (TSeq a b) = Cut /\ s = TSeq a b).
+Proof.
+  intros p s; split.
+  - destruct s as [ | x o e | x y | a b | e1 a b e2 | e1 a b e2 ]; intro H.
+    + discriminate.
+    + simpl in H; destruct (soccurs x e); [ discriminate | ].
+      destruct (op2bin o); discriminate.
+    + simpl in H; destruct (Nat.eqb x y); discriminate.
+    + right; exists a, b; split; [ exact H | reflexivity ].
+    + left; exists e1, a, b, e2; left; reflexivity.
+    + left; exists e1, a, b, e2; right; reflexivity.
+  - intros [[e1 [a [b [e2 [-> | ->]]]]] | [a [b [H ->]]]];
+      [ reflexivity | reflexivity | exact H ].
 Qed.
 
 (** And a block that does accumulate never hides an aliasing violation: by
     [block_sound] the transition it emits denotes the source relation, whose
     every step carries [RevSmvAlias.step_alias_ok]. *)
-Corollary accumulated_block_is_alias_free : forall x o e g h,
-  sexec (TAsn x o e) g h -> alias_ok (fun n => n) (TAsn x o e) = true.
+Corollary accumulated_block_is_alias_free : forall s g h,
+  sexec s g h -> alias_ok idenv s = true.
 Proof.
-  intros x o e g h H; apply (step_alias_ok (fun n => n) (TAsn x o e) g h).
-  replace (rn_stmt (fun n : nat => n) (TAsn x o e)) with (TAsn x o e); [ exact H | ].
-  simpl; f_equal.
-  clear; induction e as [z | n | e1 IH1 | o' a IHa b IHb]; simpl;
-    [ reflexivity | reflexivity | now rewrite <- IH1 | now rewrite <- IHa, <- IHb ].
+  intros s g h H; apply (step_alias_ok idenv s g h).
+  rewrite rn_stmt_id; exact H.
 Qed.

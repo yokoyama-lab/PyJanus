@@ -212,6 +212,11 @@ Print Assumptions RevSmvBlock.block_sound.
 Print Assumptions RevSmvBlock.block_from_entry.
 Print Assumptions RevSmvBlock.block_is_functional.
 Print Assumptions RevSmvBlock.the_unchecked_swap_models_a_run_the_source_has_not.
+Print Assumptions RevSmvBlock.sx_flagged_iff.
+Print Assumptions RevSmvBlock.sx_flagged_alias.
+Print Assumptions RevSmvBlock.sx_refused_iff.
+Print Assumptions RevSmvBlock.swap_is_never_refused.
+Print Assumptions RevSmvBlock.accumulated_block_is_alias_free.
 Print Assumptions rev_if_via_cat.
 Print Assumptions StS.denote_If.
 Print Assumptions StS.denote_Loop.
