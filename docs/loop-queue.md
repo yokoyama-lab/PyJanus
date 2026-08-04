@@ -334,7 +334,7 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 ---
 
-### [ ] 16. 変数添字の読みを nuXmv の配列型に載せる
+### [x] 16. 変数添字の読みを nuXmv の配列型に載せる
 
 **測定済みの前提（2026-08-05）**:
 
