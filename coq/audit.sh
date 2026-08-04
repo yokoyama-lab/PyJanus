@@ -179,6 +179,10 @@ Print Assumptions StpS.mstepn_det.
 Print Assumptions StpS.mrunn_det_halt.
 Print Assumptions StpS.crun_cost_complete.
 Print Assumptions StpS.compilation_is_step_exact_iff.
+Print Assumptions StpS.execn_unique.
+Print Assumptions StpS.execn_pos.
+Print Assumptions StpS.runn_sound.
+Print Assumptions StpS.execn_runn.
 Print Assumptions StpS.csize_invert.
 Print Assumptions StpS.execn_rev.
 Print Assumptions StpS.execn_iff.

@@ -648,7 +648,25 @@ relation at the same cost.
 Step count and code size are different measures: a loop running `Skip` once costs
 3 (entry assertion, body, exit test) while occupying 5 labels
 (`a_one_round_skip_loop_costs_three`). What relates them is the derivation, which
-is what the theorem above does.
+is what the theorem above does. The count is also *unique* — a program and a
+pair of states determine it (`execn_unique`, from the same determinism).
+
+**Fuel.** The count is a resource claim about an interpreter too, not only about
+the compiled machine: `execn_runn` says `n` units of fuel always suffice for a
+run the source charges `n`. Getting there had to avoid two dead ends. Every
+extracted interpreter in this development targets a core outside the chain (or a
+separate `RevLang` application), so none can be named alongside `execn`; and
+`REV_PRIM.pstep` is a **relation** by design — `RevStack.v` notes a pop on a
+too-short stack simply has no step — so there is nothing in the chain to run.
+Extending `REV_PRIM` with a computable step would be an interface decision, not a
+lemma, and `RevNecessity.v` proves the present three obligations tight. So the
+functional refinement is a **parameter** instead: any instance that has one
+supplies it (`RevExtractMod.v` defines exactly this `pstep_fn` and proves exactly
+this `pstep_fn_sound`), and instances whose primitives are genuinely relational
+simply do not get an interpreter. The bound is sufficient but *not least* — fuel
+measures depth, the count measures actions, and
+`the_fuel_bound_is_not_tight` separates them with four `Skip`s that charge 4 and
+run on 3.
 
 ## What the totality checker rests on (`RevError.v`)
 
@@ -890,7 +908,8 @@ core results) on each build.
 | **Compilation is step-exact, both ways**: the source charges `n` actions iff the compiled code reaches the exit in exactly `n` instructions | `compilation_is_step_exact_iff` (`compilation_is_step_exact` / `crun_cost_complete`) | `RevSteps.v` | none |
 | The machine is deterministic, cost included | `mstepn_det`, `mrunn_det_halt` | `RevSteps.v` | none |
 | **Running backwards costs exactly as much as running forwards**, out of the same amount of code | `execn_rev`, `execn_iff`, `csize_invert`, `inverse_costs_the_same` | `RevSteps.v` | none |
-| The counted semantics is the big-step one | `execn_exec`, `exec_execn` | `RevSteps.v` | none |
+| The counted semantics is the big-step one, and the count is unique | `execn_exec`, `exec_execn`, `execn_unique` | `RevSteps.v` | none |
+| **The step count is a fuel bound**: `n` units always suffice for a run the source charges `n` (sufficient, not least) | `execn_runn`, `runn_sound`, `the_fuel_bound_is_not_tight` | `RevSteps.v` | none |
 | **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |
 | **The totality checker's encoding is exactly right**: the compiled program fails iff the source fails an assertion | `fail_iff` (`fails_of_execE` / `failsP_execE`) | `RevError.v` | none |
 | **The checker's floor-division macro is correct** for every integer, and the naive translation demonstrably is not | `mfdiv_correct`, `mfmod_correct`, `naive_division_is_wrong` | `RevSmvExpr.v` | none |
