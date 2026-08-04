@@ -410,9 +410,18 @@ class _Compiler:
       if not 0 <= index.value < len(entry):
         raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
       return self._val(entry[index.value])
+    idx = self._dynamic_index(index, env, obl, len(entry))
+    return self._read_at(entry, idx)
+
+  def _dynamic_index(self, index, env: _Env, obl: list[str], size: int) -> str:
+    """Translate a variable index and check its range into ERR."""
     idx = self._iexpr(index, env, obl)
     obl.append(f"({idx}) >= 0")
-    obl.append(f"({idx}) < {len(entry)}")
+    obl.append(f"({idx}) < {size}")
+    return idx
+
+  def _read_at(self, entry: tuple, idx: str) -> str:
+    """The value of the selected element, as a `case` over the pending map."""
     if len(entry) == 1:
       return self._val(entry[0])
     branches = "".join(f"{idx} = {i} : {self._val(entry[i])}; "
@@ -512,7 +521,12 @@ class _Compiler:
       return self._call(s, env, depth, isinstance(s, UncallStmt))
     raise SmvUnsupported(f"statement outside the fragment: {type(s).__name__}")
 
-  def _assign(self, s: AssignStmt, env: dict[str, str]) -> None:
+  def _assign(self, s: AssignStmt, env: _Env) -> None:
+    entry = self._lookup(s.lval.ident.name, env)
+    if (isinstance(entry, tuple) and len(s.lval.selectors) == 1
+        and isinstance(s.lval.selectors[0], LvalIndex)
+        and not isinstance(s.lval.selectors[0].expr, Number)):
+      return self._assign_dynamic(s, env, entry)
     target = self._lval_name(s.lval, env)
     if self._occurs(target, s.expr, env):
       # `x += x` is not injective, and Janus rejects it *at run time* — after
@@ -522,23 +536,49 @@ class _Compiler:
       return
     obl: list[str] = []
     rhs = self._iexpr(s.expr, env, obl)
-    old = self._val(target)
-    if s.mod_op is ModOp.ADD_EQ:
-      new = f"({old} + {rhs})"
-    elif s.mod_op is ModOp.SUB_EQ:
-      new = f"({old} - {rhs})"
-    elif s.mod_op is ModOp.MUL_EQ:
+    new = self._apply(s.mod_op, self._val(target), rhs, obl)
+    self._check(obl)
+    self.pending[target] = new
+    self._maybe_seal()
+
+  def _apply(self, mod_op, old: str, rhs: str, obl: list[str]) -> str:
+    """`old op= rhs`, with the operator's own run-time obligations."""
+    if mod_op is ModOp.ADD_EQ:
+      return f"({old} + {rhs})"
+    if mod_op is ModOp.SUB_EQ:
+      return f"({old} - {rhs})"
+    if mod_op is ModOp.MUL_EQ:
       obl.append(f"({rhs}) != 0")  # x *= 0 is not injective
-      new = f"({old} * {rhs})"
-    elif s.mod_op is ModOp.DIV_EQ:
+      return f"({old} * {rhs})"
+    if mod_op is ModOp.DIV_EQ:
       obl.append(f"({rhs}) != 0")
       quotient, remainder = self._div_defines(old, rhs)
       obl.append(f"{remainder} = 0")  # `/=` must divide exactly
-      new = quotient
-    else:
-      raise SmvUnsupported(f"assignment operator outside the fragment: {s.mod_op.value}")
+      return quotient
+    raise SmvUnsupported(f"assignment operator outside the fragment: {mod_op.value}")
+
+  def _assign_dynamic(self, s: AssignStmt, env: _Env, entry: tuple) -> None:
+    """`a[i] op= e`: every element is updated conditionally on the index.
+
+    The operator's obligations are computed **once, on the value read at `i`** —
+    not per element.  Only the selected element is written, so a per-element
+    divisibility obligation would fire for elements the statement never touches:
+    a false alarm of exactly the kind the call-site double-binding check used to
+    produce.
+    """
+    for element in entry:
+      if self._occurs(element, s.expr, env) or \
+         self._occurs(element, s.lval.selectors[0].expr, env):
+        raise SmvUnsupported(
+            "aliasing between a variable index and the same array")
+    obl: list[str] = []
+    rhs = self._iexpr(s.expr, env, obl)
+    idx = self._dynamic_index(s.lval.selectors[0].expr, env, obl, len(entry))
+    new = self._apply(s.mod_op, self._read_at(entry, idx), rhs, obl)
     self._check(obl)
-    self.pending[target] = new
+    before = [self._val(name) for name in entry]   # read every element first
+    for k, name in enumerate(entry):
+      self.pending[name] = f"(case {idx} = {k} : {new}; TRUE : {before[k]}; esac)"
     self._maybe_seal()
 
   def _if(self, s: IfStmt, env: dict[str, str], depth: int) -> None:
