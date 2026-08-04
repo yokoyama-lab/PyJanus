@@ -468,6 +468,11 @@ class _Compiler:
     if proc is None:
       raise SmvUnsupported(f"undefined procedure: {s.ident.name}")
     if depth >= self.max_depth:
+      # Leave for BOUND and drop this path: the pending updates are not carried
+      # (BOUND is absorbing and only its *reachability* is asserted) and the
+      # continuation goes to a fresh location nothing enters.  So an ERR proof
+      # covers only the runs that stay below the bound; `INVARSPEC pc != BOUND`
+      # is what turns it into an unconditional one.
       self.uses_bound = True
       self.trans.append(_Trans(self.loc, self._conj(self.path), (), BOUND_LOC))
       self._enter(self._loc())
@@ -532,7 +537,7 @@ class _Compiler:
     lines.append(f"-- pc = {ERR_LOC} : a Janus runtime assertion failed (ERR)")
     if self.uses_bound:
       lines.append(f"-- pc = {BOUND_LOC} : the inlining bound was hit (BOUND) —"
-                   " a proof below is only valid up to that depth")
+                   " an ERR proof then covers only the runs that stay below it")
     lines.append(f"-- pc = {entry} : entry,  pc = {final} : normal termination")
     lines.append("")
     if self.defines:
@@ -609,8 +614,11 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
   `init` is `"any"` (variables unconstrained — proves totality on the whole
   domain) or `"zero"` (the store PyJanus actually starts from).  `assume` is an
   SMV boolean expression restricting the initial store, i.e. a precondition.
-  `max_depth` bounds procedure inlining; if the bound is reachable the model
-  says so through the `BOUND` location and the proof is only valid below it.
+  `max_depth` bounds procedure inlining.  A run that reaches the bound leaves for
+  the `BOUND` location and its continuation is dropped, so proving `pc != ERR`
+  is a statement about *the runs that stay below the bound* — not "correct up to
+  depth n".  Proving `pc != BOUND` as well says no run reaches it, which makes
+  the ERR proof unconditional.
   `style` selects the relational (`"trans"`) or functional (`"assign"`) shape.
   """
   if mod_bits not in (None, "") or mod_prime not in (None, ""):
