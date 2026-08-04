@@ -306,7 +306,7 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 ---
 
-### [ ] 14. 再測定と文書の更新
+### [x] 14. 再測定と文書の更新
 
 **完了条件**: `tools/verify_corpus.py` を149本に対して回し、`docs/totality-checking.md`
 §4（被覆率の表）と §5（判定の表）を**実測値で**置き換える。古い数値を推測で書き換えない
