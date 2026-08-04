@@ -71,7 +71,7 @@ Rocq は誤った証明を受理しないが、**弱い定理は喜んで受理�
 
 ---
 
-### [ ] 2. `--smv` と `-m bits` / `-p prime` の併用を拒否する
+### [x] 2. `--smv` と `-m bits` / `-p prime` の併用を拒否する
 
 **なぜ**: **実証済みの不健全性**。`cli.py` は `compile_to_smv` に剰余モードを渡さない
 ので、`-m 8` でも無限領域（`x : integer`）のモデルが出る。
@@ -276,3 +276,9 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
   `Admitted|(^|[^A-Za-z])admit[[:space:]]*[.;]` に限定した（誤検出0を55ファイルで確認）。
   `_CoqProject` に無いファイルでも検出することを合成サンプルで確認済み＝塞ぎたかった穴。
   次は項目2（`--smv` × `-m`/`-p` の拒否）。
+- 2026-08-04 項目2 完了。拒否は **`compile_to_smv` 側**に置いた（CLI だけだと
+  `tools/verify_corpus.py` 等のライブラリ経由が塞がらない）。`cli.py` は
+  `args.mod_bits`/`args.mod_prime` をそのまま渡す。`""` も未指定として扱う
+  （`validate_args` がそう扱っているため）。`tests/verify/test_smv_modular.py` 10本、
+  うち1本は nuXmv で「無限領域モデルは proved／`-m 8` の実行は失敗」を固定＝拒否の根拠が
+  黙って偽になるのを防ぐ。docs §6 に限界として追記。次は項目3（`_occurs` fail-closed）。

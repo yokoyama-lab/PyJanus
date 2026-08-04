@@ -220,7 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.smv:
       phase = "SMV generation"
       from .smv import compile_to_smv
-      print(compile_to_smv(program, init=args.smv_init, assume=args.smv_assume), end="")
+      print(compile_to_smv(program, init=args.smv_init, assume=args.smv_assume,
+                           mod_bits=args.mod_bits, mod_prime=args.mod_prime), end="")
       return 0
     if args.profile:
       phase = "profiling"

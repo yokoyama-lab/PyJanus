@@ -51,6 +51,13 @@ into and the first two of which would silently turn a proof into a lie:
   legal.  The translation is two-sorted and *refuses* such expressions rather
   than guessing — the same discipline `coq/RevLowerExpr.v` formalizes as `wf`.
 
+The same reasoning refuses the **modular modes**: `-m BITS` and `-p PRIME` wrap
+every value, while this back-end emits unbounded integers, so a model built for
+them would be about a different program.  `coq/RevSMod.v` and `RevExtSMod.v` are
+the verified target for encoding them properly, and the obligations would have to
+change with it — in a residue ring `*=` / `/=` need their factor to be a *unit*,
+not merely nonzero.
+
 Anything outside the fragment raises `SmvUnsupported`; nothing is ever emitted
 as an approximation.
 """
@@ -573,7 +580,9 @@ class _Compiler:
 
 
 def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = None,
-                   max_depth: int = 16, style: str = "assign") -> str:
+                   max_depth: int = 16, style: str = "assign",
+                   mod_bits: int | str | None = None,
+                   mod_prime: int | str | None = None) -> str:
   """Compile `program` to an nuXmv model asserting that no assertion can fail.
 
   `init` is `"any"` (variables unconstrained — proves totality on the whole
@@ -583,6 +592,17 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
   says so through the `BOUND` location and the proof is only valid below it.
   `style` selects the relational (`"trans"`) or functional (`"assign"`) shape.
   """
+  if mod_bits not in (None, "") or mod_prime not in (None, ""):
+    # The modular modes change what *every* operation computes, and this
+    # back-end compiles the unbounded-integer semantics.  Emitting a model
+    # anyway would prove `INVARSPEC pc != ERR` of a different program: under
+    # `-m 8` the interpreter wraps `100 += 100` to -56 and fails an assertion
+    # the unbounded model satisfies.  Refusing here rather than only in the CLI
+    # keeps library callers (verify_corpus.py, the tests) fail-closed too.
+    raise SmvUnsupported(
+        "the modular modes (-m BITS / -p PRIME) are outside this back-end: "
+        "they wrap every value, while the emitted model is over unbounded "
+        "integers, so a proof about it would be about a different program")
   if init not in ("any", "zero"):
     raise ValueError(f"init must be 'any' or 'zero', not {init!r}")
   if style not in ("trans", "assign"):
