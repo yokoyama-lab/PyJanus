@@ -142,7 +142,7 @@ PyJanus `-m 8` は失敗する（x が -56 に巻き込む）が、`--smv -m 8` 
 
 ---
 
-### [ ] 5. `RevSmvBlock.sx` の `None` を2つに分ける
+### [x] 5. `RevSmvBlock.sx` の `None` を2つに分ける
 
 **なぜ**: 現在の `None` は「断片外（`SmvUnsupported`＝モデルを出さない）」と
 「別名フラグ（ERR への無条件辺＝モデルは出る）」を混同している。smv.py での挙動が
