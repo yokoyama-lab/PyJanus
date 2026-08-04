@@ -111,12 +111,12 @@ class FragmentTests(unittest.TestCase):
     with self.assertRaises(SmvUnsupported):
       build(src)
 
-  def test_arrays_of_unspecified_length_are_refused(self):
-    # A fixed-length array at a constant index is now expanded to scalars
-    # (`tests/verify/test_smv_array.py`).  What is still outside the fragment is
-    # everything the expansion cannot resolve on its own.
+  def test_an_argument_that_is_not_a_plain_variable_is_refused(self):
+    # Arrays now pass by reference through inlining, which supplies the length
+    # (`tests/verify/test_smv_array.py`).  What the expansion cannot resolve is
+    # an argument that is not simply a name.
     self._refuses("procedure f(int a[])\n    a[0] += 1\n\n"
-                  "procedure main()\n    int a[4]\n    call f(a)\n")
+                  "procedure main()\n    int a[4]\n    call f(a[0])\n")
 
   def test_a_swap_between_a_scalar_and_a_cell_is_refused(self):
     # Cells swap with cells (`tests/verify/test_smv_array.py`); mixing a scalar
