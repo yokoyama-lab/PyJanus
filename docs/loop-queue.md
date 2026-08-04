@@ -12,10 +12,14 @@
 
 ```bash
 make -C coq                                   # 増分ビルド（約1秒）
-coq/audit.sh                                  # フルビルド＋公理検査（約10秒）
-! grep -rn 'Admitted\|admit\.' coq/*.v        # 空であること
+coq/audit.sh                                  # フルビルド＋公理検査＋未完了証明の検査（約10秒）
 python3 -m pytest tests/verify/ -q            # 約4秒
 ```
+
+`Admitted` / `admit` の repo 全体検査は **`audit.sh` の step 0 に入った**（項目1）ので
+別途 grep する必要はない。`Axiom` は repo 全体では検査しない——`Module Type` の義務
+（`REV_PRIM` の3法則など）が `Axiom` で宣言されるため。実際に結果へ届く公理は
+`Print Assumptions`（step 3）が捕まえる。
 
 コミット前（キュー1件を閉じるとき）にもう1段:
 
@@ -54,7 +58,7 @@ Rocq は誤った証明を受理しないが、**弱い定理は喜んで受理�
 
 ## キュー
 
-### [ ] 1. `audit.sh` に repo 全体の `Admitted` 検査を足す
+### [x] 1. `audit.sh` に repo 全体の `Admitted` 検査を足す
 
 **なぜ**: `audit.sh` は**名指しした191定理**しか見ない（`.v` は55ファイル）。新しい
 ファイルを足して登録し忘れると、その中の `Admitted` は緑のまま通る。ループ自身が
@@ -266,3 +270,9 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
 
 - 2026-08-04 キュー作成。項目1〜8が対象、保留は別掲。次は項目1（`audit.sh` の
   repo 全体 `Admitted` 検査）——ループ自身のゲートなので最初に固める。
+- 2026-08-04 項目1 完了。`audit.sh` に step 0 を追加（ビルド前に走るので fail-fast）。
+  実装中の発見: `Axiom` は `Module Type` の義務宣言で10箇所正当に使われており repo 全体
+  検査は**誤り**、`admit` は散文（"admits a sound fuel"）に5箇所あるのでパターンは
+  `Admitted|(^|[^A-Za-z])admit[[:space:]]*[.;]` に限定した（誤検出0を55ファイルで確認）。
+  `_CoqProject` に無いファイルでも検出することを合成サンプルで確認済み＝塞ぎたかった穴。
+  次は項目2（`--smv` × `-m`/`-p` の拒否）。

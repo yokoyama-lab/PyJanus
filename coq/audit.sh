@@ -10,6 +10,29 @@ ROCQ_DIR="$(dirname "$ROCQ")"
 export PATH="$ROCQ_DIR:$PATH"
 echo "== using $("$ROCQ" --version | head -1) =="
 
+# 0. Repo-wide: no unfinished proof anywhere.
+#
+#    Steps 2-3 below only inspect the theorems this script *names*, so a new file
+#    whose results were never added here could carry an `Admitted` and still come
+#    out green.  This check does not depend on the list, and runs first because it
+#    needs no build.
+#
+#    Deliberately NOT grepped repo-wide: `Axiom`.  A `Module Type` obligation is
+#    declared with `Axiom` and is exactly how `REV_PRIM` states the three local
+#    laws an instance must discharge (`RevCore.v`, `RevCoreP.v`, `RevMod.v`, ...),
+#    so a blanket check would reject the framework's own design.  Real axioms
+#    reaching a result are what `Print Assumptions` reports, which is step 3.
+#
+#    The pattern matches the vernacular `Admitted` and the `admit` tactic, not
+#    the English word: `admits a sound fuel interpreter` and the like appear in
+#    several file headers and must not trip it.
+UNFINISHED="$(grep -nE 'Admitted|(^|[^A-Za-z])admit[[:space:]]*[.;]' ./*.v || true)"
+if [ -n "$UNFINISHED" ]; then
+  echo "AUDIT FAILED: unfinished proof in the development:" >&2
+  printf '%s\n' "$UNFINISHED" >&2
+  exit 1
+fi
+
 # 1. Build the whole development.
 "$ROCQ" makefile -f _CoqProject -o Makefile >/dev/null
 make -j2
