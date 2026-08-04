@@ -202,7 +202,7 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
 
 ---
 
-### [ ] 8. BOUND の主張を精密にする（ドキュメント）
+### [x] 8. BOUND の主張を精密にする（ドキュメント）
 
 **なぜ**: `_call` が深さ上限で BOUND に抜けたあと、継続は到達不能な位置に置かれる。
 `nuxmv.py` の `status` は最弱を取る（refuted > unknown > proved）ので**報告は誤らない**
