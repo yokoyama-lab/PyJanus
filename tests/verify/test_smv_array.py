@@ -135,12 +135,63 @@ class OutOfBoundsTests(unittest.TestCase):
     self.assertFalse(has_err_edge(model_of(FIXED, init="zero")))
 
 
+DYN_READ = ("procedure main()\n    int a[3]\n    int i\n    int x\n"
+            "    i += 1\n    x += a[i]\n")
+DYN_READ_OOB = ("procedure main()\n    int a[3]\n    int i\n    int x\n"
+                "    i += 5\n    x += a[i]\n")
+DYN_READ_ONE = ("procedure main()\n    int a[1]\n    int i\n    int x\n"
+                "    x += a[i]\n")
+CELL_VS_DYN = ("procedure main()\n    int a[3]\n    int i\n    a[0] += a[i]\n")
+
+
+class DynamicReadTests(unittest.TestCase):
+  """`a[i]` reads through a `case` over the elements, guarded by the bounds.
+
+  38 of the 41 array-blocked programs use a variable index, so this is the step
+  that matters for coverage.  Out-of-range is a run-time error in PyJanus, so it
+  is an obligation checked into ERR — not an assumption.
+  """
+
+  def test_the_read_is_a_case_over_the_elements(self):
+    model = model_of(DYN_READ, init="zero")
+    self.assertIn("(i + 1) = 0 : a_0", model)
+    self.assertIn("(i + 1) = 1 : a_1", model)
+    # the last element is the `TRUE` default rather than its own branch
+    self.assertIn("TRUE : a_2", model)
+
+  def test_the_bounds_are_checked_into_err(self):
+    model = model_of(DYN_READ, init="zero")
+    self.assertTrue(has_err_edge(model), "an out-of-range index must reach ERR")
+    # `_iexpr` already parenthesises, so the operand may be nested; pin the
+    # operand and the bound, not the number of brackets.
+    self.assertRegex(model, r"\(+i \+ 1\)+ >= 0")
+    self.assertRegex(model, r"\(+i \+ 1\)+ < 3")
+
+  def test_a_one_element_array_needs_no_case(self):
+    model = model_of(DYN_READ_ONE, init="zero")
+    self.assertNotIn("case (i)", model)
+    self.assertTrue(has_err_edge(model))
+
+  def test_the_index_is_read_through_the_pending_map(self):
+    # `i += 1` precedes the read, so the index term is the accumulated `(i + 1)`,
+    # not the entry value — the large-block discipline of RevSmvBlock.v.
+    self.assertIn("(i + 1)", model_of(DYN_READ, init="zero"))
+    self.assertNotIn("case (i) = 0", model_of(DYN_READ, init="zero"))
+
+
 class StillRefusedTests(unittest.TestCase):
   """What this step deliberately does not do yet."""
 
-  def test_a_variable_index_is_refused(self):
+  def test_a_variable_index_write_is_refused(self):
     with self.assertRaises(SmvUnsupported):
       model_of(DYNAMIC, init="zero")
+
+  def test_a_cell_against_a_variable_index_is_refused(self):
+    # `a[0] += a[i]` is an error exactly when i = 0.  Answering "yes" would be a
+    # false alarm and "no" would be unsound, so it is refused until the
+    # index-precise aliasing check exists.
+    with self.assertRaises(SmvUnsupported):
+      model_of(CELL_VS_DYN, init="zero")
 
   def test_a_zero_length_array_is_refused(self):
     # Caught by the corpus check while landing this step: `int x[0]` is rejected
@@ -163,7 +214,9 @@ class AgreementTests(unittest.TestCase):
     for name, src, fails in (("in-bounds", FIXED, False),
                              ("initialised", INITIALISED, False),
                              ("swap-cells", SWAP_CELLS, False),
-                             ("out-of-bounds", OOB, True)):
+                             ("out-of-bounds", OOB, True),
+                             ("dynamic-read", DYN_READ, False),
+                             ("dynamic-read-oob", DYN_READ_OOB, True)):
       with self.subTest(name):
         self.assertEqual(interpreter_fails(src), fails)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
