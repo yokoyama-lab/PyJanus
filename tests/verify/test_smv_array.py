@@ -179,12 +179,60 @@ class DynamicReadTests(unittest.TestCase):
     self.assertNotIn("case (i) = 0", model_of(DYN_READ, init="zero"))
 
 
+DYN_WRITE = ("procedure main()\n    int a[3]\n    int i\n"
+             "    i += 1\n    a[i] += 5\n")
+DYN_WRITE_OOB = ("procedure main()\n    int a[3]\n    int i\n"
+                 "    i += 7\n    a[i] += 5\n")
+DYN_DIV = ("procedure main()\n    int a[3]\n    int i\n    int d\n"
+           "    d += 2\n    a[i] += 4\n    a[i] /= d\n")
+DYN_DIV_BAD = ("procedure main()\n    int a[3]\n    int i\n    int d\n"
+               "    d += 2\n    a[i] += 5\n    a[i] /= d\n")
+DYN_VS_DYN = "procedure main()\n    int a[3]\n    int i\n    int j\n    a[i] += a[j]\n"
+DYN_VS_CELL = "procedure main()\n    int a[3]\n    int i\n    a[i] += a[0]\n"
+DYN_SWAP = "procedure main()\n    int a[3]\n    int i\n    int j\n    a[i] <=> a[j]\n"
+
+
+class DynamicWriteTests(unittest.TestCase):
+  """`a[i] += e` updates every element conditionally on the index."""
+
+  def test_every_element_gets_a_conditional_update(self):
+    model = model_of(DYN_WRITE, init="zero")
+    for k in range(3):
+      with self.subTest(k):
+        branches = next_branches(model, f"a_{k}")
+        self.assertEqual(len(branches), 1)
+        self.assertIn(f"= {k} :", branches[0][1])
+
+  def test_the_bounds_are_still_checked(self):
+    self.assertTrue(has_err_edge(model_of(DYN_WRITE, init="zero")))
+
+  def test_the_divisibility_obligation_is_on_the_value_read(self):
+    # One `/=` means one divisor obligation and one remainder obligation, not
+    # one per element: the elements that are *not* selected are never divided,
+    # so per-element obligations would be false alarms.
+    import re
+    model = model_of(DYN_DIV, init="zero")
+    self.assertEqual(len(re.findall(r"__fr\d+ :=", model)), 1)
+
+
 class StillRefusedTests(unittest.TestCase):
   """What this step deliberately does not do yet."""
 
-  def test_a_variable_index_write_is_refused(self):
+  def test_a_write_whose_index_reads_the_same_array_is_refused(self):
+    # `a[a[0]] += 1` fails exactly when `a[0] = 0`; the index is walked too.
     with self.assertRaises(SmvUnsupported):
-      model_of(DYNAMIC, init="zero")
+      model_of("procedure main()\n    int a[3]\n    a[a[0]] += 1\n", init="zero")
+
+  def test_a_variable_index_against_the_same_array_is_refused(self):
+    # `a[i] += a[j]` fails exactly when i = j, and `a[i] += a[0]` when i = 0.
+    for name, src in (("dyn-vs-dyn", DYN_VS_DYN), ("dyn-vs-cell", DYN_VS_CELL)):
+      with self.subTest(name):
+        with self.assertRaises(SmvUnsupported):
+          model_of(src, init="zero")
+
+  def test_a_variable_index_swap_is_refused(self):
+    with self.assertRaises(SmvUnsupported):
+      model_of(DYN_SWAP, init="zero")
 
   def test_a_cell_against_a_variable_index_is_refused(self):
     # `a[0] += a[i]` is an error exactly when i = 0.  Answering "yes" would be a
@@ -216,7 +264,11 @@ class AgreementTests(unittest.TestCase):
                              ("swap-cells", SWAP_CELLS, False),
                              ("out-of-bounds", OOB, True),
                              ("dynamic-read", DYN_READ, False),
-                             ("dynamic-read-oob", DYN_READ_OOB, True)):
+                             ("dynamic-read-oob", DYN_READ_OOB, True),
+                             ("dynamic-write", DYN_WRITE, False),
+                             ("dynamic-write-oob", DYN_WRITE_OOB, True),
+                             ("dynamic-div", DYN_DIV, False),
+                             ("dynamic-div-bad", DYN_DIV_BAD, True)):
       with self.subTest(name):
         self.assertEqual(interpreter_fails(src), fails)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
