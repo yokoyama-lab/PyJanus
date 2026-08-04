@@ -779,7 +779,14 @@ class _Compiler:
     obl: list[str] = []
     init = self._iexpr(enter.init_expr, env, obl) if enter.init_expr is not None else "0"
     self._check(obl)
-    name = self._declare(enter.ident.name, None)
+    # `--init zero` is "the store PyJanus actually starts from", so a local
+    # belongs in it too.  Leaving it free made the zero store a *family* of
+    # states rather than one, which over-approximates: every undecided program
+    # in the corpus carried free locals.  The value is irrelevant to the
+    # semantics — the `local` entry overwrites it before any read — so pinning
+    # it removes states that differ only in a dead component.
+    name = self._declare(enter.ident.name,
+                         "0" if self.init_mode == "zero" else None)
     self.pending[name] = init
 
     inner = dict(env)
