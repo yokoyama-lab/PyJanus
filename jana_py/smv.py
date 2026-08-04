@@ -289,13 +289,40 @@ class _Compiler:
     if isinstance(e, (Number, Boolean)):
       return False
     if isinstance(e, LvalExpr):
-      return self._lval_name(e.lval, env) == name
+      return self._occurs_lval(name, e.lval, env)
     if isinstance(e, BinExpr):
       return self._occurs(name, e.left, env) or self._occurs(name, e.right, env)
     if isinstance(e, UnaryExpr):
       return self._occurs(name, e.expr, env)
     raise SmvUnsupported(
         f"expression outside the fragment in an aliasing check: {type(e).__name__}")
+
+  def _occurs_lval(self, name: str, lval, env: _Env) -> bool:
+    """Does the SMV variable `name` occur in this l-value?
+
+    A variable index reads *the index expression* as well as the array, which is
+    what PyJanus's `_selector_index_exprs` walks.  When the target is a cell of
+    the same array the answer is not syntactic — `a[0] += a[i]` fails exactly
+    when `i = 0` — so it is refused rather than guessed: answering "yes" would be
+    a false alarm and "no" would be unsound.  Deciding it needs the
+    index-precise test `RevArr.wf_assign` formalises.
+    """
+    entry = self._lookup(lval.ident.name, env)
+    if not lval.selectors:
+      if isinstance(entry, tuple):
+        raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
+      return entry == name
+    if not isinstance(entry, tuple):
+      raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
+    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
+      raise SmvUnsupported("struct field or multi-dimensional l-value")
+    index = lval.selectors[0].expr
+    if isinstance(index, Number):
+      return 0 <= index.value < len(entry) and entry[index.value] == name
+    if name in entry:
+      raise SmvUnsupported(
+          "aliasing between a cell and a variable index of the same array")
+    return self._occurs(name, index, env)
 
   def _lookup(self, name: str, env: dict[str, str]) -> str:
     if name not in env:
@@ -337,8 +364,10 @@ class _Compiler:
     if not isinstance(entry, tuple) or not lval.selectors:
       return False
     selector = lval.selectors[0]
-    if not isinstance(selector, LvalIndex) or not isinstance(selector.expr, Number):
+    if not isinstance(selector, LvalIndex):
       return False
+    if not isinstance(selector.expr, Number):
+      return self._oob(selector.expr, env)   # a nested constant index may still be
     return not 0 <= selector.expr.value < len(entry)
 
   def _oob(self, e, env: _Env) -> bool:
@@ -355,12 +384,47 @@ class _Compiler:
     raise SmvUnsupported(
         f"expression outside the fragment in a bounds check: {type(e).__name__}")
 
+  def _read_lval(self, lval, env: _Env, obl: list[str]) -> str:
+    """Read an l-value.  A variable index becomes a `case` over the elements.
+
+    The index is itself translated (so it reads the pending map, keeping the
+    large-block composition right) and its range becomes an **obligation**, not
+    an assumption: PyJanus raises "Array index `[i]' was out of bounds" when it
+    reaches such a read, so out-of-range has to reach ERR.
+
+    The last element is the `TRUE` default rather than a branch of its own, which
+    is exactly the case the bounds obligation leaves; a one-element array needs
+    no `case` at all.
+    """
+    entry = self._lookup(lval.ident.name, env)
+    if not lval.selectors:
+      if isinstance(entry, tuple):
+        raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
+      return self._val(entry)
+    if not isinstance(entry, tuple):
+      raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
+    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
+      raise SmvUnsupported("struct field or multi-dimensional l-value")
+    index = lval.selectors[0].expr
+    if isinstance(index, Number):
+      if not 0 <= index.value < len(entry):
+        raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
+      return self._val(entry[index.value])
+    idx = self._iexpr(index, env, obl)
+    obl.append(f"({idx}) >= 0")
+    obl.append(f"({idx}) < {len(entry)}")
+    if len(entry) == 1:
+      return self._val(entry[0])
+    branches = "".join(f"{idx} = {i} : {self._val(entry[i])}; "
+                       for i in range(len(entry) - 1))
+    return f"(case {branches}TRUE : {self._val(entry[-1])}; esac)"
+
   def _iexpr(self, e, env: dict[str, str], obl: list[str]) -> str:
     """Translate an integer-sorted expression, appending safety obligations."""
     if isinstance(e, Number):
       return str(e.value) if e.value >= 0 else f"({e.value})"
     if isinstance(e, LvalExpr):
-      return self._val(self._lval_name(e.lval, env))
+      return self._read_lval(e.lval, env, obl)
     if isinstance(e, BinExpr):
       if e.op in _ARITH:
         left = self._iexpr(e.left, env, obl)
