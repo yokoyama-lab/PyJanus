@@ -360,12 +360,30 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 ---
 
-### [ ] 17. 再測定と文書更新（2回目）
+### [x] 17. 再測定と文書更新（2回目）
 
 **完了条件**: 項目15・16 の結果で `docs/totality-checking.md` §5・§5.5 を更新。
 実測値のみ。`CLAUDE.md` の現状節も合わせる。
 
 **規模**: 小
+
+---
+
+### [ ] 18. `verify_corpus.py` の既定を `assign` に揃えて測り直す
+
+**なぜ**: ライブラリ `compile_to_smv` の既定は `style="assign"`、ツール
+`verify_corpus.py` の既定は `trans` で食い違っている。§5 の表は後者で測っており、
+**`assign` の方が少なくとも1本多く証明する**（`base_convert.ja`: trans=unknown /
+assign=proved、120秒・`--init zero`。2026-08-05 実測）。つまり公表している `proved` は
+下限である。§5.4 は「ASSIGN 形式は判定を1つも変えなかった」と書いていたが、
+配列が断片に入って成り立たなくなった（訂正済み）。
+
+**完了条件**: `verify_corpus.py` の既定を `assign` にし、149本を `--timeout 120` で
+測り直して §5 の表を置き換える。`trans` も `--style` で選べるままにする。
+**判定が下がる本がないこと**を確認する（`assign` は書かれない変数のフレーム条件を
+`next(v) := v;` で明示するようになったので下がらないはずだが、測って確かめる）。
+
+**規模**: 小（測定が主。30分程度）
 
 ---
 
