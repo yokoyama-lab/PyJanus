@@ -444,6 +444,19 @@ Proof.
   exact Hn.
 Qed.
 
+(** The count is unique: a program, a starting state and a final state determine
+    it.  (Two derivations compile to two runs reaching the same halt, and
+    [mrunn_det_halt] identifies them.) *)
+Corollary execn_unique : forall n1 n2 s a b,
+  execn n1 s a b -> execn n2 s a b -> n1 = n2.
+Proof.
+  intros n1 n2 s a b H1 H2.
+  destruct (mrunn_det_halt n1 n2 _ _ _ _ _ _ _
+              (compilation_is_step_exact n1 s a b H1)
+              (compilation_is_step_exact n2 s a b H2)
+              (Cp.entry_halt s) (Cp.entry_halt s)) as [Heq [_ _]]; exact Heq.
+Qed.
+
 (** **The** cost theorem, both ways. *)
 Theorem compilation_is_step_exact_iff : forall n s a b,
   execn n s a b <-> Cp.mrunn G n (Cp.entry_code s) 0 a (Cp.csize s) b.
@@ -574,6 +587,176 @@ Proof.
   - apply execn_rev; exact H.
   - apply execn_rev in H; rewrite L.invert_invol in H; exact H.
 Qed.
+
+(* ===================================================================== *)
+(** ** Fuel and steps.
+
+    A fuel-bounded interpreter is the shape every executable core in this
+    development takes ([RevExtract.v], [RevExtractAr.v], [RevExtractFrame.v],
+    [RevExtractMod.v]).  None of them can be named alongside [execn], because
+    each targets a core outside the [RevSmallStep -> RevDenote -> RevFix ->
+    RevCompile] chain, or a separate application of [RevLang]; the generativity
+    of functor application makes even the statement ill-typed.
+
+    Putting one *inside* the chain runs into the framework's own design:
+    [REV_PRIM.pstep] is a **relation**, deliberately — [RevStack.v] notes that a
+    pop on a too-short stack simply has no step, which a function into [state]
+    could not express.  So there is nothing to run.
+
+    Extending [REV_PRIM] with a computable step is not the answer either: its
+    three obligations are the framework's headline, and [RevNecessity.v] proves
+    them *tight*.  Adding a fourth would be an interface decision, not a lemma.
+
+    What costs nothing is to take the functional refinement as a **parameter**.
+    Any instance that has one supplies it; instances whose primitives are
+    genuinely relational simply do not get an interpreter.  The shape below is
+    the development's own: [RevExtractMod.v] defines exactly this [pstep_fn] and
+    proves exactly this [pstep_fn_sound]. *)
+
+Section WithFn.
+
+Variable pstep_fn : P.prim -> P.state -> option P.state.
+Hypothesis pstep_fn_sound : forall p a b, pstep_fn p a = Some b -> P.pstep p a b.
+Hypothesis pstep_fn_complete : forall p a b, P.pstep p a b -> pstep_fn p a = Some b.
+
+Fixpoint runn (f : nat) (s : L.stmt) (a : P.state) {struct f} : option P.state :=
+  match f with
+  | O => None
+  | S f' =>
+      match s with
+      | L.Skip => Some a
+      | L.Prim p => pstep_fn p a
+      | L.Seq s1 s2 =>
+          match runn f' s1 a with Some m => runn f' s2 m | None => None end
+      | L.If g1 s1 s2 g2 =>
+          if P.gtest g1 a
+          then match runn f' s1 a with
+               | Some b => if P.gtest g2 b then Some b else None
+               | None => None end
+          else match runn f' s2 a with
+               | Some b => if P.gtest g2 b then None else Some b
+               | None => None end
+      | L.Loop g1 s1 s2 g2 =>
+          if P.gtest g1 a then loopn f' g1 s1 s2 g2 a else None
+      | L.Call p => runn f' (G p) a
+      | L.Uncall p => runn f' (L.invert (G p)) a
+      end
+  end
+with loopn (f : nat) (g1 : P.guard) (s1 s2 : L.stmt) (g2 : P.guard) (a : P.state)
+  {struct f} : option P.state :=
+  match f with
+  | O => None
+  | S f' =>
+      match runn f' s1 a with
+      | None => None
+      | Some a1 =>
+          if P.gtest g2 a1 then Some a1
+          else match runn f' s2 a1 with
+               | None => None
+               | Some a2 =>
+                   if P.gtest g1 a2 then None else loopn f' g1 s1 s2 g2 a2
+               end
+      end
+  end.
+
+(** Soundness: whatever it returns is a real run. *)
+Lemma runn_sound_mut : forall f,
+  (forall s a b, runn f s a = Some b -> L.exec G s a b)
+  /\ (forall g1 s1 s2 g2 a b,
+        loopn f g1 s1 s2 g2 a = Some b -> L.lp G g1 s1 s2 g2 a b).
+Proof.
+  induction f as [ | f [IHr IHl] ]; split;
+    [ intros s a b H; discriminate | intros g1 s1 s2 g2 a b H; discriminate | | ].
+  - intros [ | p | s1 s2 | g1 s1 s2 g2 | g1 s1 s2 g2 | p | p ] a b H; simpl in H.
+    + injection H as <-; apply L.E_Skip.
+    + apply L.E_Prim, pstep_fn_sound; exact H.
+    + destruct (runn f s1 a) as [m|] eqn:E1; [ | discriminate ].
+      eapply L.E_Seq; [ apply IHr; exact E1 | apply IHr; exact H ].
+    + destruct (P.gtest g1 a) eqn:Eg1.
+      * destruct (runn f s1 a) as [x|] eqn:E1; [ | discriminate ].
+        destruct (P.gtest g2 x) eqn:Eg2; [ | discriminate ].
+        injection H as <-; apply L.E_IfT; [ exact Eg1 | apply IHr; exact E1 | exact Eg2 ].
+      * destruct (runn f s2 a) as [x|] eqn:E2; [ | discriminate ].
+        destruct (P.gtest g2 x) eqn:Eg2; [ discriminate | ].
+        injection H as <-; apply L.E_IfF; [ exact Eg1 | apply IHr; exact E2 | exact Eg2 ].
+    + destruct (P.gtest g1 a) eqn:Eg1; [ | discriminate ].
+      apply L.E_Loop; [ exact Eg1 | apply IHl; exact H ].
+    + apply L.E_Call, IHr; exact H.
+    + apply L.E_Uncall, IHr; exact H.
+  - intros g1 s1 s2 g2 a b H; simpl in H.
+    destruct (runn f s1 a) as [a1|] eqn:E1; [ | discriminate ].
+    destruct (P.gtest g2 a1) eqn:Eg2.
+    + injection H as <-; apply L.L_one; [ apply IHr; exact E1 | exact Eg2 ].
+    + destruct (runn f s2 a1) as [a2|] eqn:E2; [ | discriminate ].
+      destruct (P.gtest g1 a2) eqn:Eg1; [ discriminate | ].
+      eapply L.L_more;
+        [ apply IHr; exact E1 | exact Eg2 | apply IHr; exact E2 | exact Eg1
+        | apply IHl; exact H ].
+Qed.
+
+Corollary runn_sound : forall f s a b, runn f s a = Some b -> L.exec G s a b.
+Proof. intros f; apply (proj1 (runn_sound_mut f)). Qed.
+
+(** Every derivation charges at least one action, which is what makes the fuel
+    arithmetic below go through: a [Seq] can hand each half all but one unit. *)
+Lemma execn_pos : forall n s a b, execn n s a b -> 1 <= n.
+Proof.
+  intros n s a b H.
+  induction H using execn_mut
+    with (P0 := fun k g1 s1 s2 g2 a b (_ : lpn k g1 s1 s2 g2 a b) => 1 <= k);
+    lia.
+Qed.
+
+(** **The** link: the step count *is* a fuel bound.  [n] units of fuel suffice
+    for a run the source charges [n] — so the count is a resource claim about the
+    interpreter, not only about the compiled machine. *)
+Theorem execn_runn : forall n s a b,
+  execn n s a b -> forall f, n <= f -> runn f s a = Some b.
+Proof.
+  intros n s a b H.
+  induction H using execn_mut
+    with (P0 := fun k g1 s1 s2 g2 a b (_ : lpn k g1 s1 s2 g2 a b) =>
+                  forall f, k <= f -> loopn f g1 s1 s2 g2 a = Some b);
+    intros f Hf.
+  - (* Skip *) destruct f as [ | f' ]; [ lia | reflexivity ].
+  - (* Prim *) destruct f as [ | f' ]; [ lia | ]. simpl; apply pstep_fn_complete; assumption.
+  - (* Seq *)
+    pose proof (execn_pos _ _ _ _ H) as Hp1; pose proof (execn_pos _ _ _ _ H0) as Hp2.
+    destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite (IHexecn1 f') by lia; apply IHexecn2; lia.
+  - (* IfT *) destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite e, (IHexecn f') by lia; rewrite e0; reflexivity.
+  - (* IfF *) destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite e, (IHexecn f') by lia; rewrite e0; reflexivity.
+  - (* Loop *) destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite e; apply IHexecn; lia.
+  - (* Call *) destruct f as [ | f' ]; [ lia | ]; simpl; apply IHexecn; lia.
+  - (* Uncall *) destruct f as [ | f' ]; [ lia | ]; simpl; apply IHexecn; lia.
+  - (* lp, last round *)
+    destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite (IHexecn f') by lia; rewrite e; reflexivity.
+  - (* lp, one more round *)
+    pose proof (execn_pos _ _ _ _ H) as Hp1; pose proof (execn_pos _ _ _ _ H0) as Hp2.
+    destruct f as [ | f' ]; [ lia | ]; simpl.
+    rewrite (IHexecn1 f') by lia; rewrite e.
+    rewrite (IHexecn2 f') by lia; rewrite e0.
+    apply IHexecn3; lia.
+Qed.
+
+(** The bound is **sufficient, not least**.  Fuel measures the *depth* of the
+    recursion while the count measures *actions*, and a wide, shallow statement
+    separates them: four [Skip]s in a balanced [Seq] charge 4 but run on 3.
+    Recording it here so the bound is not "strengthened" into something false. *)
+Example the_fuel_bound_is_not_tight : forall a,
+  execn 4 (L.Seq (L.Seq L.Skip L.Skip) (L.Seq L.Skip L.Skip)) a a
+  /\ runn 3 (L.Seq (L.Seq L.Skip L.Skip) (L.Seq L.Skip L.Skip)) a = Some a.
+Proof.
+  intro a; split; [ | reflexivity ].
+  change 4 with (2 + 2); apply X_Seq with (m := a);
+    (change 2 with (1 + 1); apply X_Seq with (m := a); apply X_Skip).
+Qed.
+
+End WithFn.
 
 (* ===================================================================== *)
 (** ** What the count charges, spelled out.
