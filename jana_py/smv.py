@@ -786,9 +786,9 @@ class _Compiler:
       self.trans.append(_Trans(self.loc, self._conj(self.path), (), BOUND_LOC))
       self._enter(self._loc())
       return
-    inner: dict[str, str] = {}
+    inner: _Env = {}
     for param, arg in zip(proc.params, s.args):
-      if param.dimensions or param.typ.kind != "int":
+      if param.typ.kind != "int":
         raise SmvUnsupported("non-scalar parameter")
       if not isinstance(arg, LvalExpr) or arg.lval.selectors:
         raise SmvUnsupported("argument is not a plain variable")
@@ -798,8 +798,24 @@ class _Compiler:
       # be a false alarm.  The per-statement checks in `_assign` and the swap
       # case above catch the bodies that do bring them together.
       resolved = self._lookup(arg.lval.ident.name, env)
-      if isinstance(resolved, tuple):
-        raise SmvUnsupported("array argument")
+      # An unspecified length `int a[]` needs nothing new: inlining has the
+      # actual in hand, arrays are by reference in Janus, and binding the formal
+      # to the *same* tuple of element variables makes a write inside the callee
+      # update the caller's array.  The length travels with the tuple, so the
+      # same procedure inlined against two arrays expands to two sizes.
+      if bool(param.dimensions) != isinstance(resolved, tuple):
+        raise SmvUnsupported(
+            f"argument does not match the parameter's shape: {param.ident.name}")
+      if param.dimensions:
+        if len(param.dimensions) != 1:
+          raise SmvUnsupported(f"multi-dimensional parameter: {param.ident.name}")
+        declared = param.dimensions[0]
+        if isinstance(declared, Number) and declared.value != len(resolved):
+          # A parameter may state its length, and PyJanus checks it *at the
+          # call* ("Expecting array of size [3] but got size [4]"), so reaching
+          # the call is the error.  Without this the model proved such a program
+          # safe.
+          return self._unconditional_error()
       inner[param.ident.name] = resolved
     body = invert_stmts(proc.body, False) if invert else proc.body
     self._stmts(body, inner, depth + 1)

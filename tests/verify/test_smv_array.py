@@ -263,6 +263,63 @@ class CellAliasTests(unittest.TestCase):
     self.assertTrue(has_err_edge(model_of(SWAP_INDEX_ALIAS, init="zero")))
 
 
+BY_REF = ("procedure bump(int a[])\n    a[0] += 1\n\n"
+          "procedure main()\n    int x[3]\n    call bump(x)\n")
+TWO_LENGTHS = ("procedure at(int a[], int i)\n    a[i] += 1\n\n"
+               "procedure main()\n    int p[2]\n    int q[4]\n    int k\n"
+               "    call at(p, k)\n    call at(q, k)\n")
+BY_REF_OOB = ("procedure at(int a[], int i)\n    a[i] += 1\n\n"
+              "procedure main()\n    int p[2]\n    int k\n"
+              "    k += 5\n    call at(p, k)\n")
+
+
+class ArrayParameterTests(unittest.TestCase):
+  """`int a[]` needs no new machinery: inlining already knows the actual.
+
+  Arrays are by reference in Janus, so binding the formal to the *same* tuple of
+  element variables is exactly right — a write inside the callee updates the
+  caller's array.  The length comes with the tuple, which is why an unspecified
+  length is not a problem here even though it is the corpus's single biggest
+  blocker (43 programs).
+  """
+
+  def test_a_write_through_the_parameter_reaches_the_caller(self):
+    model = model_of(BY_REF, init="zero")
+    self.assertEqual([v for _, v in next_branches(model, "x_0")], ["(x_0 + 1)"])
+
+  def test_one_procedure_two_lengths(self):
+    # The same body is inlined twice, against arrays of different sizes, so the
+    # bounds obligation differs between the two call sites.
+    model = model_of(TWO_LENGTHS, init="zero")
+    self.assertRegex(model, r"\(+k\)+ < 2")
+    self.assertRegex(model, r"\(+k\)+ < 4")
+
+  def test_a_declared_length_must_match_the_actual(self):
+    # Caught against the interpreter while landing this step: a parameter may
+    # state its length, and PyJanus checks it at the call.  Without the check the
+    # model *proved* `array-size-mismatch.ja` safe.
+    src = ("procedure foo(int x[3])\n    skip\n\n"
+           "procedure main()\n    int x[4]\n    call foo(x)\n")
+    self.assertTrue(interpreter_fails(src))
+    self.assertTrue(has_err_edge(model_of(src, init="zero")))
+
+  def test_a_matching_declared_length_is_fine(self):
+    src = ("procedure foo(int x[3])\n    x[0] += 1\n\n"
+           "procedure main()\n    int x[3]\n    call foo(x)\n")
+    self.assertFalse(interpreter_fails(src))
+    self.assertFalse(has_err_edge(model_of(src, init="zero")))
+
+  def test_a_scalar_argument_for_an_array_parameter_is_refused(self):
+    with self.assertRaises(SmvUnsupported):
+      model_of("procedure f(int a[])\n    a[0] += 1\n\n"
+               "procedure main()\n    int x\n    call f(x)\n", init="zero")
+
+  def test_an_array_argument_for_a_scalar_parameter_is_refused(self):
+    with self.assertRaises(SmvUnsupported):
+      model_of("procedure f(int x)\n    x += 1\n\n"
+               "procedure main()\n    int a[3]\n    call f(a)\n", init="zero")
+
+
 class StillRefusedTests(unittest.TestCase):
   """What this step deliberately does not do yet."""
 
@@ -312,7 +369,10 @@ class AgreementTests(unittest.TestCase):
                              ("swap-alias", SWAP_ALIAS, True),
                              ("swap-no-alias", SWAP_NO_ALIAS, False),
                              ("index-alias", INDEX_ALIAS, True),
-                             ("swap-index-alias", SWAP_INDEX_ALIAS, True)):
+                             ("swap-index-alias", SWAP_INDEX_ALIAS, True),
+                             ("by-ref", BY_REF, False),
+                             ("two-lengths", TWO_LENGTHS, False),
+                             ("by-ref-oob", BY_REF_OOB, True)):
       with self.subTest(name):
         self.assertEqual(interpreter_fails(src), fails)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
