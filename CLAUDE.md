@@ -2,6 +2,112 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 現在の状態（handoff: 2026-08-04）
+
+**全域性検査器（`jana_py/smv.py`）の符号化が全項目 Rocq で裏付けられた**セッション。
+前回残っていた「別名検査の結線」「large-block 同値」「段数保存」の3つを閉じ、続けて
+`docs/loop-queue.md` の14項目（うち後半6項目が**配列対応**）を自走ループで消化した。
+
+### 読む順
+
+1. `coq/README.md` — 何が証明済みかの claims 表。「What compilation costs」
+   「What the totality checker rests on」「The checker's aliasing decision」
+   「The large-block encoding」の4節が直近の成果
+2. `docs/totality-checking.md` — 検査器の設計・3つの罠・実測値・§8〜§11 の機械検証
+3. `docs/reversible-categorical-semantics.md` — 圏論層と先行研究の対応（新規性の線引き）
+4. `coq/RevSemantics.v` → `RevCompile.v` → `RevSteps.v` → `RevError.v` →
+   `RevSmvExpr.v` → `RevSmvAlias.v` → `RevSmvBlock.v`（この順で読むと筋が通る）
+
+### 確定している事実（再確認不要）
+
+- **`RevLang` 関手を2回適用すると別の帰納型になる。** そのため各ファイルが
+  `Module L := RevLang P` と書いていた間はファイル跨ぎの一致が**記述すらできなかった**。
+  現在は `RevSmallStep → RevDenote → RevFix → RevCompile` の連鎖で1つを共有し、
+  `RevSemantics.v` と `RevSteps.v` がそこから射影する。
+  **新しい意味論を足すときはこの連鎖に入れる**
+- **5意味論の全10ペアが iff**（`RevSemantics.all_agree`）。5つの `REV_PRIM` 実例
+  （`RevJanus` / `RevExt`＝配列と `local`/`delocal` 付き Janus / `RevStack` / `RevCA` / `RevToy`）
+  すべてで成立を確認済み。`RevArr` / `RevFrame` / `RevProc` は functor の外なので**射程外**
+- **検査器の符号化は4項目すべて機械検証済み**: `RevError.fail_iff`（ERR 到達 ⟺ 表明破れ）、
+  `RevSmvExpr.mfdiv_correct`（床除算）、`RevSmvAlias.alias_check_is_exact`（別名）、
+  `RevSmvBlock.block_sound`（large-block）。残る穴は**それらの接合**（CFG 全体を1つの
+  Coq モデルにしていない）だけ
+- **コンパイルは段数厳密で両方向**（`RevSteps.compilation_is_step_exact_iff`）＝倍率1。
+  機械の決定性（`mstepn_det` / `mrunn_det_halt`）から段数はプログラムの性質であり
+  導出に依らない（`execn_unique`）。**逆行のコストは順行と同じ**（`execn_rev`）で、
+  コード長も同じ（`csize_invert`）。段数は fuel の十分量でもある（`execn_runn`）が
+  **最小ではない**（fuel は深さ・段数は動作数。`the_fuel_bound_is_not_tight`）
+- **別名検査の結線で smv.py の穴が2つ出た**（2026-08-04 修正済み）。
+  (a) **swap に別名検査が無く**、`x <=> x` が恒等として模型化されて nuXmv が
+  「安全」と**証明していた**。(b) 仮引数の二重束縛それ自体を ERR にしていた（誤検出）。
+  修正方針は「検査は文ごと、対象は代入と swap の2つ」
+- **PyJanus の別名検査は静的でなく実行時**。`x += x` は `validate_program` を通る
+- **nuXmv の整数 `/` は0方向切り捨て、`mod` は SMT エンジンでは整数に使えない**。
+  パスは `LD_LIBRARY_PATH=~/dev/infra/tools/nuxmv-libs ~/dev/infra/tools/nuXmv`
+  （PATH には無い）
+- **符号化が決定率を左右した**: large-block（直線部を1遷移に）で `--init zero` が
+  2/8 → 5/8 proved。ASSIGN 形式はモデルを1/7にしたが**判定は1つも変えなかった**
+- 実測（149本・IC3・120秒・`--init zero`、2026-08-04 の配列対応後）:
+  refuted 17 / proved 10 / unknown 12 / unsupported 96 / parse-error 7 / static-error 7。
+  **examples の断片内は 8 → 17本**。誤検出ゼロは維持（examples から refuted は出ていない）
+- **配列でボトルネックが移った**: 「断片外だから測れない」→「表現できるが決められない」。
+  そして**符号化パラメータは3つとも律速でなかった**（`docs/totality-checking.md`
+  §5.4〜§5.7）: 位置数（§5.4）、`_BLOCK_CHARS`（§5.6、判定不変）、モデルサイズ
+  （§5.7、native 化で 5.9倍縮小・配列長に線形になっても**判定は17本すべて同一**）。
+  残る説明は問題そのものの難しさで、**次に触るなら符号化でなく問題の与え方**
+  （事前条件・配列長の固定・性質の分割）
+- **配列の符号化は2種類**あり既定は `arrays="native"`（nuXmv の `array 0..n-1 of integer`）。
+  変数添字の**読み**は配列型で書けるが**書き**は nuXmv が拒否するので要素ごとの条件付き
+  更新のまま。`"expand"`（要素展開）も残してあり両方テストで固定
+- **`assign` 形式は書かれない変数に `next` を出さないと無拘束**になる（SMV の意味論）。
+  2026-08-05 に `next(v) := v;` を出すよう修正。`trans` 形式は免疫があり、§5 の測定は
+  そちらなので公表値は無傷。誤検出方向なので既存の proved も有効
+- **配列は参照渡し**なので、インライン展開が実引数のタプルを持てば長さ未指定 `int a[]` も
+  解決する。新しい機構は要らなかった
+- `python3 -m pytest tests/` だけで4つの抽出インタプリタとの一致が走る（`tests/conftest.py`
+  が必要なものをビルドする）。**1695 passed / 345 skipped**。`PYJANUS_SKIP_VERIFIED=1` で抑止
+- `.vo` は**ツールチェーン固有**。rocq は 2026-07-29 に OCaml 5.3.0 版へ入れ替わった。
+  「compiled with OCaml 5.4.1 while this instance ... 5.3.0」も
+  「inconsistent assumptions」も対処は同じ `cd coq && make clean && make`
+- 論文としての見立て: **情報処理学会 PRO なら1本**。RC は差分の立て方次第。ITP/CPP は厳しい
+
+### 次の作業候補
+
+1. **論文執筆（PRO）** — 材料は揃った。軸は「可逆言語の意味論を言語非依存に一度証明し
+   5実例へ落とす／コンパイル後も可逆性と**段数**が転送される／独立実装との差分検証／
+   検査器の符号化を機械検証して実際に不健全性を1件発見」（大）
+2. **決定率を上げる — ただし符号化ではない**。3案とも測って判定が動かなかった（§5.4〜§5.7）。
+   次は**問題の与え方**: `--smv-assume` で事前条件を与える／配列長を小さく固定して
+   スケールを見る／性質を分割する（例: ERR の種類ごとに INVARSPEC を分ける）（中）
+5. **stack（31本）と struct（13本）** — 次の被覆率の壁。可変長の状態と複合型で、
+   配列とは別種の作業（大）
+3. **CFG 全体の接合** — `RevError.v`（抽象 `prim`/`guard`）と `RevSmvBlock.v`（具体
+   `sstmt`）は `RevLowerStmt.lower_stmt_iff` 経由で繋がるが、1つの Coq モデルには
+   なっていない。ここを閉じると検査器の符号化が端から端まで1本になる（大）
+4. **`--smv` の剰余符号化** — 現在は `-m`/`-p` との併用を拒否している（2026-08-04）。
+   符号化するなら移行先は `RevSMod.v` / `RevExtSMod.v` だが、剰余環では `*=` / `/=` の
+   条件が「非零」ではなく**単元**に変わるので現在の義務は流用できない。**設計判断**（中）
+
+### 注意
+
+- **この repo の `CLAUDE.md` は git 追跡下**（グローバル方針の例外）。この現状節は
+  未コミットのまま置いてある（`docs/textbook-programs-plan.md` への参照追加・7行も同様）
+- **自走ループの手順・ゲート・保留項目は `docs/loop-queue.md`**。キューは一度空になった
+  （8/8）。再開するときは項目を足してから `/loop` を回す
+- `experiments/ultrametric-m0/` は **2026-07-10 の既存作業で未追跡**。直近セッションの
+  産物ではないので消さないこと。追跡するか移すかは要判断
+- `coq/audit.sh` の `Print Assumptions` に書くモジュールは、同ファイル冒頭の
+  `Require Import` に入っていないと失敗する
+- Coq の `repeat split` は **`reflexivity` で閉じる目標を勝手に消す**ので、
+  その後の bullet 数がずれる。前セッションで3回、今セッションで1回踏んだ
+- Coq のコメント内で `*同時*)` のように強調の `*` の直後に `)` が来ると
+  **コメントが途中で閉じる**。`-- 強調 --` で回避
+- `Open Scope Z_scope` 下では `p 2` の `2` が `Z` に取られる。nat 添字は `2%nat`
+- `induction ... using execn_mut` の IH 名は `IHexecn` / 複数なら `IHexecn1..3`。
+  `eapply step_then; [ .. | | lia ]` のように空スロットを挟むと、`lia` が
+  未確定の evar を見て落ちる。**段数は `with (n1 := ..) (n2 := ..)` で明示する**
+- `.vo` と抽出物（`janus_frame.ml` 等）は gitignore 対象のビルド生成物
+
 ## Overview
 
 PyJanus is a dependency-free (Python 3.10+) interpreter for **Janus**, the
@@ -9,6 +115,13 @@ reversible programming language. Beyond running programs forwards and backwards,
 it provides a debugger, a C++ code generator, an inverse interpreter, and a set
 of reversible-computing research tools (Bennett embedding, circuit synthesis,
 equivalence checking, pebble-game space profiling).
+
+> **To grow the reversible-program corpus** (adding textbook/pearl programs one
+> after another), see `docs/textbook-programs-plan.md` — the add-a-program
+> workflow, the two-form layout (`tests/jana2014/fixtures/examples/` +
+> `tests/jana2014_in_out/programs/`), two-core verification, and the backlog.
+> Its catalog of source material is `docs/reversible-pearls.md`; dialects live in
+> `docs/DIALECTS.md`.
 
 ## Commands
 
