@@ -317,7 +317,7 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 ---
 
-### [ ] 15. `_BLOCK_CHARS` を決定率で振る
+### [x] 15. `_BLOCK_CHARS` を決定率で振る
 
 **なぜ**: 配列は断片に入ったが**9本とも未決**（§5.5）。効いているのは位置数ではなく
 **項の大きさ**で、その唯一の調整つまみが `_BLOCK_CHARS`（既定 4000）。§5.4 は
