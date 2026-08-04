@@ -157,7 +157,7 @@ PyJanus `-m 8` は失敗する（x が -56 に巻き込む）が、`--smv -m 8` 
 
 ---
 
-### [ ] 6. `RevSmvAlias.renv` の部分性を明示する
+### [x] 6. `RevSmvAlias.renv` の部分性を明示する
 
 **なぜ**: `renv := nat -> nat` を全域関数にしたのは単純化。smv.py の `env` は部分写像で、
 未束縛名は `SmvUnsupported`（`_lookup`）。射程外であることがファイル冒頭のコメントに

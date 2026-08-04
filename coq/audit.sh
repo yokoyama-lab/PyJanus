@@ -205,6 +205,9 @@ Print Assumptions RevSmvAlias.step_alias_ok.
 Print Assumptions RevSmvAlias.alias_flagged_no_step.
 Print Assumptions RevSmvAlias.alias_check_is_exact.
 Print Assumptions RevSmvAlias.swap_alias_iff.
+Print Assumptions RevSmvAlias.aoccurs_agree.
+Print Assumptions RevSmvAlias.alias_ok_agree.
+Print Assumptions RevSmvAlias.completions_agree.
 (* the checker's large-block encoding *)
 Print Assumptions RevSmvBlock.seval_subst.
 Print Assumptions RevSmvBlock.guard_at_entry.

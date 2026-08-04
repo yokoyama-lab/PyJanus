@@ -60,10 +60,21 @@ Open Scope Z_scope.
     resolves every l-value and every variable read through it ([_lookup],
     [_lval_name]).  A procedure call extends it with the actuals
     ([inner[param] = resolved]), which is where two names can come to denote one
-    slot.  Here that dictionary is a total function [renv]; the fragment where it
-    is partial is exactly where [smv.py] raises [SmvUnsupported]. *)
+    slot. *)
 
 Definition renv := nat -> nat.
+
+(** [env] is a *partial* map in [smv.py]: [_lookup] raises [SmvUnsupported] on a
+    name it does not hold, and so (since the fail-closed fix) does [_occurs].  A
+    statement mentioning an unbound name is therefore refused *before* the
+    aliasing decision is reached, so the decision is only ever consulted where
+    every name is bound.
+
+    That is why [renv] is total here rather than [nat -> option nat]: the partial
+    version would put an "if defined" side condition on every theorem below, for
+    a case that cannot arise.  What has to be shown instead is that the
+    completion is *irrelevant* — [alias_ok_agree] and [completions_agree] at the
+    end of this file do that. *)
 
 (** [_occurs]: does the SMV variable [t] occur in [e] after resolution? *)
 Fixpoint aoccurs (env : renv) (t : nat) (e : sexpr) : bool :=
@@ -317,3 +328,81 @@ Example the_check_is_on_the_source_expression :
   (* but slot 1 *does* occur in x's pending expression *)
   /\ soccurs 1 pend = true.
 Proof. split; reflexivity. Qed.
+
+(* ===================================================================== *)
+(** ** The scope of a total [renv]: the completion does not matter.
+
+    [smv.py] carries a dictionary, not a function.  Modelling it as a total
+    function is a *completion*, and a completion is only honest if the decision
+    cannot depend on the values it invents.  It cannot: the decision reads the
+    environment only at the names the statement mentions. *)
+
+(** The names a statement mentions — the l-values it writes and the variables its
+    expressions read. *)
+Fixpoint snames (n : nat) (s : sstmt) : bool :=
+  match s with
+  | TSkip => false
+  | TAsn x _ e => Nat.eqb n x || soccurs n e
+  | TSwap x y => Nat.eqb n x || Nat.eqb n y
+  | TSeq a b => snames n a || snames n b
+  | TIf e1 a b e2 => soccurs n e1 || snames n a || snames n b || soccurs n e2
+  | TLoop e1 a b e2 => soccurs n e1 || snames n a || snames n b || soccurs n e2
+  end.
+
+Lemma aoccurs_agree : forall env1 env2 t e,
+  (forall n, soccurs n e = true -> env1 n = env2 n) ->
+  aoccurs env1 t e = aoccurs env2 t e.
+Proof.
+  intros env1 env2 t e; induction e as [z | m | e1 IH1 | o a IHa b IHb]; intro Hag; simpl.
+  - reflexivity.
+  - rewrite (Hag m); [ reflexivity | simpl; apply Nat.eqb_refl ].
+  - apply IH1; intros n Hn; apply Hag; exact Hn.
+  - rewrite IHa, IHb; [ reflexivity | | ];
+      intros n Hn; apply Hag; simpl; rewrite Hn; [ apply orb_true_r | reflexivity ].
+Qed.
+
+(** **The** statement: two environments agreeing on the names a statement
+    mentions decide it identically. *)
+Theorem alias_ok_agree : forall env1 env2 s,
+  (forall n, snames n s = true -> env1 n = env2 n) ->
+  alias_ok env1 s = alias_ok env2 s.
+Proof.
+  intros env1 env2 [ | x o e | x y | a b | e1 a b e2 | e1 a b e2 ] Hag;
+    simpl; try reflexivity.
+  - (* TAsn *)
+    rewrite (Hag x) by (simpl; rewrite Nat.eqb_refl; reflexivity).
+    f_equal; apply aoccurs_agree; intros n Hn.
+    apply Hag; simpl; rewrite Hn; apply orb_true_r.
+  - (* TSwap *)
+    rewrite (Hag x) by (simpl; rewrite Nat.eqb_refl; reflexivity).
+    rewrite (Hag y) by (simpl; rewrite Nat.eqb_refl, orb_true_r; reflexivity).
+    reflexivity.
+Qed.
+
+(** Concretely: fix the names [smv.py]'s dictionary actually holds ([dom]) and
+    take any two total completions of it.  If every name the statement mentions
+    is in [dom] — which the compiler guarantees, since [_lookup] refuses
+    otherwise — the two completions decide the statement identically.  So
+    nothing proved in this file depends on the values the completion invents. *)
+Corollary completions_agree :
+  forall (dom : nat -> bool) (part : nat -> nat) (env1 env2 : renv) s,
+    (forall n, dom n = true -> env1 n = part n) ->
+    (forall n, dom n = true -> env2 n = part n) ->
+    (forall n, snames n s = true -> dom n = true) ->
+    alias_ok env1 s = alias_ok env2 s.
+Proof.
+  intros dom part env1 env2 s H1 H2 Hd; apply alias_ok_agree; intros n Hn.
+  rewrite (H1 n (Hd n Hn)), (H2 n (Hd n Hn)); reflexivity.
+Qed.
+
+(** And the names really are all that is read: an environment differing only
+    outside them changes nothing.  (The example makes the quantifier concrete —
+    slot 9 is not mentioned, so moving it is invisible.) *)
+Example only_the_mentioned_names_are_read :
+  let s := TAsn 0 OAdd (SVar 1) in
+  alias_ok (fun n => n) s = alias_ok (fun n => if Nat.eqb n 9 then 42%nat else n) s.
+Proof.
+  apply alias_ok_agree; intros n Hn; simpl in Hn.
+  destruct (Nat.eqb n 9) eqn:E; [ | reflexivity ].
+  apply Nat.eqb_eq in E; subst n; simpl in Hn; discriminate.
+Qed.
