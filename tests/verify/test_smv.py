@@ -104,6 +104,28 @@ class FloorDivisionTests(unittest.TestCase):
     self.assertIn("DEFINE", model)
 
 
+class InitTests(unittest.TestCase):
+  """`--init zero` means the store PyJanus starts from — locals included.
+
+  Locals used to get no `init` at all, leaving them free: the "zero store" was
+  not a single state, and every undecided program in the corpus carried free
+  locals (32 of them in `injective_gcd`).  Over-approximating like that is a
+  latent false-alarm source, whatever it does to the decision rate.
+  """
+
+  SRC = ("procedure main()\n    int x\n"
+         "    local   int t = 1\n    x += t\n    delocal int t = 1\n")
+
+  def test_a_local_is_pinned_under_init_zero(self):
+    self.assertIn("init(t) := 0;", build(self.SRC, init="zero", style="assign"))
+
+  def test_a_local_stays_free_under_init_any(self):
+    self.assertNotIn("init(t) :=", build(self.SRC, init="any", style="assign"))
+
+  def test_the_relational_form_pins_it_too(self):
+    self.assertIn("t = 0", build(self.SRC, init="zero", style="trans"))
+
+
 class FragmentTests(unittest.TestCase):
   """Everything outside the fragment must be refused, never mistranslated."""
 
