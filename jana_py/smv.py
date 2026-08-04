@@ -297,6 +297,60 @@ class _Compiler:
     raise SmvUnsupported(
         f"expression outside the fragment in an aliasing check: {type(e).__name__}")
 
+  def _cell_index(self, lval, env: _Env, obl: list[str]) -> tuple | None:
+    """`(elements, index term)` when this l-value is an array cell, else `None`.
+
+    A constant index yields its own literal, so the two kinds compose: an
+    aliasing question between a constant and a variable index is the same
+    equality as between two variables, just with one side decided.
+    """
+    entry = self._lookup(lval.ident.name, env)
+    if not isinstance(entry, tuple):
+      return None
+    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
+      raise SmvUnsupported("struct field or multi-dimensional l-value")
+    index = lval.selectors[0].expr
+    if isinstance(index, Number):
+      return entry, str(index.value)
+    return entry, self._dynamic_index(index, env, obl, len(entry))
+
+  def _alias_obl(self, entry: tuple, tidx: str, e, env: _Env, obl: list[str]) -> bool:
+    """Require every cell of `entry` read by `e` to differ from index `tidx`.
+
+    `a[i] += a[j]` fails **exactly when i = j** — the index-precise condition
+    `RevArr.wf_assign` formalises, which admits `A[j][i] += A[j][k]` for i != k
+    where a name-based check would not.  It is a *term*, so it becomes an
+    obligation checked into ERR, not a refusal (which would lose the program)
+    and not a blanket error (which would be a false alarm).
+
+    Returns True when the alias is *decided* — both indices constant and equal —
+    in which case reaching the statement is itself the error.
+    """
+    if isinstance(e, (Number, Boolean)):
+      return False
+    if isinstance(e, LvalExpr):
+      cell = self._cell_index(e.lval, env, obl)
+      if cell is None:
+        return False
+      ridx = cell[1]
+      inner = e.lval.selectors[0].expr
+      if cell[0] is not entry:
+        # a different array cannot alias, but its index may still read this one
+        return self._alias_obl(entry, tidx, inner, env, obl)
+      if tidx.isdigit() and ridx.isdigit():
+        if tidx == ridx:
+          return True
+      else:
+        obl.append(f"({tidx}) != ({ridx})")
+      return self._alias_obl(entry, tidx, inner, env, obl)
+    if isinstance(e, BinExpr):
+      left = self._alias_obl(entry, tidx, e.left, env, obl)
+      return self._alias_obl(entry, tidx, e.right, env, obl) or left
+    if isinstance(e, UnaryExpr):
+      return self._alias_obl(entry, tidx, e.expr, env, obl)
+    raise SmvUnsupported(
+        f"expression outside the fragment in an aliasing check: {type(e).__name__}")
+
   def _occurs_lval(self, name: str, lval, env: _Env) -> bool:
     """Does the SMV variable `name` occur in this l-value?
 
@@ -494,6 +548,12 @@ class _Compiler:
     if isinstance(s, SwapStmt):
       if self._oob_lval(s.left, env) or self._oob_lval(s.right, env):
         return self._unconditional_error()
+      lentry = self._lookup(s.left.ident.name, env)
+      rentry = self._lookup(s.right.ident.name, env)
+      if isinstance(lentry, tuple) or isinstance(rentry, tuple):
+        if not (isinstance(lentry, tuple) and isinstance(rentry, tuple)):
+          raise SmvUnsupported("swap between a scalar and an array cell")
+        return self._swap_cells(s, env, lentry, rentry)
       left = self._lval_name(s.left, env)
       right = self._lval_name(s.right, env)
       if left == right:
@@ -523,10 +583,8 @@ class _Compiler:
 
   def _assign(self, s: AssignStmt, env: _Env) -> None:
     entry = self._lookup(s.lval.ident.name, env)
-    if (isinstance(entry, tuple) and len(s.lval.selectors) == 1
-        and isinstance(s.lval.selectors[0], LvalIndex)
-        and not isinstance(s.lval.selectors[0].expr, Number)):
-      return self._assign_dynamic(s, env, entry)
+    if isinstance(entry, tuple):
+      return self._assign_cell(s, env, entry)
     target = self._lval_name(s.lval, env)
     if self._occurs(target, s.expr, env):
       # `x += x` is not injective, and Janus rejects it *at run time* — after
@@ -556,6 +614,82 @@ class _Compiler:
       obl.append(f"{remainder} = 0")  # `/=` must divide exactly
       return quotient
     raise SmvUnsupported(f"assignment operator outside the fragment: {mod_op.value}")
+
+  def _assign_cell(self, s: AssignStmt, env: _Env, entry: tuple) -> None:
+    """`a[t] op= e`, with `t` constant or variable.
+
+    The aliasing condition is the same equality either way; only the update
+    differs, and a constant index updates one element rather than all of them.
+    """
+    obl: list[str] = []
+    cell = self._cell_index(s.lval, env, obl)
+    assert cell is not None
+    tidx = cell[1]
+    inner = s.lval.selectors[0].expr
+    definite = self._alias_obl(entry, tidx, s.expr, env, obl)
+    if self._alias_obl(entry, tidx, inner, env, obl):
+      definite = True
+    if definite:
+      return self._unconditional_error()
+    rhs = self._iexpr(s.expr, env, obl)
+    if tidx.isdigit():
+      target = entry[int(tidx)]
+      new = self._apply(s.mod_op, self._val(target), rhs, obl)
+      self._check(obl)
+      self.pending[target] = new
+    else:
+      new = self._apply(s.mod_op, self._read_at(entry, tidx), rhs, obl)
+      self._check(obl)
+      before = [self._val(name) for name in entry]
+      for k, name in enumerate(entry):
+        self.pending[name] = f"(case {tidx} = {k} : {new}; TRUE : {before[k]}; esac)"
+    self._maybe_seal()
+
+  def _swap_cells(self, s, env: _Env, left: tuple, right: tuple) -> None:
+    """`a[i] <=> b[j]`: simultaneous, with the aliasing equality as an obligation
+    when both sides are the same array."""
+    obl: list[str] = []
+    lcell = self._cell_index(s.left, env, obl)
+    rcell = self._cell_index(s.right, env, obl)
+    assert lcell is not None and rcell is not None
+    lidx, ridx = lcell[1], rcell[1]
+    definite = False
+    if lcell[0] is rcell[0]:
+      if lidx.isdigit() and ridx.isdigit():
+        definite = lidx == ridx
+      else:
+        obl.append(f"({lidx}) != ({ridx})")
+    # PyJanus's `_check_alias_swap` also compares every *index expression* of
+    # either side against **both** keys: `a[0] <=> a[a[1]]` is an alias when
+    # `a[1] = 1`, because the index reads the very cell being swapped.  Missing
+    # this proved such a program safe.
+    for inner in (s.left.selectors[0].expr if s.left.selectors else None,
+                  s.right.selectors[0].expr if s.right.selectors else None):
+      if inner is None:
+        continue
+      if self._alias_obl(left, lidx, inner, env, obl):
+        definite = True
+      if self._alias_obl(right, ridx, inner, env, obl):
+        definite = True
+    if definite:
+      return self._unconditional_error()
+    self._check(obl)
+    lval_now = self._read_at(left, lidx) if not lidx.isdigit() else self._val(left[int(lidx)])
+    rval_now = self._read_at(right, ridx) if not ridx.isdigit() else self._val(right[int(ridx)])
+    updates: dict[str, str] = {}
+    if lidx.isdigit():
+      updates[left[int(lidx)]] = rval_now
+    else:
+      for k, name in enumerate(left):
+        updates[name] = f"(case {lidx} = {k} : {rval_now}; TRUE : {self._val(name)}; esac)"
+    if ridx.isdigit():
+      updates[right[int(ridx)]] = lval_now
+    else:
+      for k, name in enumerate(right):
+        base = updates.get(name, self._val(name))
+        updates[name] = f"(case {ridx} = {k} : {lval_now}; TRUE : {base}; esac)"
+    self.pending.update(updates)
+    self._maybe_seal()
 
   def _assign_dynamic(self, s: AssignStmt, env: _Env, entry: tuple) -> None:
     """`a[i] op= e`: every element is updated conditionally on the index.

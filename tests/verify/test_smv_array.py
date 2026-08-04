@@ -215,31 +215,68 @@ class DynamicWriteTests(unittest.TestCase):
     self.assertEqual(len(re.findall(r"__fr\d+ :=", model)), 1)
 
 
+CELL_ALIAS = "procedure main()\n    int a[3]\n    int i\n    a[0] += a[i]\n"
+CELL_NO_ALIAS = ("procedure main()\n    int a[3]\n    int i\n"
+                 "    i += 1\n    a[0] += a[i]\n")
+DYN_ALIAS = ("procedure main()\n    int a[3]\n    int i\n    int j\n"
+             "    a[i] += a[j]\n")
+DYN_NO_ALIAS = ("procedure main()\n    int a[3]\n    int i\n    int j\n"
+                "    j += 1\n    a[i] += a[j]\n")
+SWAP_ALIAS = ("procedure main()\n    int a[3]\n    int i\n    int j\n"
+              "    a[i] <=> a[j]\n")
+SWAP_NO_ALIAS = ("procedure main()\n    int a[3]\n    int i\n    int j\n"
+                 "    j += 1\n    a[i] <=> a[j]\n")
+INDEX_ALIAS = "procedure main()\n    int a[3]\n    a[a[0]] += 1\n"
+#: `a[1] = 1`, so the index reads the very cell being swapped.  PyJanus calls
+#: that an alias; an earlier version of the swap encoding proved it safe.
+SWAP_INDEX_ALIAS = "procedure main()\n  int a[2] = {0,1}\n  a[0] <=> a[a[1]]\n"
+
+
+class CellAliasTests(unittest.TestCase):
+  """`a[i] += a[j]` fails exactly when i = j — an obligation, not a refusal.
+
+  Refusing it (as the read and write steps did) is safe but loses the programs;
+  answering "always an error" would be the false alarm the call-site
+  double-binding check used to be. The index-precise condition is what
+  `RevArr.wf_assign` formalises, and it is a *term*, so it becomes an ERR edge
+  guarded by the two indices being equal.
+  """
+
+  def test_the_obligation_is_emitted(self):
+    model = model_of(CELL_ALIAS, init="zero")
+    self.assertTrue(has_err_edge(model))
+    self.assertRegex(model, r"\(0\) != \(i\)|\(i\) != \(0\)")
+
+  def test_distinct_indices_need_no_error(self):
+    # `j += 1` before `a[i] += a[j]` does not make them distinct — i is still
+    # free — so this one keeps its edge; the *decided* case is below.
+    self.assertTrue(has_err_edge(model_of(DYN_NO_ALIAS, init="zero")))
+
+  def test_an_index_reading_the_written_array_is_checked(self):
+    self.assertTrue(has_err_edge(model_of(INDEX_ALIAS, init="zero")))
+
+  def test_a_swap_index_reading_a_swapped_cell_is_checked(self):
+    # Caught against the interpreter while landing this step: PyJanus compares
+    # every index expression against *both* keys, and without that
+    # `a[0] <=> a[a[1]]` was proved safe while PyJanus rejects it.
+    self.assertTrue(interpreter_fails(SWAP_INDEX_ALIAS))
+    self.assertTrue(has_err_edge(model_of(SWAP_INDEX_ALIAS, init="zero")))
+
+
 class StillRefusedTests(unittest.TestCase):
   """What this step deliberately does not do yet."""
 
-  def test_a_write_whose_index_reads_the_same_array_is_refused(self):
-    # `a[a[0]] += 1` fails exactly when `a[0] = 0`; the index is walked too.
-    with self.assertRaises(SmvUnsupported):
-      model_of("procedure main()\n    int a[3]\n    a[a[0]] += 1\n", init="zero")
-
-  def test_a_variable_index_against_the_same_array_is_refused(self):
-    # `a[i] += a[j]` fails exactly when i = j, and `a[i] += a[0]` when i = 0.
-    for name, src in (("dyn-vs-dyn", DYN_VS_DYN), ("dyn-vs-cell", DYN_VS_CELL)):
+  def test_the_cases_the_earlier_steps_deferred_are_now_decided(self):
+    # The read and write steps refused these, saying so until the index-precise
+    # check existed.  It does now, so each gets an ERR edge guarded by the two
+    # indices being equal rather than a refusal.
+    for name, src in (("cell-vs-dyn", CELL_VS_DYN),
+                      ("dyn-vs-dyn", DYN_VS_DYN),
+                      ("dyn-vs-cell", DYN_VS_CELL),
+                      ("dyn-swap", DYN_SWAP),
+                      ("index-reads-array", INDEX_ALIAS)):
       with self.subTest(name):
-        with self.assertRaises(SmvUnsupported):
-          model_of(src, init="zero")
-
-  def test_a_variable_index_swap_is_refused(self):
-    with self.assertRaises(SmvUnsupported):
-      model_of(DYN_SWAP, init="zero")
-
-  def test_a_cell_against_a_variable_index_is_refused(self):
-    # `a[0] += a[i]` is an error exactly when i = 0.  Answering "yes" would be a
-    # false alarm and "no" would be unsound, so it is refused until the
-    # index-precise aliasing check exists.
-    with self.assertRaises(SmvUnsupported):
-      model_of(CELL_VS_DYN, init="zero")
+        self.assertTrue(has_err_edge(model_of(src, init="zero")))
 
   def test_a_zero_length_array_is_refused(self):
     # Caught by the corpus check while landing this step: `int x[0]` is rejected
@@ -268,7 +305,14 @@ class AgreementTests(unittest.TestCase):
                              ("dynamic-write", DYN_WRITE, False),
                              ("dynamic-write-oob", DYN_WRITE_OOB, True),
                              ("dynamic-div", DYN_DIV, False),
-                             ("dynamic-div-bad", DYN_DIV_BAD, True)):
+                             ("dynamic-div-bad", DYN_DIV_BAD, True),
+                             ("cell-alias", CELL_ALIAS, True),
+                             ("cell-no-alias", CELL_NO_ALIAS, False),
+                             ("dyn-alias", DYN_ALIAS, True),
+                             ("swap-alias", SWAP_ALIAS, True),
+                             ("swap-no-alias", SWAP_NO_ALIAS, False),
+                             ("index-alias", INDEX_ALIAS, True),
+                             ("swap-index-alias", SWAP_INDEX_ALIAS, True)):
       with self.subTest(name):
         self.assertEqual(interpreter_fails(src), fails)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
