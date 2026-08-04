@@ -296,8 +296,9 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   it. `crun_sound` proves the compiled code loses no behaviour; the converse is
   open (see the note at the end of the file).
 - `RevSteps.v` — the **cost** of the compiler-mediated semantics: a counted
-  big-step semantics, proved to be realized by exactly that many machine steps,
-  and proved invariant under `invert` (running backwards costs the same).
+  big-step semantics, proved to agree with the machine's own count in both
+  directions (so the count is a property of the program), and proved invariant
+  under `invert` (running backwards costs the same, out of the same code).
 - `RevSemantics.v` — the **hub**: names the five semantics of the framework
   language and states every pair. All six pairs among big-step, small-step,
   denotational and inverse-execution are `iff`s; the four involving the compiler
@@ -609,7 +610,7 @@ is not a run-time action. It is the same relation as `exec` (`execn_exec`,
 
 | | |
 |---|---|
-| `compilation_is_step_exact` | a source derivation charging `n` becomes a machine run of **exactly** `n` steps |
+| `compilation_is_step_exact_iff` | `execn n s a b` **iff** the compiled code runs from `a` to the exit in exactly `n` steps |
 | `execn_rev` | `execn n s a b -> execn n (invert s) b a` — **running backwards costs exactly as much as running forwards** |
 
 The first says flattening structured control flow into indexed jumps costs
@@ -618,6 +619,18 @@ compiler with implicit fall-through, or one emitting a jump to join the arms of 
 conditional, would pay for it; here instructions carry their successor label
 explicitly, `Seq` emits no glue, and each test or assertion of the big-step rules
 becomes exactly one `IBr` or `IChk`.
+
+Its two halves are different statements. The forward one is about a
+*derivation*: charge the source `n` and the machine performs `n` instructions.
+The converse rules out some *other* run of the same code reaching the exit in a
+different count, and needs the machine to be deterministic — `pstep_det` is a
+`REV_PRIM` law and `gtest` is a function, so an instruction determines its
+successor, its state *and its cost*; the only instruction costing more than 1 is
+a call, whose cost is the callee's run and so falls to the same induction
+(`mstepn_det`, `mrunn_det_halt`). Reaching the exit pins the count down because
+`entry_halt` puts an `IHalt` there, so a run that arrives has to stop. Together
+they make the count a property of the *program*, not of the derivation that
+happened to be written down.
 
 The second is the reversible-computing-specific one, and it is not visible in
 `exec_rev`: `invert` *rebuilds* the control flow — it swaps an `If`'s entry test
@@ -858,7 +871,8 @@ core results) on each build.
 | **Five semantics of one language, and all ten pairs agree** | `all_agree` (+ the ten `*_iff`s) | `RevSemantics.v` | none |
 | **Compiler correctness both ways**: the compiled code loses no behaviour and invents none | `crun_iff` (`crun_sound` / `crun_complete`) | `RevCompile.v` | none |
 | Reversibility transports to all four other semantics | `small_injective`, `den_injective`, `inv_injective`, `flat_injective` | `RevSemantics.v` | none |
-| **Compilation is step-exact**: a source derivation charging `n` actions becomes a machine run of exactly `n` instructions | `compilation_is_step_exact`, `comp_cost` | `RevSteps.v` | none |
+| **Compilation is step-exact, both ways**: the source charges `n` actions iff the compiled code reaches the exit in exactly `n` instructions | `compilation_is_step_exact_iff` (`compilation_is_step_exact` / `crun_cost_complete`) | `RevSteps.v` | none |
+| The machine is deterministic, cost included | `mstepn_det`, `mrunn_det_halt` | `RevSteps.v` | none |
 | **Running backwards costs exactly as much as running forwards**, out of the same amount of code | `execn_rev`, `execn_iff`, `csize_invert`, `inverse_costs_the_same` | `RevSteps.v` | none |
 | The counted semantics is the big-step one | `execn_exec`, `exec_execn` | `RevSteps.v` | none |
 | **Assertion failure as an outcome**, agreeing with `exec` on success and exclusive with it | `execE_ok_iff`, `ok_not_err` | `RevError.v` | none |

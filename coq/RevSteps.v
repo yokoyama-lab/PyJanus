@@ -20,14 +20,20 @@
     Two results follow, and the second is the one specific to reversible
     computing.
 
-    - [compilation_is_step_exact] : [execn n s a b] gives a machine run of
-      **exactly** [n] steps.  Flattening structured control flow into indexed
-      jumps costs nothing: the factor is 1, not a constant greater than 1.  That
-      is not automatic — a compiler with implicit fall-through, or one that emits
-      a jump to join the arms of a conditional, would pay for it.  Here
-      instructions carry their successor label explicitly, [Seq] emits no glue,
-      and each test/assertion of the big-step rules becomes exactly one [IBr] or
-      [IChk].
+    - [compilation_is_step_exact_iff] : [execn n s a b] **iff** the compiled code
+      runs from [a] to the exit in exactly [n] steps.  Flattening structured
+      control flow into indexed jumps costs nothing: the factor is 1, not a
+      constant greater than 1.  That is not automatic — a compiler with implicit
+      fall-through, or one that emits a jump to join the arms of a conditional,
+      would pay for it.  Here instructions carry their successor label
+      explicitly, [Seq] emits no glue, and each test/assertion of the big-step
+      rules becomes exactly one [IBr] or [IChk].
+
+      The forward half is about a *derivation*; the converse says no other run
+      of the same code reaches the exit in a different count, and needs the
+      machine to be deterministic ([mstepn_det], [mrunn_det_halt]).  It is what
+      makes the count a property of the program rather than of the derivation
+      that happened to be written down.
 
     - [execn_rev] : [execn n s a b -> execn n (invert s) b a].  **Running a
       reversible program backwards costs exactly as much as running it
@@ -270,6 +276,181 @@ Qed.
 Corollary compilation_is_step_exact_crun : forall n s a b,
   execn n s a b -> Cp.crun G s a b.
 Proof. intros n s a b H; exists n; apply compilation_is_step_exact; exact H. Qed.
+
+(* ===================================================================== *)
+(** ** The converse: the machine cannot take a different number of steps.
+
+    [compilation_is_step_exact] is a statement about a *derivation*: charge the
+    source [n] and the machine performs [n] instructions.  On its own that leaves
+    open whether some *other* run of the same compiled code could reach the exit
+    in a different count — so "the compiler adds no overhead" would be only half
+    proved.
+
+    It cannot: the machine is deterministic.  [pstep_det] is a [REV_PRIM] law and
+    [gtest] is a function, so an instruction determines its successor, its state
+    *and its cost*; the only instruction whose cost is not 1 is a call, and its
+    cost is the callee's run, which is deterministic by the same induction.
+    Reaching the exit pins the count down because [entry_halt] puts an [IHalt]
+    there, so a run that arrives has to stop. *)
+
+(** [Cp.step_cases] loses the exact count at a call ([k < n] rather than
+    [n = S k]), which is all its callers needed.  This is the same case analysis
+    keeping the equation. *)
+Lemma step_cases_exact : forall n c l a m x, Cp.mstepn G n c l a m x ->
+  match Cp.get c l with
+  | Cp.INop nxt => n = 1 /\ m = nxt /\ x = a
+  | Cp.IPrim p nxt => n = 1 /\ m = nxt /\ P.pstep p a x
+  | Cp.IBr g lt lf => n = 1 /\ x = a
+      /\ ((P.gtest g a = true /\ m = lt) \/ (P.gtest g a = false /\ m = lf))
+  | Cp.IChk g v nxt => n = 1 /\ m = nxt /\ x = a /\ P.gtest g a = v
+  | Cp.ICall p nxt => m = nxt
+      /\ exists k, n = S k
+           /\ Cp.mrunn G k (Cp.entry_code (G p)) 0 a (Cp.csize (G p)) x
+  | Cp.IUncall p nxt => m = nxt
+      /\ exists k, n = S k
+           /\ Cp.mrunn G k (Cp.entry_code (L.invert (G p))) 0 a
+                (Cp.csize (L.invert (G p))) x
+  | Cp.IHalt => False
+  end.
+Proof.
+  intros n c l a m x H; inversion H; subst;
+    match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi end; simpl.
+  - repeat split.
+  - repeat split; assumption.
+  - repeat split; left; split; [ assumption | reflexivity ].
+  - repeat split; right; split; [ assumption | reflexivity ].
+  - repeat split; assumption.
+  - split; [ reflexivity | eexists; split; [ reflexivity | eassumption ] ].
+  - split; [ reflexivity | eexists; split; [ reflexivity | eassumption ] ].
+Qed.
+
+(** A run that starts at a halt is the empty run — count included. *)
+Lemma halt_run_refl_count : forall n c l a l' b,
+  Cp.get c l = Cp.IHalt -> Cp.mrunn G n c l a l' b -> n = 0 /\ l' = l /\ b = a.
+Proof.
+  intros n c l a l' b Hh H; inversion H; subst.
+  - repeat split.
+  - exfalso; eapply Cp.halt_no_step; eassumption.
+Qed.
+
+Definition Pdet (n : nat) (c : Cp.code) (l : nat) (a : P.state)
+                (m : nat) (x : P.state) : Prop :=
+  forall n' m' x', Cp.mstepn G n' c l a m' x' -> n = n' /\ m = m' /\ x = x'.
+
+(** For a *run* the count is only pinned down once the endpoint is a halt: a
+    prefix of a run is also a run, so without that there is nothing to determine.
+    [entry_halt] supplies it at every exit this development cares about. *)
+Definition Qdet (n : nat) (c : Cp.code) (l : nat) (a : P.state)
+                (l1 : nat) (b1 : P.state) : Prop :=
+  Cp.get c l1 = Cp.IHalt ->
+  forall n' l2 b2, Cp.mrunn G n' c l a l2 b2 -> Cp.get c l2 = Cp.IHalt ->
+    n = n' /\ l1 = l2 /\ b1 = b2.
+
+Lemma machine_det : forall n c l a m x, Cp.mstepn G n c l a m x -> Pdet n c l a m x.
+Proof.
+  intros n c l a m x H.
+  induction H using Cp.mstepn_mut
+    with (P0 := fun k c0 l0 a0 l1 b1 (_ : Cp.mrunn G k c0 l0 a0 l1 b1) =>
+                  Qdet k c0 l0 a0 l1 b1);
+    red.
+  (* --- one instruction --- *)
+  - (* INop *) intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [? ?]]; subst; repeat split.
+  - (* IPrim *) intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [? Hp]]; subst; repeat split.
+    eapply P.pstep_det; eassumption.
+  - (* IBr, taken *) intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [? [[Hg ?] | [Hg ?]]]]; subst;
+      repeat split; congruence.
+  - (* IBr, not taken *) intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [? [[Hg ?] | [Hg ?]]]]; subst;
+      repeat split; congruence.
+  - (* IChk *) intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [? [? ?]]]; subst; repeat split.
+  - (* ICall: the cost is the callee's run, determined by the inner hypothesis *)
+    intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [k [Hk Hr]]]; subst.
+    destruct (IHmstepn (Cp.entry_halt _) k _ _ Hr (Cp.entry_halt _))
+      as [Hn [_ Hb]]; subst; repeat split.
+  - (* IUncall *)
+    intros n' m' x' H'; pose proof (step_cases_exact _ _ _ _ _ _ H') as Hc;
+      match goal with Hi : Cp.get _ _ = _ |- _ => rewrite Hi in Hc end;
+      simpl in Hc; destruct Hc as [? [k [Hk Hr]]]; subst.
+    destruct (IHmstepn (Cp.entry_halt _) k _ _ Hr (Cp.entry_halt _))
+      as [Hn [_ Hb]]; subst; repeat split.
+  (* --- a run --- *)
+  - (* NR_refl: the run is empty, so the other one is too *)
+    intros Hh n' l2 b2 H' _.
+    destruct (halt_run_refl_count n' _ _ _ _ _ Hh H') as [? [? ?]]; subst; repeat split.
+  - (* NR_step *)
+    intros Hh n' l2 b2 H' Hh2.
+    destruct (Cp.run_cases G n' _ _ _ _ _ H')
+      as [[Hz [Hl Hb]] | [k1 [k2 [m2 [x2 [Hn [Hs2 Hr2]]]]]]].
+    + (* the other run is empty, but this one steps: impossible at a halt *)
+      exfalso; subst.
+      match goal with
+      | Hh : Cp.get ?c0 ?l0 = Cp.IHalt, Hst : Cp.mstepn G _ ?c0 ?l0 _ _ _ |- _ =>
+          exact (Cp.halt_no_step G _ c0 l0 _ _ _ Hh Hst)
+      end.
+    + destruct (IHmstepn k1 m2 x2 Hs2) as [? [? ?]]; subst.
+      destruct (IHmstepn0 Hh k2 l2 b2 Hr2 Hh2) as [? [? ?]]; subst; repeat split.
+Qed.
+
+Corollary mstepn_det : forall n n' c l a m x m' x',
+  Cp.mstepn G n c l a m x -> Cp.mstepn G n' c l a m' x' ->
+  n = n' /\ m = m' /\ x = x'.
+Proof. intros n n' c l a m x m' x' H1 H2; apply (machine_det _ _ _ _ _ _ H1 _ _ _ H2). Qed.
+
+(** Two runs from one configuration that both stop at a halt are the same run. *)
+Theorem mrunn_det_halt : forall n n' c l a l1 b1 l2 b2,
+  Cp.mrunn G n c l a l1 b1 -> Cp.mrunn G n' c l a l2 b2 ->
+  Cp.get c l1 = Cp.IHalt -> Cp.get c l2 = Cp.IHalt ->
+  n = n' /\ l1 = l2 /\ b1 = b2.
+Proof.
+  intros n n' c l a l1 b1 l2 b2 H1 H2 Hh1 Hh2.
+  (* the run-level statement is the [P0] of the same induction *)
+  revert n' l2 b2 H2 Hh2 Hh1; induction H1 as [ c0 l0 a0 | k1 k2 c0 l0 a0 m0 x0 le b0 Hs Hr IH ];
+    intros n' l2 b2 H2 Hh2 Hh1.
+  - destruct (halt_run_refl_count n' _ _ _ _ _ Hh1 H2) as [? [? ?]]; subst; repeat split.
+  - destruct (Cp.run_cases G n' _ _ _ _ _ H2)
+      as [[Hz [Hl Hb]] | [q1 [q2 [m2 [x2 [Hn [Hs2 Hr2]]]]]]].
+    + exfalso; subst.
+      match goal with
+      | Hh : Cp.get ?c0 ?l0 = Cp.IHalt, Hst : Cp.mstepn G _ ?c0 ?l0 _ _ _ |- _ =>
+          exact (Cp.halt_no_step G _ c0 l0 _ _ _ Hh Hst)
+      end.
+    + destruct (mstepn_det _ _ _ _ _ _ _ _ _ Hs Hs2) as [? [? ?]]; subst.
+      destruct (IH q2 l2 b2 Hr2 Hh2 Hh1) as [? [? ?]]; subst; repeat split.
+Qed.
+
+(** Hence the count is a property of the *program*, not of the derivation that
+    happened to be written down: whatever run the compiled code performs from
+    [a] to the exit, it takes exactly the number of steps the source charges. *)
+Theorem crun_cost_complete : forall m s a b,
+  Cp.mrunn G m (Cp.entry_code s) 0 a (Cp.csize s) b -> execn m s a b.
+Proof.
+  intros m s a b Hr.
+  assert (Hex : L.exec G s a b) by (apply Cp.crun_complete; exists m; exact Hr).
+  destruct (exec_execn s a b Hex) as [n Hn].
+  assert (Hr' := compilation_is_step_exact n s a b Hn).
+  destruct (mrunn_det_halt n m _ _ _ _ _ _ _ Hr' Hr
+              (Cp.entry_halt s) (Cp.entry_halt s)) as [Heq [_ _]]; subst.
+  exact Hn.
+Qed.
+
+(** **The** cost theorem, both ways. *)
+Theorem compilation_is_step_exact_iff : forall n s a b,
+  execn n s a b <-> Cp.mrunn G n (Cp.entry_code s) 0 a (Cp.csize s) b.
+Proof.
+  intros n s a b; split;
+    [ apply compilation_is_step_exact | apply crun_cost_complete ].
+Qed.
 
 (* ===================================================================== *)
 (** ** Inversion preserves the count.

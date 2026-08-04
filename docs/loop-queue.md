@@ -37,12 +37,21 @@ Rocq は誤った証明を受理しないが、**弱い定理は喜んで受理�
 `assert` を緩めれば緑になる。したがって毎反復、`git diff` について次を確認する。
 1つでも該当したら**変更を戻して次の項目へ**（人間の判断が要る）。
 
+```bash
+git diff | grep -E '^-[[:space:]]*(Theorem|Lemma|Corollary|Example|Definition|Fixpoint|Inductive) '
+git diff -- tests/ | grep -E '^-.*self\.assert'
+```
+
+どちらも空であること。加えて目視で:
+
 - `Admitted` / `admit.` / `Axiom` / `Parameter` が増えていない
-- **既存の** `Theorem` / `Lemma` / `Corollary` / `Example` の**文**が変わっていない
-  （追加は自由。既存の主張を弱めるのは人間の判断）
-- テストの `assert*` の削除・条件の緩和が無い
-  （`--init any` → `zero`、グリッドの縮小、`subTest` 範囲の縮小を含む）
+- テストの条件が緩んでいない（`--init any` → `zero`、グリッドの縮小、
+  `subTest` 範囲の縮小を含む。削除は上の grep が捕まえるが、**緩和は捕まえない**）
 - `docs/*.md` の実測値（本数・秒数・判定）を、測り直さずに書き換えていない
+
+**行頭を固定すること。** 素の `grep 'assert'` は散文に当たる（Janus の "exit
+assertion" は至る所に出る）。誤検出するゲートは読み飛ばされるようになり、
+そうなった時点でゲートとして死ぬ。
 
 ## 規約
 
@@ -115,7 +124,7 @@ PyJanus `-m 8` は失敗する（x が -56 に巻き込む）が、`--smv -m 8` 
 
 ---
 
-### [ ] 4. 段数の主張を両方向にする（または表現を片方向に限定する）
+### [x] 4. 段数の主張を両方向にする（または表現を片方向に限定する）
 
 **なぜ**: `RevSteps.compilation_is_step_exact` は「n 段の導出は**厳密に n 段の**機械実行に
 なる」という**片方向**の定理。「機械実行は必ず n 段」は言えていない（機械の段数決定性が
@@ -288,3 +297,9 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
   parse 7 / static 7）で、`type-error-{empty,top}.ja` の2本が別の関数で拒否されるように
   なっただけ——どちらも元から断片外。`or` の短絡は残した（True は保守側かつ PyJanus 忠実）。
   次は項目4（段数の両方向化。まず (a) 機械決定性を試し、詰まれば (b) 表現限定）。
+- 2026-08-04 項目4 完了。**(a) が通ったので (b) への退避は不要**。`step_cases_exact`
+  （`Cp.step_cases` は call で `k < n` と段数を落とすので、`n = S k` を保つ版を**追加**。
+  既存 lemma は変更していない）→ `machine_det`（`mstepn_mut` の相互帰納、P0 は
+  「終点が halt なら段数まで一意」）→ `crun_cost_complete` → `compilation_is_step_exact_iff`。
+  ついでに差分ゲートのパターンを行頭固定に厳密化——素の `assert` grep が散文の
+  "exit assertion" に当たって誤検出したため。次は項目5（`sx` の None 分離）。
