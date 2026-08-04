@@ -743,6 +743,15 @@ Mechanizing it found **two real gaps in `smv.py`**, both now regression-tested:
   them together; PyJanus checks per statement and runs such a program, so that was
   a false alarm (`double_binding_is_not_itself_an_error`).
 
+`renv` is a total function while `smv.py`'s `env` is a dictionary, and that is a
+*completion*, honest only if the decision cannot depend on the values it invents.
+`alias_ok_agree` shows it cannot — two environments agreeing on the names a
+statement mentions decide it identically — and `completions_agree` says it in
+those terms: any two completions of the same partial map agree on any statement
+whose names are in its domain, which the compiler guarantees because `_lookup`
+refuses the others. Making `renv` partial instead would put an "if defined" side
+condition on every theorem here, for a case that cannot arise.
+
 `the_check_is_on_the_source_expression` records why the test must run *before* the
 block's pending substitution: after `x += y` the pending value of `x` is `x + y`,
 so a subsequent legal `y += x` reads a term mentioning `y` — testing the
@@ -888,6 +897,7 @@ core results) on each build.
 | The two-sorted expression translation agrees with `seval`, and its refusals are not vacuous | `tri_sound`, `trb_sound`, `comparison_is_not_an_integer` | `RevSmvExpr.v` | none |
 | **The checker's aliasing decision is exactly the reference semantics'** — it flags a statement iff the statement cannot run | `alias_check_is_exact` (`step_alias_ok` / `alias_flagged_no_step`), `swap_alias_iff` | `RevSmvAlias.v` | none |
 | The checker's alias test, the source side condition and the core's run-time test are one predicate | `aoccurs_rn`, `alias_three_ways` | `RevSmvAlias.v` | funext |
+| Modelling the compiler's dictionary as a total function is harmless: the decision reads only the names the statement mentions | `alias_ok_agree`, `completions_agree` | `RevSmvAlias.v` | none |
 | **The large-block encoding denotes the source semantics**: one transition of simultaneous updates over entry values = the block run statement by statement | `block_sound`, `block_from_entry`, `block_is_functional` | `RevSmvBlock.v` | none |
 | A path condition met mid-block may be evaluated at the block's entry | `guard_at_entry`, `seval_subst` | `RevSmvBlock.v` | none |
 | The block compiler flags a statement **iff** the aliasing check rejects it, with no side condition | `sx_flagged_iff` (+ `sx_refused_iff`, `swap_is_never_refused`) | `RevSmvBlock.v` | none |
