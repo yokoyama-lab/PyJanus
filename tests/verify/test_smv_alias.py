@@ -42,6 +42,7 @@ sys.path.insert(0, str(ROOT))
 from jana_py import nuxmv
 from jana_py import parser_jana2014
 from jana_py import preprocess
+from jana_py.smv import SmvUnsupported
 from jana_py.smv import compile_to_smv
 
 BINARY = nuxmv.find_nuxmv()
@@ -160,6 +161,64 @@ class EncodingTests(unittest.TestCase):
     # must let it run.
     model = model_of(CLEAN["harmless_double_binding"], init="zero")
     self.assertFalse(has_err_edge(model))
+
+
+class FailClosedTests(unittest.TestCase):
+  """`_occurs` must refuse what it does not understand, not answer "no".
+
+  The swap gap had this exact shape: `_stmt` grew a case, the aliasing check did
+  not, and the result was silently "no alias here".  `_occurs` used to end in
+  `return False`, so any expression node outside the three it handles — a
+  ternary, a stack `top`, a type cast — read as "the target does not occur".
+  Nothing was wrong *today*, because `_iexpr` refuses those nodes a moment
+  later; but that made the safety of the aliasing check depend on the order two
+  unrelated functions happen to fail in.  Now the two refuse the same set.
+  """
+
+  def compiler(self, src: str):
+    from jana_py.smv import _Compiler
+    pt = preprocess.preprocess_text("<test>", src, None, "jana2014")
+    program = parser_jana2014.parse_program("<test>", pt.text, pt.line_origins)
+    return _Compiler(program, "zero", None, 16, "assign")
+
+  def rhs_of_last_assignment(self, src: str):
+    pt = preprocess.preprocess_text("<test>", src, None, "jana2014")
+    program = parser_jana2014.parse_program("<test>", pt.text, pt.line_origins)
+    return program.main.stmts[-1].expr
+
+  def test_a_node_outside_the_fragment_raises(self):
+    src = ("procedure main()\n    int x\n    int c\n"
+           "    x += (c = 0 ? x : 0)\n")
+    comp = self.compiler(src)
+    with self.assertRaises(SmvUnsupported):
+      comp._occurs("x", self.rhs_of_last_assignment(src), {"x": "x", "c": "c"})
+
+  def test_an_unknown_object_raises_rather_than_answering_no(self):
+    comp = self.compiler("procedure main()\n    int x\n    x += 1\n")
+    with self.assertRaises(SmvUnsupported):
+      comp._occurs("x", object(), {"x": "x"})
+
+  def test_an_unbound_name_raises(self):
+    # `_iexpr` refuses it through `_lookup`; the aliasing check now does too,
+    # instead of reading an unbound name as "does not occur".
+    src = "procedure main()\n    int x\n    x += 1\n"
+    comp = self.compiler(src)
+    with self.assertRaises(SmvUnsupported):
+      comp._occurs("x", self.rhs_of_last_assignment(
+          "procedure main()\n    int x\n    int y\n    x += y\n"), {"x": "x"})
+
+  def test_a_literal_still_does_not_occur(self):
+    src = "procedure main()\n    int x\n    x += 1\n"
+    comp = self.compiler(src)
+    self.assertFalse(comp._occurs("x", self.rhs_of_last_assignment(src), {"x": "x"}))
+
+  def test_the_program_is_still_merely_unsupported(self):
+    # Behaviour through the front door is unchanged: a ternary was refused
+    # before (by `_iexpr`) and is refused now (by `_occurs`).
+    src = ("procedure main()\n    int x\n    int c\n"
+           "    x += (c = 0 ? x : 0)\n")
+    with self.assertRaises(SmvUnsupported):
+      model_of(src, init="zero")
 
 
 @unittest.skipIf(BINARY is None, "nuXmv not installed")
