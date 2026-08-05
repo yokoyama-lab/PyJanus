@@ -946,6 +946,13 @@ class _Compiler:
       self._enter(self._loc())
       return
     inner: _Env = {}
+    #: `(param, expr)` for every argument that is not an l-value.  These are
+    #: *value arguments*: `runtime._bind_args` desugars `call f(n-1, r)` into
+    #: `local t = n-1; call f(t, r); delocal t = n-1`, so the cell is writable
+    #: and the obligation lands on return — the expression has to read back the
+    #: value it was bound to.  Modelling them as read-only constants would
+    #: reject callees that legitimately move the value and put it back.
+    value_args: list[tuple] = []
     for param, arg in zip(proc.params, s.args):
       if param.typ.kind == "struct":
         if not isinstance(arg, LvalExpr) or arg.lval.selectors:
@@ -961,7 +968,13 @@ class _Compiler:
         continue
       if param.typ.kind != "int":
         raise SmvUnsupported("non-scalar parameter")
-      if not isinstance(arg, LvalExpr) or arg.lval.selectors:
+      if not isinstance(arg, LvalExpr):
+        value_args.append((param, arg))
+        continue
+      if arg.lval.selectors:
+        # A cell or a field passed by reference.  The binding would have to name
+        # one element, which a variable index does not; refused rather than
+        # guessed.
         raise SmvUnsupported("argument is not a plain variable")
       # Two formals may resolve to one variable.  That is not itself an error:
       # PyJanus checks each statement as it reaches it, so a body that never
@@ -993,8 +1006,28 @@ class _Compiler:
             # such a program safe.
             return self._unconditional_error()
       inner[param.ident.name] = resolved
+    for param, arg in value_args:
+      if param.dimensions or param.decl_type is DeclType.CONSTANT:
+        # An array cannot be written as an expression, and a `const` parameter
+        # binds through `ConstantParamProxy` (read-only) instead.  Neither is
+        # this desugaring, so neither is answered here.
+        raise SmvUnsupported(f"value argument to a non-plain parameter: {param.ident.name}")
+      obl: list[str] = []
+      bound = self._iexpr(arg, env, obl)
+      self._check(obl)
+      name = self._declare(param.ident.name,
+                           "0" if self.init_mode == "zero" else None)
+      self.pending[name] = bound
+      inner[param.ident.name] = name
     body = invert_stmts(proc.body, False) if invert else proc.body
     self._stmts(body, inner, depth + 1)
+    for param, arg in value_args:
+      # Re-evaluated **after** the body and in the *caller's* environment: a
+      # callee that moves `m` through another parameter changes what `m + 1`
+      # means on return, and PyJanus rejects exactly that.
+      obl: list[str] = []
+      restored = self._iexpr(arg, env, obl)
+      self._check(obl + [f"{self._val(inner[param.ident.name])} = {restored}"])
 
   # -- driver ----------------------------------------------------------
 

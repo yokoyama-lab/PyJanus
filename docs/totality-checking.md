@@ -177,17 +177,17 @@ procedure main()
 配列は宣言を要素ごとの SMV 変数へ展開し、添字は定数・変数のどちらも扱う（§12）。
 
 `tests/jana2014/fixtures/examples/` の97本のうち **`compile_to_smv` が受理するのは
-24本**（2026-08-05 実測。配列対応前は8本、そのあと 17本→21本→24本）。
-残る73本の**最初にぶつかる**阻害要因:
+27本**（2026-08-05 実測。配列対応前は8本、そのあと 17→21→24→27）。
+残る70本の**最初にぶつかる**阻害要因:
 
 | 阻害要因 | 本数 |
 |---|---:|
 | 非スカラ宣言（ほぼすべて stack） | 25 |
-| 引数が単なる変数でない（`f(a[0])` 等） | 12 |
 | 断片外の文（`iterate` / `push` / `pop` 等） | 11 |
 | `^=`（ビット演算の代入） | 11 |
-| ビット演算子 `&` `\|` | 6 |
-| 非スカラの `local` | 5 |
+| 非スカラの `local` | 7 |
+| ビット演算子 `&` `\|` | 7 |
+| 引数がセル・フィールド（`f(a[0])`） | 6 |
 | スカラとセルの swap | 2 |
 | 断片外の式 | 1 |
 
@@ -200,9 +200,15 @@ procedure main()
 多次元対応で入ったのは3本（`structs_array_field` / `structs_array_field_arr` /
 `structs_grid`）で、`matrixmult.ja` と `matrixmult_v1.0.ja` は**入らなかった**——
 どちらも次に `^=` で止まる（`^=` が 9 → 11 に増えているのがそれ）。
-`structs_local_arr2d.ja` も非スカラの `local` で止まる（4 → 5）。
-**阻害要因は1本につき1つとは限らない**ので、被覆率の見積もりは「最初にぶつかる要因」の
-本数の足し算にはならない。
+値引数（§13）で入ったのは3本で、こちらも `argument is not a plain variable` 12本のうち
+3本にとどまった。**阻害要因は1本につき1つとは限らない**ので、被覆率の見積もりは
+「最初にぶつかる要因」の本数の足し算にはならない——これは3回続けて外した。
+
+`argument is not a plain variable` に残る6本は、**別の機構**である。値引数（定数・式）は
+値渡しだが、`f(a[0])` は**セルの参照渡し**で、仮引数が特定のセル変数を指す。定数添字なら
+安いが（`injective_mini_cipher` / `injective_sort_network` / `test2` の3本）、変数添字
+（`s[i]` / `garbage[garbagecounter]` / `m[i]` の3本）は仮引数が実行時に決まるセルを指すので
+別物である。1つのエラーメッセージが2つの機構を覆っていた。
 
 ## 5. 結果
 
@@ -213,9 +219,9 @@ procedure main()
 | 判定 | 本数 | 意味 |
 |---|---:|---|
 | `refuted` | 22 | 表明破れへ到達する初期ストアを提示 |
-| `proved` | 14 | 帰納的不変量で到達不能を証明 |
-| `unknown` | 10 | 120秒でタイムアウト、または IC3 が断念 |
-| `unsupported` | 89 | 断片外（うち25本が stack の宣言） |
+| `proved` | 16 | 帰納的不変量で到達不能を証明 |
+| `unknown` | 11 | 120秒でタイムアウト、または IC3 が断念 |
+| `unsupported` | 86 | 断片外（うち25本が stack の宣言） |
 | `parse-error` | 7 | 構文エラー（error fixture として想定内） |
 | `static-error` | 7 | `validate_program` が弾く（模型検査の対象外） |
 
@@ -224,7 +230,7 @@ procedure main()
 > `expand` に変えても**この表は変わらない**（両方で測って一致を確認。§5.7）。`style` を
 > `trans` に落とすと `base_convert.ja` が unknown に戻り proved は 10 になる。
 
-**内訳は割り切れている**: 断片内 46本＝ examples 24本（proved 14 / unknown 10）
+**内訳は割り切れている**: 断片内 49本＝ examples 27本（proved 16 / unknown 11）
 ＋ error fixture 22本（**全て refuted**）。すなわち **examples から `refuted` は1本も
 出ていない（誤検出ゼロ）** し、error fixture で `proved` になったものも1本も無い。
 
@@ -244,6 +250,8 @@ procedure main()
   同時に `knapsack` と `injective_bwt_inverse` が**初めて実際に検査された**——
   それまでは構文エラーが `unknown` に化けていた。判定は変わらないが、
   **理由が「IC3 が断念」から本物のタイムアウトに変わった**。
+- **値引数（§13、2026-08-05）**: unsupported 89 → 86、断片内 examples 24 → 27、
+  proved 14 → 16、unknown 10 → 11。
 
 ### 5.1 検出側 — 22/22、誤検出 0
 
@@ -269,12 +277,12 @@ procedure main()
 最後の3本（`alias-1` / `var-modified-on-rhs` / `delocal-wrong-name`）は §3.3 の修正で
 初めて検出できるようになったもので、修正前は逆に「安全」と**誤って証明**していた。
 
-### 5.2 証明側 — 14/24
+### 5.2 証明側 — 16/27
 
-examples 97本のうち断片内は**24本**（配列対応前は8本、そのあと 17→21→24）。
-**証明できたのは14本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
-`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 7本）で、
-残る10本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
+examples 97本のうち断片内は**27本**（配列対応前は8本、そのあと 17→21→24→27）。
+**証明できたのは16本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
+`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 9本）で、
+残る11本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
 以前ここに「`injective_bwt_inverse` / `knapsack` も IC3 が断念」と書いていたが、
 **それは誤りだった**——両者はモデルが構文エラーで、検査にかかっていなかった（§3.5）。
 いまは実際に走って120秒で尽きる。
@@ -296,14 +304,14 @@ examples 97本のうち断片内は**24本**（配列対応前は8本、その�
 
 | 判定 | `--init zero` | `--init any` |
 |---|---:|---:|
-| `refuted` | 22 | **32** |
-| `proved` | 14 | 8 |
-| `unknown` | 10 | **6** |
-| 断片内・計 | 46 | 46 |
-| **決着** | 36 | **40** |
+| `refuted` | 22 | **33** |
+| `proved` | 16 | 10 |
+| `unknown` | 11 | **6** |
+| 断片内・計 | 49 | 49 |
+| **決着** | 38 | **43** |
 
 error fixture 22本は**どちらでも全て refuted**で、判定は1本も動かない。動くのは
-examples 24本だけなので、以下はそれを列挙する。
+examples 27本だけなので、以下はそれを列挙する。
 
 | プログラム | `--init zero` | `--init any` | 反例が言っていること |
 |---|---|---|---|
@@ -315,6 +323,8 @@ examples 24本だけなので、以下はそれを列挙する。
 | `structs_array_field.ja` | proved | proved | — |
 | `structs_array_field_arr.ja` | proved | proved | — |
 | `structs_grid.ja` | proved | proved | — |
+| `structs_param.ja` | proved | proved | — |
+| `structs_flat_param.ja` | proved | proved | — |
 | `base_convert.ja` | proved | **refuted** | 基数が 0 |
 | `fall.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
 | `fib.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
@@ -326,6 +336,7 @@ examples 24本だけなので、以下はそれを列挙する。
 | `injective_gcd.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
 | `run-length-enc.ja` | unknown | **refuted** | 入力が 0 終端でない |
 | `sqrt.ja` | unknown | **refuted** | `num < 0` |
+| `injective_partition.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
 | `bwt_plain.ja` | unknown | unknown | — |
 | `edit_distance.ja` | unknown | unknown | — |
 | `injective_bwt_inverse.ja` | unknown | unknown | — |
@@ -333,16 +344,17 @@ examples 24本だけなので、以下はそれを列挙する。
 | `lcs.ja` | unknown | unknown | — |
 
 **2つの問いは難易度で順序づかない。** 直観では `--init any` の方が強い主張だから
-難しいはずだが、実測は逆である: 未決10本のうち**5本が `any` では決着する**
-（`fib_variants` / `glaisher` / `injective_gcd` / `run-length-enc` / `sqrt`）。
-逆向きは `injective_bennett` の1本だけ。理由は単純で、**反例を1本見つける方が
-不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
-examples の決着は 14本 → 18本に増える。
+難しいはずだが、実測は逆である: 未決11本のうち**6本が `any` では決着する**
+（`fib_variants` / `glaisher` / `injective_gcd` / `injective_partition` /
+`run-length-enc` / `sqrt`）。逆向きは `injective_bennett` の1本だけ。理由は単純で、
+**反例を1本見つける方が不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
+examples の決着は 16本 → 21本に増える。
 
-**`proved` の側は構造体7本が占めている。** `--init any` でも証明できる8本のうち7本が
+**`proved` の側は構造体9本が占めている。** `--init any` でも証明できる10本のうち9本が
 `structs_*` で、これらは10〜20行の直線的なテストプログラムである。つまり
 「全入力で全域単射」を証明できた**アルゴリズムらしいアルゴリズムは `cantor_pair` 1本
-だけ**で、そこは正直に読む必要がある。
+だけ**で、そこは正直に読む必要がある。断片を広げると `proved` は増えるが、
+増えているのは主に**断片を広げるために書かれたテストプログラム**である。
 
 `zagier.ja` などの挙動が2つの問いの違いを端的に示す: **零ストアでは安全と証明でき、
 全入力では反例が出る**。前者は「PyJanus が実際に走らせる1本の実行は落ちない」、
@@ -1012,3 +1024,32 @@ block_is_functional : （同じブロックの2つのソース実行は一致す
 **入らなかったもの**: 添字の本数が宣言の階数と食い違う形（`int a[2][2]` に `a[0]`）は
 **拒否する**——オフセットが未知なのではなく無意味だから。仮引数の階数が実引数と
 食い違う場合も同様。
+
+## 13. 値引数（2026-08-05）
+
+l-value でない実引数——`call shift(a, 5)`、`call f(n - 1, r)`——は Janus の
+**値引数**である。`runtime._bind_args` の記述が意味論そのもの:
+
+```
+call f(n-1, r)  は  local t = n-1; call f(t, r); delocal t = n-1  に脱糖される
+```
+
+したがってセルは**書き換え可能**で、義務は戻り時に来る: 引数の式が、束縛された値を
+読み返さなければならない。`x += 1; x -= 1` する callee は通り、`x += 1` だけの callee は
+落ちる（どちらも解釈器で実測して `tests/verify/test_smv_valuearg.py` に固定した）。
+
+**当初この項目は「読み取り専用の定数として渡し、代入が現れたら ERR」と設計していたが、
+それは誤りだった。** `ConstantParamProxy` は `const` と宣言された**仮引数**の機構で、
+定数**実引数**とは別物である。設計どおりに実装していたら、**実際に走るプログラムを
+誤って弾く**ことになっていた。
+
+符号化で外せない点が2つある。
+
+- **出口の式は本体の*後*に、*呼び出し側*の環境で再評価する。** callee が別の仮引数を
+  通じて `m` を動かせば、戻り時の `m + 1` は別の値になる。`call f(m + 1, m)` で本体が
+  `m += 1` するプログラムを PyJanus は拒否する。
+- これは `local`/`delocal` とまったく同じ形なので、**読み取り専用という概念を新設せずに
+  その経路を使い回す**。`uncall` でも束縛は本体の前、検査は後で、対称である。
+
+定数だけでなく**式の引数**も同じ経路で通る（`matrix_apsp.ja` の
+`base + v_n*v_n`）。配列の仮引数と `const` 仮引数への値引数は、この脱糖ではないので拒否する。
