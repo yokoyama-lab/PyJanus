@@ -899,13 +899,28 @@ class _Compiler:
 
   def _local(self, s: LocalStmt, env: dict[str, str], depth: int) -> None:
     enter, leave = s.enter_decl, s.exit_decl
-    for decl in (enter, leave):
-      if decl.dimensions or decl.typ.kind != "int":
-        raise SmvUnsupported("non-scalar local")
-      if decl.decl_type is DeclType.CONSTANT:
-        raise SmvUnsupported("constant local")
     if enter.ident.name != leave.ident.name:
       # Another run-time check: PyJanus raises when it reaches the `delocal`.
+      self._unconditional_error()
+      return
+    # What the *entry* declares has to be representable, or there is no local to
+    # model.  Once it is, a `delocal` that disagrees about the type is the same
+    # kind of run-time error as one that disagrees about the name.
+    if enter.decl_type is DeclType.CONSTANT or leave.decl_type is DeclType.CONSTANT:
+      raise SmvUnsupported("constant local")
+    if enter.typ.kind == "struct":
+      if enter.dimensions:
+        raise SmvUnsupported("local array of structs")
+      return self._local_struct(s, env, depth)
+    if enter.dimensions:
+      # `local int t[2] = a` parses and validates, but PyJanus cannot run it —
+      # the interpreter raises a bare `TypeError`.  With no reference behaviour
+      # to match, a model would be an authority on a program the implementation
+      # cannot execute.
+      raise SmvUnsupported("local array")
+    if enter.typ.kind != "int":
+      raise SmvUnsupported("non-scalar local")
+    if leave.typ.kind != "int" or leave.dimensions:
       self._unconditional_error()
       return
     obl: list[str] = []
@@ -928,6 +943,57 @@ class _Compiler:
     obl2: list[str] = []
     final = self._iexpr(leave.init_expr, inner, obl2) if leave.init_expr is not None else "0"
     self._check(obl2 + [f"{self._val(name)} = {final}"])
+
+  def _struct_cells(self, entry: dict) -> list[str]:
+    """Every SMV variable of an expanded struct, in declaration order."""
+    cells: list[str] = []
+    for value in entry.values():
+      cells.extend(value if isinstance(value, tuple) else (value,))
+    return cells
+
+  def _struct_operand(self, expr, env: _Env, who: str) -> dict:
+    """The struct an initializer names.  Only a plain variable is accepted."""
+    if not isinstance(expr, LvalExpr) or expr.lval.selectors:
+      raise SmvUnsupported(f"struct local initializer is not a plain variable: {who}")
+    entry = self._lookup(expr.lval.ident.name, env)
+    if not isinstance(entry, dict):
+      raise SmvUnsupported(f"struct local initialized from a non-struct: {who}")
+    return entry
+
+  def _local_struct(self, s: LocalStmt, env: _Env, depth: int) -> None:
+    """`local struct Box e = a … delocal struct Box e = a` — a copy, checked back.
+
+    Every field is bound on entry and compared again on exit, and the exit
+    expression is re-evaluated **after** the body: PyJanus rejects both a body
+    that moves the local and one that moves the source.
+    """
+    enter, leave = s.enter_decl, s.exit_decl
+    if (leave.typ.kind != "struct" or leave.typ.name != enter.typ.name
+        or leave.dimensions):
+      self._unconditional_error()
+      return
+    if enter.init_expr is None or leave.init_expr is None:
+      raise SmvUnsupported(f"struct local without an initializer: {enter.ident.name}")
+    src = self._struct_operand(enter.init_expr, env, enter.ident.name)
+    fresh = self._declare_struct(enter, env, allow_init=True)
+    if sorted(fresh) != sorted(src):
+      raise SmvUnsupported(f"struct local of a different shape: {enter.ident.name}")
+    src_cells, dst_cells = self._struct_cells(src), self._struct_cells(fresh)
+    if len(src_cells) != len(dst_cells):
+      raise SmvUnsupported(f"struct local of a different shape: {enter.ident.name}")
+    for dst, cell in zip(dst_cells, src_cells):
+      self.pending[dst] = self._val(cell)
+
+    inner = dict(env)
+    inner[enter.ident.name] = fresh
+    self._stmts(s.body, inner, depth)
+
+    back = self._struct_operand(leave.init_expr, inner, enter.ident.name)
+    back_cells = self._struct_cells(back)
+    if len(back_cells) != len(dst_cells):
+      raise SmvUnsupported(f"struct delocal of a different shape: {enter.ident.name}")
+    self._check([f"{self._val(dst)} = {self._val(cell)}"
+                 for dst, cell in zip(dst_cells, back_cells)])
 
   def _call(self, s, env: dict[str, str], depth: int, invert: bool) -> None:
     if s.external:
@@ -1110,7 +1176,7 @@ class _Compiler:
       self.dims[cells] = shape
     return cells
 
-  def _declare_struct(self, decl, env: _Env) -> dict:
+  def _declare_struct(self, decl, env: _Env, allow_init: bool = False) -> dict:
     """One SMV variable per field.
 
     A field is itself a scalar or an array, and no field has a struct type in
@@ -1120,7 +1186,9 @@ class _Compiler:
     sdef = self.structs.get(decl.typ.name)
     if sdef is None:
       raise SmvUnsupported(f"unknown struct type: {decl.typ.name}")
-    if decl.init_expr is not None:
+    if decl.init_expr is not None and not allow_init:
+      # A `local` supplies one and copies it in field by field (`_local_struct`);
+      # a top-level declaration has nothing to copy from.
       raise SmvUnsupported(f"struct initializer: {decl.ident.name}")
     outer = self._constant_shape(decl.dimensions, decl.ident.name)
     out: dict = {}

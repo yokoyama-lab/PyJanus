@@ -517,7 +517,7 @@ Cantor fold の単射性があるので入口はある。小さいが、項目22
 
 ---
 
-### [ ] 27. 非スカラの `local`
+### [x] 27. 非スカラの `local`
 
 **測定（2026-08-05）**: `non-scalar local` は **4本**（`structs_local_arr` ほか）。
 `local` は現在スカラのみ受け付ける（`_local` が `decl.dimensions` と非 int を拒否）。
@@ -547,6 +547,23 @@ PyJanus と突き合わせること。
 **規模**: 中
 
 ---
+
+
+### 検査器の外で見つかった欠陥（この repo の別の場所を直す話）
+
+- **`local int t[2] = a` で PyJanus が素の `TypeError` を投げる**（2026-08-05、項目27）。
+  `int() argument must be a string, a bytes-like object or a real number, not 'list'`。
+  構文は通り `validate_program` も通るので、**受理したうえで内部例外で落ちている**。
+  配列の局所変数が本当に言語にあるのかどうか（あるなら `runtime.py` の欠陥、無いなら
+  parser か validate で弾くべき）を決める必要があるので、検査器側では符号化せず拒否した。
+
+### 断片の穴として残しているもの
+
+- **セル・フィールドの参照渡し `f(a[0])`**（6本、2026-08-05、項目26）。値引数
+  （定数・式）とは**別の機構**で、仮引数が特定のセル変数を指す。定数添字の3本
+  （`injective_mini_cipher` / `injective_sort_network` / `test2`）は安い。変数添字の3本
+  （`adaptive_huffman` / `binary_heap` / `injective_arith_coding`）は仮引数が実行時に
+  決まるセルを指すので別物。
 
 ## 保留（ループに入れない）
 
@@ -693,3 +710,16 @@ PyJanus と突き合わせること。
   **+3本**（予測 +12）。`argument is not a plain variable` は**2つの機構を覆っていた**——
   残る6本はセルの参照渡し `f(a[0])` で値渡しではない。断片内 examples 24 → 27。
   次は項目27（非スカラの `local`。値引数で 5 → 7 に増えた）。
+- 2026-08-05 項目27 完了。**+2本**（`structs_local_arr` / `structs_local_arr2d`、
+  どちらも proved）＋ error fixture 1本（`delocal-wrong-type` が refuted に）。予測と一致
+  したのは今回が初めて。理由は先に内訳を数えたから——`non-scalar local` の7本のうち
+  **5本は stack**（`avl_search` / `closest_pair` / `lis` / `matrix_apsp` /
+  `selection_sort`）で、構造体は2本だけだった。
+  struct local はコピーで、入口で全フィールドを束縛し出口で突き合わせる。出口の式は
+  本体の**後**に再評価する（値引数と同じ規則。局所側を動かしても供給元を動かしても
+  PyJanus は落ちる——両方実測して固定）。`local`/`delocal` の型不一致は実行時エラー
+  なので無条件 ERR にした（検出側 22/22 → 23/23）。
+  **`local int t[2] = a` は符号化しなかった**: 構文も validate も通るのに PyJanus が
+  素の `TypeError` で落ちる。参照となる振る舞いが無いものを符号化すると、模型が
+  「実装が実行できないプログラム」の権威になる。**PyJanus 側の欠陥**として下に記録した。
+  次は項目28（`iterate` の脱糖）でキュー最後。
