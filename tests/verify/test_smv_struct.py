@@ -186,8 +186,10 @@ class ArrayOfStructTests(unittest.TestCase):
 
 
 class StillRefusedTests(unittest.TestCase):
-  def test_a_two_dimensional_array_of_structs_is_refused(self):
-    src = DEF + "procedure main()\n    Point p[2][2]\n    p[0][0].x += 1\n"
+  def test_a_whole_struct_l_value_is_refused(self):
+    # Rank > 1 is translated now (`tests/verify/test_smv_multidim.py`); naming
+    # a struct without a field still is not, since it denotes no one variable.
+    src = DEF + "procedure main()\n    Point p\n    Point q\n    p <=> q\n"
     with self.assertRaises(SmvUnsupported):
       model_of(src, init="zero")
 

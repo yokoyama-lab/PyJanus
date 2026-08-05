@@ -115,12 +115,26 @@ _Env = dict  # dict[str, str | tuple[str, ...] | dict[str, str | tuple[str, ...]
 #: Reserved in SMV (plus `pc`, which names the program counter).  A Janus
 #: variable with one of these names is renamed, the way `c_codegen.py` renames
 #: identifiers that collide with C++ keywords.
+#:
+#: The single letters are the temporal and epistemic operators of nuXmv's logic
+#: — `A`, `E`, `X`, `U`, `T`, `K`, … — and they are the ones that actually bite:
+#: `knapsack.ja` declares `K` and `injective_bwt_inverse.ja` declares `T`, and
+#: both produced a model nuXmv refused to read.  The list below was obtained by
+#: **probing the binary** with a one-variable model, not by reading a grammar;
+#: `K` is reserved by nuXmv without appearing in NuSMV's published one.
+#: `tests/verify/test_smv_reserved.py` pins the probed set.
 _SMV_RESERVED = frozenset({
-    "pc", "MODULE", "VAR", "IVAR", "FROZENVAR", "DEFINE", "ASSIGN", "INIT",
-    "TRANS", "INVAR", "INVARSPEC", "CTLSPEC", "LTLSPEC", "SPEC", "FAIRNESS",
-    "JUSTICE", "COMPASSION", "CONSTANTS", "case", "esac", "init", "next",
-    "self", "TRUE", "FALSE", "boolean", "integer", "real", "word", "array",
-    "of", "in", "union", "xor", "xnor", "mod", "process", "abs", "max", "min",
+    "pc", "MODULE", "VAR", "IVAR", "FROZENVAR", "DEFINE", "MDEFINE", "ASSIGN",
+    "INIT", "TRANS", "INVAR", "INVARSPEC", "CTLSPEC", "LTLSPEC", "PSLSPEC",
+    "SPEC", "FAIRNESS", "JUSTICE", "COMPASSION", "CONSTANTS", "CONSTARRAY",
+    "COMPUTE", "ISA", "case", "esac", "init", "next", "self", "TRUE", "FALSE",
+    "boolean", "integer", "real", "word", "array", "of", "in", "union", "xor",
+    "xnor", "mod", "process", "abs", "max", "min", "MIN", "MAX", "ABS",
+    "count", "toint", "bool", "floor", "sizeof", "signed", "unsigned",
+    "extend", "resize", "swconst", "uwconst", "word1", "not", "and", "or",
+    # temporal / epistemic operators
+    "A", "E", "F", "G", "H", "K", "O", "S", "T", "U", "V", "X", "Y", "Z",
+    "EX", "AX", "EF", "AF", "EG", "AG", "BU", "EBF", "ABF", "EBG", "ABG",
 })
 
 _ARITH = {BinOpKind.ADD: "+", BinOpKind.SUB: "-", BinOpKind.MUL: "*"}
@@ -163,6 +177,12 @@ class _Compiler:
     self.array_decls: list[tuple[str, int]] = []
     #: cell name -> the array it belongs to, so a read can use `a[i]` directly.
     self.array_of: dict[str, str] = {}
+    #: cell tuple -> its shape.  Cells are stored flat in row-major order, so a
+    #: rank-2 array is a tuple of `rows * cols` names; the shape is what lets
+    #: `A[i][j]` fold to one offset *and* lets each index be checked against its
+    #: own dimension.  Without it `A[0][5]` on a 2x3 array would pass, its flat
+    #: offset 5 being inside the six cells.  Absent means rank 1.
+    self.dims: dict[tuple[str, ...], tuple[int, ...]] = {}
     self.varnames: list[str] = []
     self.var_init: dict[str, str | None] = {}
     self.defines: list[tuple[str, str]] = []
@@ -307,17 +327,53 @@ class _Compiler:
     raise SmvUnsupported(
         f"expression outside the fragment in an aliasing check: {type(e).__name__}")
 
-  def _index_expr(self, lval, env: _Env):
-    """The index expression of an l-value, **after** any leading field selector.
+  def _index_expr(self, lval, env: _Env) -> list:
+    """The index expressions of an l-value, **after** the field selector.
 
     `b.v[i]` indexes the field, so the raw `selectors[0]` is the field and using
-    it as an index reads the wrong node.  Everything that needs the index goes
-    through here.
+    it as an index reads the wrong node.  Everything that needs the indices goes
+    through here.  A rank-2 array has two of them.
     """
     _, selectors = self._base_of(lval, env)
-    if selectors and isinstance(selectors[0], LvalIndex):
-      return selectors[0].expr
-    return None
+    return [sel.expr for sel in selectors if isinstance(sel, LvalIndex)]
+
+  def _shape(self, entry: tuple) -> tuple[int, ...]:
+    """The declared shape of a cell tuple; rank 1 unless registered."""
+    return self.dims.get(entry, (len(entry),))
+
+  def _strides(self, shape: tuple[int, ...]) -> list[int]:
+    """Row-major strides: the last index moves one cell."""
+    strides, step = [], 1
+    for size in reversed(shape):
+      strides.insert(0, step)
+      step *= size
+    return strides
+
+  def _flat_index(self, entry: tuple, selectors, env: _Env, obl: list[str]) -> str:
+    """Fold every index selector into one row-major offset into `entry`.
+
+    Each index is checked against **its own** dimension rather than against the
+    flat length, which is the whole reason the shape is kept: `A[0][5]` on a 2x3
+    array has offset 5, inside the six cells and outside the array.
+    """
+    shape = self._shape(entry)
+    if len(selectors) != len(shape) or not all(
+        isinstance(sel, LvalIndex) for sel in selectors):
+      raise SmvUnsupported(
+          f"index of rank {len(selectors)} on an array of rank {len(shape)}")
+    strides = self._strides(shape)
+    indices = [sel.expr for sel in selectors]
+    if all(isinstance(index, Number) for index in indices):
+      return str(sum(i.value * s for i, s in zip(indices, strides)))
+    parts = []
+    for index, size, stride in zip(indices, shape, strides):
+      term = self._iexpr(index, env, obl)
+      obl.append(f"({term}) >= 0")
+      obl.append(f"({term}) < {size}")
+      # `_iexpr` already parenthesises, so rank 1 gives back exactly the term
+      # the single-index encoding used to produce.
+      parts.append(term if stride == 1 else f"({term} * {stride})")
+    return parts[0] if len(parts) == 1 else "(" + " + ".join(parts) + ")"
 
   def _cell_index(self, lval, env: _Env, obl: list[str]) -> tuple | None:
     """`(elements, index term)` when this l-value is an array cell, else `None`.
@@ -329,12 +385,7 @@ class _Compiler:
     entry, selectors = self._base_of(lval, env)
     if not isinstance(entry, tuple):
       return None
-    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
-      raise SmvUnsupported("multi-dimensional l-value")
-    index = selectors[0].expr
-    if isinstance(index, Number):
-      return entry, str(index.value)
-    return entry, self._dynamic_index(index, env, obl, len(entry))
+    return entry, self._flat_index(entry, selectors, env, obl)
 
   def _alias_obl(self, entry: tuple, tidx: str, e, env: _Env, obl: list[str]) -> bool:
     """Require every cell of `entry` read by `e` to differ from index `tidx`.
@@ -356,15 +407,17 @@ class _Compiler:
         return False
       ridx = cell[1]
       inner = self._index_expr(e.lval, env)
+      # Forced, not short-circuited: every index contributes its obligations.
+      nested = any([self._alias_obl(entry, tidx, index, env, obl) for index in inner])
       if cell[0] is not entry:
         # a different array cannot alias, but its index may still read this one
-        return inner is not None and self._alias_obl(entry, tidx, inner, env, obl)
+        return nested
       if tidx.isdigit() and ridx.isdigit():
         if tidx == ridx:
           return True
       else:
         obl.append(f"({tidx}) != ({ridx})")
-      return inner is not None and self._alias_obl(entry, tidx, inner, env, obl)
+      return nested
     if isinstance(e, BinExpr):
       left = self._alias_obl(entry, tidx, e.left, env, obl)
       return self._alias_obl(entry, tidx, e.right, env, obl) or left
@@ -390,15 +443,21 @@ class _Compiler:
       return entry == name
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
-      raise SmvUnsupported("multi-dimensional l-value")
-    index = selectors[0].expr
-    if isinstance(index, Number):
-      return 0 <= index.value < len(entry) and entry[index.value] == name
+    shape = self._shape(entry)
+    if len(selectors) != len(shape) or not all(
+        isinstance(sel, LvalIndex) for sel in selectors):
+      raise SmvUnsupported(
+          f"index of rank {len(selectors)} on an array of rank {len(shape)}")
+    indices = [sel.expr for sel in selectors]
+    if all(isinstance(index, Number) for index in indices):
+      if any(not 0 <= index.value < size for index, size in zip(indices, shape)):
+        return False
+      flat = sum(i.value * s for i, s in zip(indices, self._strides(shape)))
+      return entry[flat] == name
     if name in entry:
       raise SmvUnsupported(
           "aliasing between a cell and a variable index of the same array")
-    return self._occurs(name, index, env)
+    return any(self._occurs(name, index, env) for index in indices)
 
   def _lookup(self, name: str, env: dict[str, str]) -> str:
     if name not in env:
@@ -444,34 +503,46 @@ class _Compiler:
       return entry
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
-      raise SmvUnsupported("multi-dimensional l-value")
-    index = selectors[0].expr
-    if not isinstance(index, Number):
+    shape = self._shape(entry)
+    if len(selectors) != len(shape) or not all(
+        isinstance(sel, LvalIndex) for sel in selectors):
+      raise SmvUnsupported(
+          f"index of rank {len(selectors)} on an array of rank {len(shape)}")
+    indices = [sel.expr for sel in selectors]
+    if not all(isinstance(index, Number) for index in indices):
       raise SmvUnsupported("variable array index")
-    if not 0 <= index.value < len(entry):
+    if any(not 0 <= index.value < size for index, size in zip(indices, shape)):
       # The caller checks bounds first, so this is defensive only.
-      raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
-    return entry[index.value]
+      raise SmvUnsupported(f"index out of bounds: {lval.ident.name}")
+    flat = sum(i.value * s for i, s in zip(indices, self._strides(shape)))
+    return entry[flat]
 
   def _oob_lval(self, lval, env: _Env) -> bool:
-    """Is this a *constant* index outside its array?
+    """Is a *constant* index outside its own dimension?
 
     PyJanus raises "Array index `[5]' was out of bounds" when it reaches such a
     statement, so reaching it is the error.  A variable index is not decided
-    here — it is refused by `_lval_name` until the `case` encoding exists.
+    here — it becomes an obligation in `_flat_index`.
+
+    The check is **per dimension**, not against the flat length: on a 2x3 array
+    `A[0][5]` folds to offset 5, which is inside the six cells.
     """
     if lval.ident.name not in env:
       return False
     entry, selectors = self._base_of(lval, env)
     if not isinstance(entry, tuple) or not selectors:
       return False
-    selector = selectors[0]
-    if not isinstance(selector, LvalIndex):
-      return False
-    if not isinstance(selector.expr, Number):
-      return self._oob(selector.expr, env)   # a nested constant index may still be
-    return not 0 <= selector.expr.value < len(entry)
+    shape = self._shape(entry)
+    for selector, size in zip(selectors, shape):
+      if not isinstance(selector, LvalIndex):
+        return False
+      if not isinstance(selector.expr, Number):
+        # a nested constant index may still be out of bounds
+        if self._oob(selector.expr, env):
+          return True
+      elif not 0 <= selector.expr.value < size:
+        return True
+    return False
 
   def _oob(self, e, env: _Env) -> bool:
     """The same question for every l-value in an expression.  Fail-closed on a
@@ -506,22 +577,10 @@ class _Compiler:
       return self._val(entry)
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
-      raise SmvUnsupported("multi-dimensional l-value")
-    index = selectors[0].expr
-    if isinstance(index, Number):
-      if not 0 <= index.value < len(entry):
-        raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
-      return self._val(entry[index.value])
-    idx = self._dynamic_index(index, env, obl, len(entry))
+    idx = self._flat_index(entry, selectors, env, obl)
+    if idx.isdigit():
+      return self._val(entry[int(idx)])
     return self._read_at(entry, idx)
-
-  def _dynamic_index(self, index, env: _Env, obl: list[str], size: int) -> str:
-    """Translate a variable index and check its range into ERR."""
-    idx = self._iexpr(index, env, obl)
-    obl.append(f"({idx}) >= 0")
-    obl.append(f"({idx}) < {size}")
-    return idx
 
   def _read_at(self, entry: tuple, idx: str) -> str:
     """The value of the selected element.
@@ -739,10 +798,10 @@ class _Compiler:
     cell = self._cell_index(s.lval, env, obl)
     assert cell is not None
     tidx = cell[1]
-    inner = self._index_expr(s.lval, env)
     definite = self._alias_obl(entry, tidx, s.expr, env, obl)
-    if self._alias_obl(entry, tidx, inner, env, obl):
-      definite = True
+    for index in self._index_expr(s.lval, env):
+      if self._alias_obl(entry, tidx, index, env, obl):
+        definite = True
     if definite:
       return self._unconditional_error()
     rhs = self._iexpr(s.expr, env, obl)
@@ -783,12 +842,10 @@ class _Compiler:
     # either side against **both** keys: `a[0] <=> a[a[1]]` is an alias when
     # `a[1] = 1`, because the index reads the very cell being swapped.  Missing
     # this proved such a program safe.
-    for inner in (self._index_expr(s.left, env), self._index_expr(s.right, env)):
-      if inner is None:
-        continue
-      if self._alias_obl(left, lidx, inner, env, obl):
+    for index in self._index_expr(s.left, env) + self._index_expr(s.right, env):
+      if self._alias_obl(left, lidx, index, env, obl):
         definite = True
-      if self._alias_obl(right, ridx, inner, env, obl):
+      if self._alias_obl(right, ridx, index, env, obl):
         definite = True
     if definite:
       return self._unconditional_error()
@@ -921,15 +978,20 @@ class _Compiler:
         raise SmvUnsupported(
             f"argument does not match the parameter's shape: {param.ident.name}")
       if param.dimensions:
-        if len(param.dimensions) != 1:
-          raise SmvUnsupported(f"multi-dimensional parameter: {param.ident.name}")
-        declared = param.dimensions[0]
-        if isinstance(declared, Number) and declared.value != len(resolved):
-          # A parameter may state its length, and PyJanus checks it *at the
-          # call* ("Expecting array of size [3] but got size [4]"), so reaching
-          # the call is the error.  Without this the model proved such a program
-          # safe.
-          return self._unconditional_error()
+        shape = self._shape(resolved)
+        if len(param.dimensions) != len(shape):
+          # Refuse rather than answer: the formal and the actual disagree about
+          # the rank, so no index in the body would mean what it says.
+          raise SmvUnsupported(
+              f"parameter of rank {len(param.dimensions)} bound to an array of "
+              f"rank {len(shape)}: {param.ident.name}")
+        for declared, extent in zip(param.dimensions, shape):
+          if isinstance(declared, Number) and declared.value != extent:
+            # A parameter may state its length, and PyJanus checks it *at the
+            # call* ("Expecting array of size [3] but got size [4]"), so
+            # reaching the call is the error.  Without this the model proved
+            # such a program safe.
+            return self._unconditional_error()
       inner[param.ident.name] = resolved
     body = invert_stmts(proc.body, False) if invert else proc.body
     self._stmts(body, inner, depth + 1)
@@ -940,22 +1002,13 @@ class _Compiler:
     """One SMV variable per element, named `a_0`, `a_1`, ...
 
     `_uniq` deduplicates, so a source variable that happens to be called `a_0`
-    does not collide.  Only a single constant dimension: an unspecified length
-    needs the call site to supply it, and a second dimension needs an index fold.
+    does not collide.  Every dimension must be a constant: an unspecified length
+    needs the call site to supply it.
     """
-    if len(decl.dimensions) != 1:
-      raise SmvUnsupported(f"multi-dimensional array: {decl.ident.name}")
-    dim = decl.dimensions[0]
-    if not isinstance(dim, Number):
-      raise SmvUnsupported(f"array of unspecified length: {decl.ident.name}")
-    size = dim.value
-    if size < 1:
-      # PyJanus rejects the declaration outright ("Array size must be greater
-      # than or equal to one"), so the program never runs.  Emitting a model
-      # anyway would prove a program safe that cannot even start.
-      raise SmvUnsupported(f"array size must be at least one: {decl.ident.name}[{size}]")
-    if size > _MAX_ARRAY:
-      raise SmvUnsupported(f"array too large to expand: {decl.ident.name}[{size}]")
+    shape = self._constant_shape(decl.dimensions, decl.ident.name)
+    size = 1
+    for extent in shape:
+      size *= extent
     if decl.init_expr is None:
       inits: list[str | None] = [("0" if self.init_mode == "zero" else None)] * size
     elif isinstance(decl.init_expr, ArrayExpr):
@@ -967,15 +1020,43 @@ class _Compiler:
         raise SmvUnsupported("division in a declaration initializer")
     else:
       raise SmvUnsupported(f"array initializer outside the fragment: {decl.ident.name}")
-    return self._expand_array(decl.ident.name, size, inits)
+    return self._expand_array(decl.ident.name, shape, inits)
 
-  def _expand_array(self, base_name: str, size: int,
+  def _constant_shape(self, dimensions, who: str) -> tuple[int, ...]:
+    """Every dimension as a positive constant, or refuse."""
+    shape = []
+    total = 1
+    for dim in dimensions:
+      if not isinstance(dim, Number):
+        raise SmvUnsupported(f"array of unspecified length: {who}")
+      if dim.value < 1:
+        # PyJanus rejects the declaration outright ("Array size must be greater
+        # than or equal to one"), so the program never runs.  Emitting a model
+        # anyway would prove a program safe that cannot even start.
+        raise SmvUnsupported(f"array size must be at least one: {who}[{dim.value}]")
+      shape.append(dim.value)
+      total *= dim.value
+    if total > _MAX_ARRAY:
+      raise SmvUnsupported(f"array too large to expand: {who}[{total}]")
+    return tuple(shape)
+
+  def _suffixes(self, shape: tuple[int, ...]) -> list[str]:
+    """`_0_1`-style name suffixes, row-major, matching the flat cell order."""
+    out = [""]
+    for extent in shape:
+      out = [f"{prefix}_{i}" for prefix in out for i in range(extent)]
+    return out
+
+  def _expand_array(self, base_name: str, shape: tuple[int, ...],
                     inits: list) -> tuple[str, ...]:
-    """`size` cells for `base_name`, in whichever array encoding is selected.
+    """One cell per element of `shape`, flat and row-major.
 
     Shared by a top-level array declaration and by an array *field* of a struct,
-    which differ only in the name they hang off.
+    which differ only in the name they hang off.  The shape is registered so
+    that indexing can fold it back; the cells themselves stay one flat tuple, so
+    everything downstream of the fold is rank-agnostic.
     """
+    size = len(inits)
     if self.arrays_mode == "native":
       # nuXmv has its own array type, and a *read* at a variable index is
       # allowed on it (`a[i]`), which is what removes the case that copies every
@@ -989,8 +1070,12 @@ class _Compiler:
         self.varnames.append(cell)
         self.var_init[cell] = inits[i]
         self.array_of[cell] = base
-      return cells
-    return tuple(self._declare(f"{base_name}_{i}", inits[i]) for i in range(size))
+    else:
+      cells = tuple(self._declare(f"{base_name}{suffix}", inits[i])
+                    for i, suffix in enumerate(self._suffixes(shape)))
+    if len(shape) != 1:
+      self.dims[cells] = shape
+    return cells
 
   def _declare_struct(self, decl, env: _Env) -> dict:
     """One SMV variable per field.
@@ -1004,50 +1089,34 @@ class _Compiler:
       raise SmvUnsupported(f"unknown struct type: {decl.typ.name}")
     if decl.init_expr is not None:
       raise SmvUnsupported(f"struct initializer: {decl.ident.name}")
-    count = 1
-    if decl.dimensions:
-      if len(decl.dimensions) != 1:
-        raise SmvUnsupported(f"multi-dimensional array of structs: {decl.ident.name}")
-      dim = decl.dimensions[0]
-      if not isinstance(dim, Number):
-        raise SmvUnsupported(f"array of structs of unspecified length: {decl.ident.name}")
-      if not 1 <= dim.value <= _MAX_ARRAY:
-        raise SmvUnsupported(f"array of structs out of range: {decl.ident.name}")
-      count = dim.value
+    outer = self._constant_shape(decl.dimensions, decl.ident.name)
     out: dict = {}
     for field in sdef.fields:
       if field.typ.kind != "int":
         raise SmvUnsupported(f"non-int struct field: {decl.typ.name}.{field.ident.name}")
       init = "0" if self.init_mode == "zero" else None
-      if count > 1 or decl.dimensions:
-        if field.dimensions:
-          raise SmvUnsupported(
-              f"array field inside an array of structs: {decl.ident.name}")
-        # Field-major: one array per field, `p_x[0]` / `p_x[1]`.  The native
-        # encoding needs it that way (an array variable per field), and it keeps
-        # the name the same as a plain struct's field.
-        out[field.ident.name] = self._expand_array(
-            f"{decl.ident.name}_{field.ident.name}", count, [init] * count)
-        continue
       name = f"{decl.ident.name}_{field.ident.name}"
-      if field.dimensions:
-        # A field may itself be an array.  It expands exactly as a top-level
-        # array does, so everything built for those — variable indices, bounds
-        # obligations, index-precise aliasing — applies unchanged.
-        if len(field.dimensions) != 1:
-          raise SmvUnsupported(
-              f"multi-dimensional field: {decl.typ.name}.{field.ident.name}")
-        dim = field.dimensions[0]
-        if not isinstance(dim, Number):
-          raise SmvUnsupported(
-              f"field of unspecified length: {decl.typ.name}.{field.ident.name}")
-        if not 1 <= dim.value <= _MAX_ARRAY:
-          raise SmvUnsupported(
-              f"field length out of range: {decl.typ.name}.{field.ident.name}")
-        out[field.ident.name] = self._expand_array(name, dim.value,
-                                                   [init] * dim.value)
+      inner = self._constant_shape(field.dimensions,
+                                   f"{decl.typ.name}.{field.ident.name}")
+      # Field-major: one array per field, `p_x[0]` / `p_x[1]`.  The native
+      # encoding needs it that way (an array variable per field), and it keeps
+      # the name the same as a plain struct's field.
+      #
+      # The two shapes simply concatenate.  `g[i].v[j]` puts the field selector
+      # *between* the indices, and `_base_of` lifts it out, so what reaches the
+      # fold is `[i, j]` against the shape `outer ++ inner` — row-major, element
+      # before field-element.  A field that is itself an array of a scalar
+      # struct field needs nothing special for the same reason.
+      shape = outer + inner
+      if not shape:
+        out[field.ident.name] = self._declare(name, init)
         continue
-      out[field.ident.name] = self._declare(name, init)
+      size = 1
+      for extent in shape:
+        size *= extent
+      if size > _MAX_ARRAY:
+        raise SmvUnsupported(f"array too large to expand: {name}[{size}]")
+      out[field.ident.name] = self._expand_array(name, shape, [init] * size)
     return out
 
   def run(self) -> str:
