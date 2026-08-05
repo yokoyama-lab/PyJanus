@@ -77,6 +77,7 @@ from .ast import FromStmt
 from .ast import IfStmt
 from .ast import LocalStmt
 from .ast import ArrayExpr
+from .ast import Lval
 from .ast import LvalExpr
 from .ast import LvalField
 from .ast import LvalIndex
@@ -595,9 +596,7 @@ class _Compiler:
     if isinstance(s, SkipStmt):
       return
     if isinstance(s, PrintsStmt):
-      if s.prints.reversible:
-        raise SmvUnsupported("reversible read/write")
-      return  # printing does not touch the store
+      return self._prints(s, env)
     if isinstance(s, AssignStmt):
       if self._oob_lval(s.lval, env) or self._oob(s.expr, env):
         return self._unconditional_error()
@@ -637,6 +636,64 @@ class _Compiler:
     if isinstance(s, (CallStmt, UncallStmt)):
       return self._call(s, env, depth, isinstance(s, UncallStmt))
     raise SmvUnsupported(f"statement outside the fragment: {type(s).__name__}")
+
+  #: What `runtime._check_printf_type` accepts, restricted to the fragment.
+  #: Only `int` and `int array` can be declared here — a `bool`, a stack or a
+  #: char array is refused at its declaration — so `%b`, `%s` and `%t` have no
+  #: well-typed argument at all and always fail.
+  _PRINTF_KINDS = {"d": "int", "a": "array"}
+
+  def _arg_kind(self, arg, env: _Env) -> str | None:
+    """`"int"` / `"array"` for an output argument; `None` if it does not resolve."""
+    name = arg.ident.name if isinstance(arg, Lval) else getattr(arg, "name", None)
+    if name is None or name not in env:
+      return None  # PyJanus raises when it tries to resolve it
+    if not isinstance(arg, Lval):
+      return "array" if isinstance(env[name], tuple) else "int"
+    entry, rest = self._base_of(arg, env)
+    if isinstance(entry, tuple):
+      return "int" if rest else "array"
+    return "int"
+
+  def _prints(self, s: PrintsStmt, env: _Env) -> None:
+    """An output statement leaves the store alone — but it can still fail.
+
+    Returning early for all of them let the checker *prove safe* five error
+    fixtures PyJanus rejects (a `printf` that does not match its format, a
+    `show` of an undeclared name).  Those failures do not depend on the store,
+    so reaching the statement is the error and the edge to ERR is
+    unconditional — the same shape as a `delocal` name mismatch (§3.3).
+    """
+    prints = s.prints
+    if prints.reversible or prints.kind in ("read", "scanf"):
+      # An input statement makes the next store depend on stdin.  The model has
+      # no way to represent that, so it refuses rather than answers.
+      raise SmvUnsupported(f"input statement: {prints.kind}")
+    if prints.kind == "print":
+      return  # a literal string, with nothing to resolve
+    kinds: list[str] = []
+    for arg in prints.args:
+      if isinstance(arg, Lval) and arg.ident.name in env and self._oob_lval(arg, env):
+        return self._unconditional_error()  # printing a cell is still a read
+      kind = self._arg_kind(arg, env)
+      if kind is None:
+        return self._unconditional_error()
+      kinds.append(kind)
+    if prints.kind != "printf":
+      return  # `show` and `write` only need their arguments to resolve
+    text, used, i = prints.text or "", 0, 0
+    while i < len(text):
+      if text[i] == "%" and i + 1 < len(text):
+        spec = text[i + 1]
+        if spec != "%":
+          if used >= len(kinds) or self._PRINTF_KINDS.get(spec) != kinds[used]:
+            return self._unconditional_error()
+          used += 1
+        i += 2
+      else:
+        i += 1
+    if used != len(kinds):
+      return self._unconditional_error()
 
   def _assign(self, s: AssignStmt, env: _Env) -> None:
     entry, _ = self._base_of(s.lval, env)

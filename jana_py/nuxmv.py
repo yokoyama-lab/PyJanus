@@ -28,7 +28,11 @@ _DEFAULT_PATHS = [
 ]
 
 _VERDICT_RE = re.compile(r"^-- invariant (?P<prop>.*?)\s+is (?P<verdict>true|false)\s*$")
-_ASSIGN_RE = re.compile(r"^\s{4}(?P<name>[A-Za-z_][A-Za-z0-9_$#-]*) = (?P<value>-?\d+)\s*$")
+#: Array cells are printed element-wise (`d[0] = 3`), and they are the part of
+#: the store worth reading: under `--init any` the counterexample is the missing
+#: precondition, and for an array program the precondition lives in the array.
+_ASSIGN_RE = re.compile(
+    r"^\s{4}(?P<name>[A-Za-z_][A-Za-z0-9_$#-]*(?:\[-?\d+\])*) = (?P<value>-?\d+)\s*$")
 
 
 @dataclass
