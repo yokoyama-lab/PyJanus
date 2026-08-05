@@ -177,16 +177,15 @@ procedure main()
 配列は宣言を要素ごとの SMV 変数へ展開し、添字は定数・変数のどちらも扱う（§12）。
 
 `tests/jana2014/fixtures/examples/` の97本のうち **`compile_to_smv` が受理するのは
-29本**（2026-08-05 実測。配列対応前は8本、そのあと 17→21→24→27→29）。
-残る68本の**最初にぶつかる**阻害要因:
+32本**（2026-08-05 実測。配列対応前は8本、そのあと 17→21→24→27→29→32）。
+残る65本の**最初にぶつかる**阻害要因:
 
 | 阻害要因 | 本数 |
 |---|---:|
 | 非スカラ宣言（ほぼすべて stack） | 25 |
-| 断片外の文（`iterate` / `push` / `pop` 等） | 11 |
-| `^=`（ビット演算の代入） | 11 |
+| **`^=`（ビット演算の代入）** | **18** |
 | ビット演算子 `&` `\|` | 7 |
-| 引数がセル・フィールド（`f(a[0])`） | 6 |
+| 引数がセル・フィールド（`f(a[0])`） | 7 |
 | 非スカラの `local`（**全て stack**） | 5 |
 | スカラとセルの swap | 2 |
 | 断片外の式 | 1 |
@@ -219,9 +218,9 @@ procedure main()
 | 判定 | 本数 | 意味 |
 |---|---:|---|
 | `refuted` | 23 | 表明破れへ到達する初期ストアを提示 |
-| `proved` | 18 | 帰納的不変量で到達不能を証明 |
-| `unknown` | 11 | 120秒でタイムアウト、または IC3 が断念 |
-| `unsupported` | 83 | 断片外（うち25本が stack の宣言） |
+| `proved` | 19 | 帰納的不変量で到達不能を証明 |
+| `unknown` | 13 | 120秒でタイムアウト、または IC3 が断念 |
+| `unsupported` | 80 | 断片外（うち25本が stack、18本が `^=`） |
 | `parse-error` | 7 | 構文エラー（error fixture として想定内） |
 | `static-error` | 7 | `validate_program` が弾く（模型検査の対象外） |
 
@@ -230,7 +229,7 @@ procedure main()
 > `expand` に変えても**この表は変わらない**（両方で測って一致を確認。§5.7）。`style` を
 > `trans` に落とすと `base_convert.ja` が unknown に戻り proved は 10 になる。
 
-**内訳は割り切れている**: 断片内 52本＝ examples 29本（proved 18 / unknown 11）
+**内訳は割り切れている**: 断片内 55本＝ examples 32本（proved 19 / unknown 13）
 ＋ error fixture 23本（**全て refuted**）。すなわち **examples から `refuted` は1本も
 出ていない（誤検出ゼロ）** し、error fixture で `proved` になったものも1本も無い。
 
@@ -254,6 +253,9 @@ procedure main()
   proved 14 → 16、unknown 10 → 11。
 - **構造体の `local`（§14、2026-08-05）**: unsupported 86 → 83、断片内 examples 27 → 29
   （どちらも proved）、error fixture 22 → 23（`delocal-wrong-type` が入って refuted）。
+- **`iterate`（§15、2026-08-05）**: unsupported 83 → 80、断片内 examples 29 → 32
+  （proved 1 / unknown 2）。**`iterate` で止まっていた11本のうち8本は次に `^=` で止まる**ので、
+  被覆率は +11 ではなく +3。これで **`^=` が stack に次ぐ壁として 11 → 18 に浮上した**。
 
 ### 5.1 検出側 — 23/23、誤検出 0
 
@@ -279,12 +281,12 @@ procedure main()
 最後の3本（`alias-1` / `var-modified-on-rhs` / `delocal-wrong-name`）は §3.3 の修正で
 初めて検出できるようになったもので、修正前は逆に「安全」と**誤って証明**していた。
 
-### 5.2 証明側 — 18/29
+### 5.2 証明側 — 19/32
 
-examples 97本のうち断片内は**29本**（配列対応前は8本、そのあと 17→21→24→27→29）。
-**証明できたのは18本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
-`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 11本）で、
-残る11本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
+examples 97本のうち断片内は**32本**（配列対応前は8本、そのあと 17→21→24→27→29→32）。
+**証明できたのは19本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
+`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 12本）で、
+残る13本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
 以前ここに「`injective_bwt_inverse` / `knapsack` も IC3 が断念」と書いていたが、
 **それは誤りだった**——両者はモデルが構文エラーで、検査にかかっていなかった（§3.5）。
 いまは実際に走って120秒で尽きる。
@@ -307,13 +309,13 @@ examples 97本のうち断片内は**29本**（配列対応前は8本、その�
 | 判定 | `--init zero` | `--init any` |
 |---|---:|---:|
 | `refuted` | 23 | **34** |
-| `proved` | 18 | 12 |
-| `unknown` | 11 | **6** |
-| 断片内・計 | 52 | 52 |
-| **決着** | 41 | **46** |
+| `proved` | 19 | 13 |
+| `unknown` | 13 | **8** |
+| 断片内・計 | 55 | 55 |
+| **決着** | 42 | **47** |
 
 error fixture 23本は**どちらでも全て refuted**で、判定は1本も動かない。動くのは
-examples 29本だけなので、以下はそれを列挙する。
+examples 32本だけなので、以下はそれを列挙する。
 
 | プログラム | `--init zero` | `--init any` | 反例が言っていること |
 |---|---|---|---|
@@ -329,6 +331,7 @@ examples 29本だけなので、以下はそれを列挙する。
 | `structs_flat_param.ja` | proved | proved | — |
 | `structs_local_arr.ja` | proved | proved | — |
 | `structs_local_arr2d.ja` | proved | proved | — |
+| `structs_local.ja` | proved | proved | — |
 | `base_convert.ja` | proved | **refuted** | 基数が 0 |
 | `fall.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
 | `fib.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
@@ -346,15 +349,17 @@ examples 29本だけなので、以下はそれを列挙する。
 | `injective_bwt_inverse.ja` | unknown | unknown | — |
 | `knapsack.ja` | unknown | unknown | — |
 | `lcs.ja` | unknown | unknown | — |
+| `injective_arithmetic.ja` | unknown | unknown | — |
+| `injective_lehmer.ja` | unknown | unknown | — |
 
 **2つの問いは難易度で順序づかない。** 直観では `--init any` の方が強い主張だから
 難しいはずだが、実測は逆である: 未決11本のうち**6本が `any` では決着する**
 （`fib_variants` / `glaisher` / `injective_gcd` / `injective_partition` /
 `run-length-enc` / `sqrt`）。逆向きは `injective_bennett` の1本だけ。理由は単純で、
 **反例を1本見つける方が不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
-examples の決着は 16本 → 21本に増える。
+examples の決着は 19本 → 24本に増える。
 
-**`proved` の側は構造体11本が占めている。** `--init any` でも証明できる12本のうち11本が
+**`proved` の側は構造体12本が占めている。** `--init any` でも証明できる13本のうち12本が
 `structs_*` で、これらは10〜20行の直線的なテストプログラムである。つまり
 「全入力で全域単射」を証明できた**アルゴリズムらしいアルゴリズムは `cantor_pair` 1本
 だけ**で、そこは正直に読む必要がある。断片を広げると `proved` は増えるが、
@@ -1080,3 +1085,43 @@ call f(n-1, r)  は  local t = n-1; call f(t, r); delocal t = n-1  に脱糖さ�
 `local` と `delocal` で**型が食い違う**場合は PyJanus の実行時エラーなので、名前の
 不一致と同じく ERR への無条件辺にする。これで `delocal-wrong-type.ja` が断片内に入り、
 検出側は 23/23 になった。
+
+## 15. `iterate` / `for`（2026-08-05）
+
+**計数ループは `from`/`until` の言い換えでは書けない。** `from` ループは `do` 部を
+**必ず1回は**走らせるが、`iterate int i = 0 to -1` は本体を**0回**走る。したがって
+AST の書き換えではなく CFG を直接組む:
+
+```
+i := a;  step := t;  stop := b (+ t)
+head:  i != stop  ->  body; i += step; goto head
+       i =  stop  ->  exit
+```
+
+停止値は `iterate` なら `end + step`、C 形式の `for (i < end)` なら `end`。
+
+**`step` と停止値は入口で凍結する。** PyJanus は両方をループ前に1度だけ評価するので、
+本体が境界の変数を恒久的に動かしても周回数は変わらない（`n += 2; iterate i = 0 to n {
+s += 1; n += 1 }` は3周。実測）。後退辺で式を読み直す実装は**ここで間違える**ので、
+専用の SMV 変数に固めてある。ループ変数は同名の外側変数を**隠す**（`_declare` が改名する）。
+
+本体がループ変数を書くと計数器が停止値を跨ぎうる。そのとき PyJanus は無限ループし、
+模型では出口が到達不能になる——§6 のとおり**非停止は表明破れではない**。
+
+### 15.1 被覆率は +11 ではなく +3 だった
+
+`iterate` は11本の**最初の**阻害要因だったが、通るようになったのは3本
+（`injective_arithmetic` / `injective_lehmer` / `structs_local`）である。**残る8本は
+次に `^=` で止まる。** これで `^=` が 11 → **18本**に浮上し、stack に次ぐ壁になった。
+
+被覆率をブロッカー表の足し算で見積もって外したのは、これで4回連続である
+（多次元 +2 予測→+3、値引数 +12→+3、`iterate` +11→+3。当たったのは、**先に内訳を
+数えた**非スカラ `local` の +2 だけ）。**「最初にぶつかる要因」の集計は上界ですらない**
+——1本のプログラムは何個でも阻害要因を持てる。
+
+### 15.2 予約識別子はここでも出た
+
+`injective_arithmetic.ja` が断片に入った瞬間、それが `exp` という変数を持つことが
+問題になった（nuXmv の予約語）。**気づけたのは §3.5 で入れた「コーパス全体のモデルが
+nuXmv に読めるか」というテストが落ちたから**である。予約語の一覧は安全網ではない
+——プログラムは何とでも名付けられる——**読めるかどうかを毎回確かめる方が安全網**である。

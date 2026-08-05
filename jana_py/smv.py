@@ -75,6 +75,7 @@ from .ast import CallStmt
 from .ast import DeclType
 from .ast import FromStmt
 from .ast import IfStmt
+from .ast import IterateStmt
 from .ast import LocalStmt
 from .ast import ArrayExpr
 from .ast import Lval
@@ -135,6 +136,10 @@ _SMV_RESERVED = frozenset({
     # temporal / epistemic operators
     "A", "E", "F", "G", "H", "K", "O", "S", "T", "U", "V", "X", "Y", "Z",
     "EX", "AX", "EF", "AF", "EG", "AG", "BU", "EBF", "ABF", "EBG", "ABG",
+    # transcendental functions and misc, found the same way — `injective_
+    # arithmetic.ja` declares `exp`, which the corpus-wide malformed check in
+    # `test_smv_reserved.py` caught the moment `iterate` let that program in.
+    "exp", "ln", "sin", "cos", "tan", "pow", "sqrt", "READ", "WRITE", "typeof",
 })
 
 _ARITH = {BinOpKind.ADD: "+", BinOpKind.SUB: "-", BinOpKind.MUL: "*"}
@@ -690,6 +695,8 @@ class _Compiler:
       return self._if(s, env, depth)
     if isinstance(s, FromStmt):
       return self._from(s, env, depth)
+    if isinstance(s, IterateStmt):
+      return self._iterate(s, env, depth)
     if isinstance(s, LocalStmt):
       return self._local(s, env, depth)
     if isinstance(s, (CallStmt, UncallStmt)):
@@ -897,6 +904,58 @@ class _Compiler:
     self._seal(top)
     self._enter(out)
 
+  def _iterate(self, s: IterateStmt, env: _Env, depth: int) -> None:
+    """`iterate int i = a by t to b … end` — a counted loop, built as a CFG.
+
+    Not a rewrite into `from`/`until`: a `from` loop runs its `do` part at least
+    once, and `iterate int i = 0 to -1` runs its body **zero** times.  The shape
+    is a head with a guard instead:
+
+        i := a;  stop := b (+ t);  step := t
+        head:  i != stop  ->  body; i += step; goto head
+               i =  stop  ->  exit
+
+    `stop` and `step` are **frozen into their own variables** because PyJanus
+    evaluates both once, before the loop.  A body that permanently moves the
+    variable the bound mentions must not change the trip count, so re-reading
+    the expression on the back edge would be wrong.
+
+    The loop variable shadows an outer one of the same name and disappears
+    afterwards; `_declare` renames it, so the outer variable is untouched.
+
+    A body that writes the loop variable can step over `stop`, and PyJanus then
+    runs forever.  Here the exit is simply unreachable — non-termination is not
+    an assertion failure (§6).
+    """
+    if s.typ.kind != "int":
+      raise SmvUnsupported(f"non-int iterate variable: {s.ident.name}")
+    obl: list[str] = []
+    start = self._iexpr(s.start_expr, env, obl)
+    step = self._iexpr(s.step_expr, env, obl)
+    end = self._iexpr(s.end_expr, env, obl)
+    self._check(obl)
+    pin = "0" if self.init_mode == "zero" else None
+    var = self._declare(s.ident.name, pin)
+    stepv = self._declare(f"{s.ident.name}_step", pin)
+    stopv = self._declare(f"{s.ident.name}_stop", pin)
+    self.pending[var] = start
+    self.pending[stepv] = step
+    self.pending[stopv] = end if s.exclusive else f"({end} + {step})"
+
+    top, body_loc, out = self._loc(), self._loc(), self._loc()
+    self._seal(top)
+    more = f"{self._val(var)} != {self._val(stopv)}"
+    self._edge(more, body_loc)
+    self._edge(f"!({more})", out)
+
+    self._enter(body_loc)
+    inner = dict(env)
+    inner[s.ident.name] = var
+    self._stmts(s.body, inner, depth)
+    self.pending[var] = f"({self._val(var)} + {self._val(stepv)})"
+    self._seal(top)
+    self._enter(out)
+
   def _local(self, s: LocalStmt, env: dict[str, str], depth: int) -> None:
     enter, leave = s.enter_decl, s.exit_decl
     if enter.ident.name != leave.ident.name:
@@ -951,14 +1010,34 @@ class _Compiler:
       cells.extend(value if isinstance(value, tuple) else (value,))
     return cells
 
-  def _struct_operand(self, expr, env: _Env, who: str) -> dict:
-    """The struct an initializer names.  Only a plain variable is accepted."""
-    if not isinstance(expr, LvalExpr) or expr.lval.selectors:
-      raise SmvUnsupported(f"struct local initializer is not a plain variable: {who}")
-    entry = self._lookup(expr.lval.ident.name, env)
+  def _struct_source(self, expr, env: _Env, who: str) -> list[str]:
+    """Field values of a struct-valued expression, flattened in field order.
+
+    Two forms occur: a plain struct variable, and an **element** of an array of
+    structs (`out[j]`).  The second reads one cell per field, at the folded
+    index, which is why the field-major layout pays off again — the index is the
+    same for every field.  A variable index brings its own bounds obligation.
+    """
+    if not isinstance(expr, LvalExpr):
+      raise SmvUnsupported(f"struct local initializer is not an l-value: {who}")
+    lval = expr.lval
+    entry = self._lookup(lval.ident.name, env)
     if not isinstance(entry, dict):
       raise SmvUnsupported(f"struct local initialized from a non-struct: {who}")
-    return entry
+    if any(isinstance(sel, LvalField) for sel in lval.selectors):
+      raise SmvUnsupported(f"struct local initialized from a field: {who}")
+    if not lval.selectors:
+      return [self._val(cell) for cell in self._struct_cells(entry)]
+    obl: list[str] = []
+    terms: list[str] = []
+    for cells in entry.values():
+      if not isinstance(cells, tuple):
+        raise SmvUnsupported(f"indexing a scalar struct field: {who}")
+      idx = self._flat_index(cells, lval.selectors, env, obl)
+      terms.append(self._val(cells[int(idx)]) if idx.isdigit()
+                   else self._read_at(cells, idx))
+    self._check(obl)
+    return terms
 
   def _local_struct(self, s: LocalStmt, env: _Env, depth: int) -> None:
     """`local struct Box e = a … delocal struct Box e = a` — a copy, checked back.
@@ -974,26 +1053,26 @@ class _Compiler:
       return
     if enter.init_expr is None or leave.init_expr is None:
       raise SmvUnsupported(f"struct local without an initializer: {enter.ident.name}")
-    src = self._struct_operand(enter.init_expr, env, enter.ident.name)
+    src = self._struct_source(enter.init_expr, env, enter.ident.name)
     fresh = self._declare_struct(enter, env, allow_init=True)
-    if sorted(fresh) != sorted(src):
+    dst_cells = self._struct_cells(fresh)
+    if len(src) != len(dst_cells):
       raise SmvUnsupported(f"struct local of a different shape: {enter.ident.name}")
-    src_cells, dst_cells = self._struct_cells(src), self._struct_cells(fresh)
-    if len(src_cells) != len(dst_cells):
-      raise SmvUnsupported(f"struct local of a different shape: {enter.ident.name}")
-    for dst, cell in zip(dst_cells, src_cells):
-      self.pending[dst] = self._val(cell)
+    for dst, term in zip(dst_cells, src):
+      self.pending[dst] = term
 
     inner = dict(env)
     inner[enter.ident.name] = fresh
     self._stmts(s.body, inner, depth)
 
-    back = self._struct_operand(leave.init_expr, inner, enter.ident.name)
-    back_cells = self._struct_cells(back)
-    if len(back_cells) != len(dst_cells):
+    # Re-read after the body, in the caller's terms: PyJanus evaluates the
+    # `delocal` expression then, so a body that moves the source — or the index
+    # that selects it — is rejected.
+    back = self._struct_source(leave.init_expr, inner, enter.ident.name)
+    if len(back) != len(dst_cells):
       raise SmvUnsupported(f"struct delocal of a different shape: {enter.ident.name}")
-    self._check([f"{self._val(dst)} = {self._val(cell)}"
-                 for dst, cell in zip(dst_cells, back_cells)])
+    self._check([f"{self._val(dst)} = {term}"
+                 for dst, term in zip(dst_cells, back)])
 
   def _call(self, s, env: dict[str, str], depth: int, invert: bool) -> None:
     if s.external:

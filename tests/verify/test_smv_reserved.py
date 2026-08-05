@@ -35,9 +35,15 @@ BINARY = nuxmv.find_nuxmv()
 
 #: Rejected by nuXmv 2.2.0 when used as a variable name.  Probed, not guessed:
 #: `K` is not in NuSMV's published grammar but nuXmv reserves it.
+#:
+#: This list is *not* the safety net — no list can be, since a program can name
+#: anything.  `test_no_corpus_model_is_malformed` below is, and it earned its
+#: keep: `exp` was added after that test caught `injective_arithmetic.ja` the
+#: moment `iterate` support let the program into the fragment.
 PROBED = ("A E F G H K O S T U V X Y Z EX AX EF AF EG AG BU EBF ABF EBG ABG "
           "count toint bool floor sizeof of ISA COMPUTE PSLSPEC MDEFINE "
-          "CONSTARRAY signed unsigned extend resize MIN MAX").split()
+          "CONSTARRAY signed unsigned extend resize MIN MAX "
+          "exp ln sin cos tan pow sqrt READ WRITE typeof").split()
 
 
 def model_of(src: str, **kw) -> str:
