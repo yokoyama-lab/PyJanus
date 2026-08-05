@@ -99,6 +99,39 @@ class TotalityTests(unittest.TestCase):
     self.assertIn("x", refuted[0].counterexample)
 
 
+class CounterexampleParsingTests(unittest.TestCase):
+  """The trace's first state *is* the deliverable, so it has to be complete.
+
+  A counterexample under `init="any"` is a missing precondition, which is only
+  useful if it names the variables that carry it.  nuXmv prints array elements
+  as `d[0] = 3`; a name pattern that stops at the bracket drops every one of
+  them.  Once arrays entered the fragment that was most of the input —
+  `glaisher.ja` came back as five dead locals while its two arrays, the whole
+  content of the precondition, went unmentioned.
+  """
+
+  #: Abridged from a real `--init any` run on `base_convert.ja`.
+  TRACE = """-- invariant pc != 0  is false
+-- as demonstrated by the following execution sequence
+Trace Type: Counterexample
+  -> State: 1.1 <-
+    pc = 2
+    d[0] = 0
+    d[1] = -3
+    n = -2027
+    b = -10
+  -> State: 1.2 <-
+    pc = 0
+"""
+
+  def test_array_elements_are_part_of_the_store(self):
+    store = nuxmv._parse(self.TRACE)[0].counterexample
+    self.assertEqual(store, {"d[0]": 0, "d[1]": -3, "n": -2027, "b": -10})
+
+  def test_the_location_is_still_excluded(self):
+    self.assertNotIn("pc", nuxmv._parse(self.TRACE)[0].counterexample)
+
+
 @unittest.skipIf(BINARY is None, "nuXmv not installed")
 class FloorDivisionAgreementTests(unittest.TestCase):
   """nuXmv truncates, Janus floors: the encoding must side with Janus.
