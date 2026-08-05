@@ -149,9 +149,45 @@ class ArrayFieldTests(unittest.TestCase):
     self.assertEqual(next_branches(model, "b_v_0"), ["(b_v_0 + 1)"])
 
 
+SARR = DEF + "procedure main()\n    Point p[2]\n    p[0].x += 1\n    p[1].y += 2\n"
+SARR_DYN = (DEF + "procedure main()\n    Point p[3]\n    int i\n"
+            "    i += 1\n    p[i].x += 1\n")
+SARR_OOB = (DEF + "procedure main()\n    Point p[3]\n    int i\n"
+            "    i += 9\n    p[i].x += 1\n")
+SARR_REF = (DEF + "procedure fill(Point q[])\n    q[0].x += 1\n\n"
+            "procedure main()\n    Point p[2]\n    call fill(p)\n")
+
+
+class ArrayOfStructTests(unittest.TestCase):
+  """`Point p[2]` is one variable per element per field.
+
+  Keeping it as *field -> tuple over elements* rather than *element -> struct*
+  is what lets `p[i].x` reuse the array path unchanged: resolve the field, then
+  index the tuple it names.
+  """
+
+  def test_it_expands_per_element_per_field(self):
+    # Field-major, because the native encoding needs one array per field.
+    self.assertEqual(declared(model_of(SARR, init="zero", arrays="expand")),
+                     ["p_x_0", "p_x_1", "p_y_0", "p_y_1"])
+
+  def test_a_constant_index_and_field_name_the_element(self):
+    model = model_of(SARR, init="zero", arrays="expand")
+    self.assertEqual(next_branches(model, "p_x_0"), ["(p_x_0 + 1)"])
+    self.assertEqual(next_branches(model, "p_y_1"), ["(p_y_1 + 2)"])
+
+  def test_a_variable_index_is_bounds_checked(self):
+    model = model_of(SARR_DYN, init="zero")
+    self.assertRegex(model, r"\(+i \+ 1\)+ < 3")
+
+  def test_it_passes_by_reference(self):
+    model = model_of(SARR_REF, init="zero", arrays="expand")
+    self.assertEqual(next_branches(model, "p_x_0"), ["(p_x_0 + 1)"])
+
+
 class StillRefusedTests(unittest.TestCase):
-  def test_an_array_of_structs_is_refused(self):
-    src = DEF + "procedure main()\n    Point p[2]\n    p[0].x += 1\n"
+  def test_a_two_dimensional_array_of_structs_is_refused(self):
+    src = DEF + "procedure main()\n    Point p[2][2]\n    p[0][0].x += 1\n"
     with self.assertRaises(SmvUnsupported):
       model_of(src, init="zero")
 
@@ -165,7 +201,10 @@ class AgreementTests(unittest.TestCase):
                       ("array-field", ARRAY_FIELD),
                       ("array-field-dyn", ARRAY_FIELD_DYN),
                       ("array-field-oob", ARRAY_FIELD_OOB),
-                      ("array-field-ref", ARRAY_FIELD_REF)):
+                      ("array-field-ref", ARRAY_FIELD_REF),
+                      ("struct-array", SARR), ("struct-array-dyn", SARR_DYN),
+                      ("struct-array-oob", SARR_OOB),
+                      ("struct-array-ref", SARR_REF)):
       with self.subTest(name):
         fails = interpreter_fails(src)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
