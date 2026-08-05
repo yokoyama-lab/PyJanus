@@ -306,6 +306,18 @@ class _Compiler:
     raise SmvUnsupported(
         f"expression outside the fragment in an aliasing check: {type(e).__name__}")
 
+  def _index_expr(self, lval, env: _Env):
+    """The index expression of an l-value, **after** any leading field selector.
+
+    `b.v[i]` indexes the field, so the raw `selectors[0]` is the field and using
+    it as an index reads the wrong node.  Everything that needs the index goes
+    through here.
+    """
+    _, selectors = self._base_of(lval, env)
+    if selectors and isinstance(selectors[0], LvalIndex):
+      return selectors[0].expr
+    return None
+
   def _cell_index(self, lval, env: _Env, obl: list[str]) -> tuple | None:
     """`(elements, index term)` when this l-value is an array cell, else `None`.
 
@@ -342,16 +354,16 @@ class _Compiler:
       if cell is None:
         return False
       ridx = cell[1]
-      inner = e.lval.selectors[0].expr
+      inner = self._index_expr(e.lval, env)
       if cell[0] is not entry:
         # a different array cannot alias, but its index may still read this one
-        return self._alias_obl(entry, tidx, inner, env, obl)
+        return inner is not None and self._alias_obl(entry, tidx, inner, env, obl)
       if tidx.isdigit() and ridx.isdigit():
         if tidx == ridx:
           return True
       else:
         obl.append(f"({tidx}) != ({ridx})")
-      return self._alias_obl(entry, tidx, inner, env, obl)
+      return inner is not None and self._alias_obl(entry, tidx, inner, env, obl)
     if isinstance(e, BinExpr):
       left = self._alias_obl(entry, tidx, e.left, env, obl)
       return self._alias_obl(entry, tidx, e.right, env, obl) or left
@@ -664,7 +676,7 @@ class _Compiler:
     cell = self._cell_index(s.lval, env, obl)
     assert cell is not None
     tidx = cell[1]
-    inner = s.lval.selectors[0].expr
+    inner = self._index_expr(s.lval, env)
     definite = self._alias_obl(entry, tidx, s.expr, env, obl)
     if self._alias_obl(entry, tidx, inner, env, obl):
       definite = True
@@ -708,8 +720,7 @@ class _Compiler:
     # either side against **both** keys: `a[0] <=> a[a[1]]` is an alias when
     # `a[1] = 1`, because the index reads the very cell being swapped.  Missing
     # this proved such a program safe.
-    for inner in (s.left.selectors[0].expr if s.left.selectors else None,
-                  s.right.selectors[0].expr if s.right.selectors else None):
+    for inner in (self._index_expr(s.left, env), self._index_expr(s.right, env)):
       if inner is None:
         continue
       if self._alias_obl(left, lidx, inner, env, obl):
@@ -734,30 +745,6 @@ class _Compiler:
         base = updates.get(name, self._val(name))
         updates[name] = f"(case {ridx} = {k} : {lval_now}; TRUE : {base}; esac)"
     self.pending.update(updates)
-    self._maybe_seal()
-
-  def _assign_dynamic(self, s: AssignStmt, env: _Env, entry: tuple) -> None:
-    """`a[i] op= e`: every element is updated conditionally on the index.
-
-    The operator's obligations are computed **once, on the value read at `i`** —
-    not per element.  Only the selected element is written, so a per-element
-    divisibility obligation would fire for elements the statement never touches:
-    a false alarm of exactly the kind the call-site double-binding check used to
-    produce.
-    """
-    for element in entry:
-      if self._occurs(element, s.expr, env) or \
-         self._occurs(element, s.lval.selectors[0].expr, env):
-        raise SmvUnsupported(
-            "aliasing between a variable index and the same array")
-    obl: list[str] = []
-    rhs = self._iexpr(s.expr, env, obl)
-    idx = self._dynamic_index(s.lval.selectors[0].expr, env, obl, len(entry))
-    new = self._apply(s.mod_op, self._read_at(entry, idx), rhs, obl)
-    self._check(obl)
-    before = [self._val(name) for name in entry]   # read every element first
-    for k, name in enumerate(entry):
-      self.pending[name] = f"(case {idx} = {k} : {new}; TRUE : {before[k]}; esac)"
     self._maybe_seal()
 
   def _if(self, s: IfStmt, env: dict[str, str], depth: int) -> None:
@@ -917,13 +904,22 @@ class _Compiler:
         raise SmvUnsupported("division in a declaration initializer")
     else:
       raise SmvUnsupported(f"array initializer outside the fragment: {decl.ident.name}")
+    return self._expand_array(decl.ident.name, size, inits)
+
+  def _expand_array(self, base_name: str, size: int,
+                    inits: list) -> tuple[str, ...]:
+    """`size` cells for `base_name`, in whichever array encoding is selected.
+
+    Shared by a top-level array declaration and by an array *field* of a struct,
+    which differ only in the name they hang off.
+    """
     if self.arrays_mode == "native":
       # nuXmv has its own array type, and a *read* at a variable index is
       # allowed on it (`a[i]`), which is what removes the case that copies every
       # element's pending term.  A *write* at a variable index is not
       # ("Expressions not allowed in array subscripts on left hand side of
       # assignments"), so the per-element conditional update stays.
-      base = self._uniq(decl.ident.name)
+      base = self._uniq(base_name)
       self.array_decls.append((base, size))
       cells = tuple(f"{base}[{i}]" for i in range(size))
       for i, cell in enumerate(cells):
@@ -931,7 +927,7 @@ class _Compiler:
         self.var_init[cell] = inits[i]
         self.array_of[cell] = base
       return cells
-    return tuple(self._declare(f"{decl.ident.name}_{i}", inits[i]) for i in range(size))
+    return tuple(self._declare(f"{base_name}_{i}", inits[i]) for i in range(size))
 
   def _declare_struct(self, decl, env: _Env) -> dict:
     """One SMV variable per field.
@@ -951,11 +947,26 @@ class _Compiler:
     for field in sdef.fields:
       if field.typ.kind != "int":
         raise SmvUnsupported(f"non-int struct field: {decl.typ.name}.{field.ident.name}")
-      if field.dimensions:
-        raise SmvUnsupported(f"array field: {decl.typ.name}.{field.ident.name}")
       init = "0" if self.init_mode == "zero" else None
-      out[field.ident.name] = self._declare(
-          f"{decl.ident.name}_{field.ident.name}", init)
+      name = f"{decl.ident.name}_{field.ident.name}"
+      if field.dimensions:
+        # A field may itself be an array.  It expands exactly as a top-level
+        # array does, so everything built for those — variable indices, bounds
+        # obligations, index-precise aliasing — applies unchanged.
+        if len(field.dimensions) != 1:
+          raise SmvUnsupported(
+              f"multi-dimensional field: {decl.typ.name}.{field.ident.name}")
+        dim = field.dimensions[0]
+        if not isinstance(dim, Number):
+          raise SmvUnsupported(
+              f"field of unspecified length: {decl.typ.name}.{field.ident.name}")
+        if not 1 <= dim.value <= _MAX_ARRAY:
+          raise SmvUnsupported(
+              f"field length out of range: {decl.typ.name}.{field.ident.name}")
+        out[field.ident.name] = self._expand_array(name, dim.value,
+                                                   [init] * dim.value)
+        continue
+      out[field.ident.name] = self._declare(name, init)
     return out
 
   def run(self) -> str:
