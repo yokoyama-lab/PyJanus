@@ -28,6 +28,11 @@ _DEFAULT_PATHS = [
 ]
 
 _VERDICT_RE = re.compile(r"^-- invariant (?P<prop>.*?)\s+is (?P<verdict>true|false)\s*$")
+#: nuXmv's own complaints about the *model*, as opposed to a verdict on it.
+_MALFORMED_RE = re.compile(
+    r"syntax error|TYPE ERROR|A model must be read before|"
+    r"impossible to build|Parsing error", re.I)
+
 #: Array cells are printed element-wise (`d[0] = 3`), and they are the part of
 #: the store worth reading: under `--init any` the counterexample is the missing
 #: precondition, and for an array program the precondition lives in the array.
@@ -49,10 +54,17 @@ class Result:
   verdicts: list[Verdict]
   output: str
   timed_out: bool = False
+  #: nuXmv could not *read* the model.  Distinguished from `unknown` because a
+  #: broken question is not a hard question: two corpus programs sat at
+  #: `unknown` for having a variable named `K` or `T` (nuXmv reserves both),
+  #: and nothing distinguished them from a genuine timeout.
+  malformed: bool = False
 
   @property
   def status(self) -> str:
     """The weakest status across all properties."""
+    if self.malformed:
+      return "model-error"
     if self.timed_out or not self.verdicts:
       return "unknown"
     for want in ("refuted", "unknown"):
@@ -117,4 +129,9 @@ def check(model: str, *, timeout: float = 60.0, binary: Path | None = None) -> R
     except subprocess.TimeoutExpired:
       return Result([], "", timed_out=True)
   output = proc.stdout + proc.stderr
-  return Result(_parse(output), output)
+  verdicts = _parse(output)
+  # Only when nothing was decided: a well-formed run never prints these, and
+  # tying the flag to an empty verdict list keeps a stray message in a trace
+  # from masking real results.
+  malformed = not verdicts and bool(_MALFORMED_RE.search(output))
+  return Result(verdicts, output, malformed=malformed)

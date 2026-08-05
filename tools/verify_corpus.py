@@ -57,6 +57,11 @@ def classify(path: Path, init: str, timeout: float, binary, style: str = "assign
   except Exception as exc:
     return "compile-error", f"{type(exc).__name__}: {exc}"
   result = nuxmv.check(model, timeout=timeout, binary=binary)
+  if result.status == "model-error":
+    # nuXmv could not read the model, so nothing was decided.  This has to be
+    # said explicitly: falling through to the `proved` return would report a
+    # question that was never asked as one that was answered.
+    return "model-error", result.output.strip().splitlines()[-1][:80]
   if result.status == "refuted":
     bad = next(v for v in result.verdicts if v.status == "refuted")
     # `pc != 1` is the inlining bound, not an assertion failure -- say which.

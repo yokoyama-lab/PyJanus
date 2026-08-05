@@ -145,8 +145,11 @@ class FragmentTests(unittest.TestCase):
     # with an array cell is not something the expansion resolves.
     self._refuses("procedure main()\n    int a[4]\n    int x\n    a[0] <=> x\n")
 
-  def test_multi_dimensional_arrays_are_refused(self):
-    self._refuses("procedure main()\n    int a[2][2]\n    a[0][0] += 1\n")
+  def test_a_rank_that_disagrees_with_the_declaration_is_refused(self):
+    # Rank > 1 is translated (`tests/verify/test_smv_multidim.py`); indexing it
+    # with the wrong number of subscripts is not, because the offset would be
+    # meaningless rather than merely unknown.
+    self._refuses("procedure main()\n    int a[2][2]\n    a[0] += 1\n")
 
   def test_stacks_are_refused(self):
     self._refuses("procedure main()\n    int x\n    stack s\n    push(x, s)\n")
