@@ -177,17 +177,17 @@ procedure main()
 配列は宣言を要素ごとの SMV 変数へ展開し、添字は定数・変数のどちらも扱う（§12）。
 
 `tests/jana2014/fixtures/examples/` の97本のうち **`compile_to_smv` が受理するのは
-27本**（2026-08-05 実測。配列対応前は8本、そのあと 17→21→24→27）。
-残る70本の**最初にぶつかる**阻害要因:
+29本**（2026-08-05 実測。配列対応前は8本、そのあと 17→21→24→27→29）。
+残る68本の**最初にぶつかる**阻害要因:
 
 | 阻害要因 | 本数 |
 |---|---:|
 | 非スカラ宣言（ほぼすべて stack） | 25 |
 | 断片外の文（`iterate` / `push` / `pop` 等） | 11 |
 | `^=`（ビット演算の代入） | 11 |
-| 非スカラの `local` | 7 |
 | ビット演算子 `&` `\|` | 7 |
 | 引数がセル・フィールド（`f(a[0])`） | 6 |
+| 非スカラの `local`（**全て stack**） | 5 |
 | スカラとセルの swap | 2 |
 | 断片外の式 | 1 |
 
@@ -218,10 +218,10 @@ procedure main()
 
 | 判定 | 本数 | 意味 |
 |---|---:|---|
-| `refuted` | 22 | 表明破れへ到達する初期ストアを提示 |
-| `proved` | 16 | 帰納的不変量で到達不能を証明 |
+| `refuted` | 23 | 表明破れへ到達する初期ストアを提示 |
+| `proved` | 18 | 帰納的不変量で到達不能を証明 |
 | `unknown` | 11 | 120秒でタイムアウト、または IC3 が断念 |
-| `unsupported` | 86 | 断片外（うち25本が stack の宣言） |
+| `unsupported` | 83 | 断片外（うち25本が stack の宣言） |
 | `parse-error` | 7 | 構文エラー（error fixture として想定内） |
 | `static-error` | 7 | `validate_program` が弾く（模型検査の対象外） |
 
@@ -230,8 +230,8 @@ procedure main()
 > `expand` に変えても**この表は変わらない**（両方で測って一致を確認。§5.7）。`style` を
 > `trans` に落とすと `base_convert.ja` が unknown に戻り proved は 10 になる。
 
-**内訳は割り切れている**: 断片内 49本＝ examples 27本（proved 16 / unknown 11）
-＋ error fixture 22本（**全て refuted**）。すなわち **examples から `refuted` は1本も
+**内訳は割り切れている**: 断片内 52本＝ examples 29本（proved 18 / unknown 11）
+＋ error fixture 23本（**全て refuted**）。すなわち **examples から `refuted` は1本も
 出ていない（誤検出ゼロ）** し、error fixture で `proved` になったものも1本も無い。
 
 ここに至る差分:
@@ -252,10 +252,12 @@ procedure main()
   **理由が「IC3 が断念」から本物のタイムアウトに変わった**。
 - **値引数（§13、2026-08-05）**: unsupported 89 → 86、断片内 examples 24 → 27、
   proved 14 → 16、unknown 10 → 11。
+- **構造体の `local`（§14、2026-08-05）**: unsupported 86 → 83、断片内 examples 27 → 29
+  （どちらも proved）、error fixture 22 → 23（`delocal-wrong-type` が入って refuted）。
 
-### 5.1 検出側 — 22/22、誤検出 0
+### 5.1 検出側 — 23/23、誤検出 0
 
-**断片内にある実行時エラー fixture 22本を全て検出した。**しかも `--init zero` と
+**断片内にある実行時エラー fixture 23本を全て検出した。**しかも `--init zero` と
 `--init any` で判定が完全に一致する（§5.3 の表）——検出は初期ストアの取り方に依らない。
 配列対応で加わった5本は `alias-2`（配列を跨ぐ別名）、`alias-swap-1` / `alias-swap-2`
 （セルの自己 swap と、添字が swap 対象を読む形）、`array-out-of-bounds`、
@@ -277,11 +279,11 @@ procedure main()
 最後の3本（`alias-1` / `var-modified-on-rhs` / `delocal-wrong-name`）は §3.3 の修正で
 初めて検出できるようになったもので、修正前は逆に「安全」と**誤って証明**していた。
 
-### 5.2 証明側 — 16/27
+### 5.2 証明側 — 18/29
 
-examples 97本のうち断片内は**27本**（配列対応前は8本、そのあと 17→21→24→27）。
-**証明できたのは16本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
-`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 9本）で、
+examples 97本のうち断片内は**29本**（配列対応前は8本、そのあと 17→21→24→27→29）。
+**証明できたのは18本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
+`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 11本）で、
 残る11本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
 以前ここに「`injective_bwt_inverse` / `knapsack` も IC3 が断念」と書いていたが、
 **それは誤りだった**——両者はモデルが構文エラーで、検査にかかっていなかった（§3.5）。
@@ -304,14 +306,14 @@ examples 97本のうち断片内は**27本**（配列対応前は8本、その�
 
 | 判定 | `--init zero` | `--init any` |
 |---|---:|---:|
-| `refuted` | 22 | **33** |
-| `proved` | 16 | 10 |
+| `refuted` | 23 | **34** |
+| `proved` | 18 | 12 |
 | `unknown` | 11 | **6** |
-| 断片内・計 | 49 | 49 |
-| **決着** | 38 | **43** |
+| 断片内・計 | 52 | 52 |
+| **決着** | 41 | **46** |
 
-error fixture 22本は**どちらでも全て refuted**で、判定は1本も動かない。動くのは
-examples 27本だけなので、以下はそれを列挙する。
+error fixture 23本は**どちらでも全て refuted**で、判定は1本も動かない。動くのは
+examples 29本だけなので、以下はそれを列挙する。
 
 | プログラム | `--init zero` | `--init any` | 反例が言っていること |
 |---|---|---|---|
@@ -325,6 +327,8 @@ examples 27本だけなので、以下はそれを列挙する。
 | `structs_grid.ja` | proved | proved | — |
 | `structs_param.ja` | proved | proved | — |
 | `structs_flat_param.ja` | proved | proved | — |
+| `structs_local_arr.ja` | proved | proved | — |
+| `structs_local_arr2d.ja` | proved | proved | — |
 | `base_convert.ja` | proved | **refuted** | 基数が 0 |
 | `fall.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
 | `fib.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
@@ -350,7 +354,7 @@ examples 27本だけなので、以下はそれを列挙する。
 **反例を1本見つける方が不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
 examples の決着は 16本 → 21本に増える。
 
-**`proved` の側は構造体9本が占めている。** `--init any` でも証明できる10本のうち9本が
+**`proved` の側は構造体11本が占めている。** `--init any` でも証明できる12本のうち11本が
 `structs_*` で、これらは10〜20行の直線的なテストプログラムである。つまり
 「全入力で全域単射」を証明できた**アルゴリズムらしいアルゴリズムは `cantor_pair` 1本
 だけ**で、そこは正直に読む必要がある。断片を広げると `proved` は増えるが、
@@ -1053,3 +1057,26 @@ call f(n-1, r)  は  local t = n-1; call f(t, r); delocal t = n-1  に脱糖さ�
 
 定数だけでなく**式の引数**も同じ経路で通る（`matrix_apsp.ja` の
 `base + v_n*v_n`）。配列の仮引数と `const` 仮引数への値引数は、この脱糖ではないので拒否する。
+
+## 14. 構造体の `local`（2026-08-05）
+
+`local struct Box e = a … delocal struct Box e = a` は**コピー**である。入口で全
+フィールドを束縛し、出口でもう一度突き合わせる。両方が効いていることを解釈器で確かめた:
+本体で**局所側**を動かしても、**供給元**を動かしても落ちる——後者は出口の式が本体の
+**後に**再評価されるからで、値引数（§13）とまったく同じ規則である。
+
+**意図的に符号化しなかったもの**が2つある。
+
+- **`local int t[2] = a`。** PyJanus がこれを走らせられない。構文は通り
+  `validate_program` も通るのに、解釈器が素の Python `TypeError`
+  （`int() argument must be a string, a bytes-like object or a real number, not 'list'`）
+  で落ちる。**参照となる振る舞いが無いものを符号化すれば、模型は「実装が実行できない
+  プログラム」についての権威になってしまう**ので拒否する。これは PyJanus 側の欠陥で、
+  この検査器の作業とは別に直す価値がある。
+- **`local stack …`。** `non-scalar local` で止まっていた7本のうち**5本はこれ**
+  （`avl_search` / `closest_pair` / `lis` / `matrix_apsp` / `selection_sort`）で、
+  stack の壁そのものである。構造体だったのは2本だけだった。
+
+`local` と `delocal` で**型が食い違う**場合は PyJanus の実行時エラーなので、名前の
+不一致と同じく ERR への無条件辺にする。これで `delocal-wrong-type.ja` が断片内に入り、
+検出側は 23/23 になった。
