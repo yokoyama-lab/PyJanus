@@ -117,13 +117,39 @@ class AliasTests(unittest.TestCase):
     self.assertIn(": 0;", model_of(src, init="zero").split("next(pc) := case")[1])
 
 
-class StillRefusedTests(unittest.TestCase):
-  def test_an_array_field_is_refused(self):
-    src = ("struct Box {\n    int v[3];\n    int w;\n};\n\n"
-           "procedure main()\n    Box b\n    b.w += 1\n")
-    with self.assertRaises(SmvUnsupported):
-      model_of(src, init="zero")
+BOXDEF = "struct Box {\n    int v[3];\n    int w;\n};\n\n"
+ARRAY_FIELD = BOXDEF + "procedure main()\n    Box b\n    b.v[1] += 1\n    b.w += 2\n"
+ARRAY_FIELD_DYN = (BOXDEF + "procedure main()\n    Box b\n    int i\n"
+                   "    i += 1\n    b.v[i] += 1\n")
+ARRAY_FIELD_OOB = (BOXDEF + "procedure main()\n    Box b\n    int i\n"
+                   "    i += 7\n    b.v[i] += 1\n")
+ARRAY_FIELD_REF = (BOXDEF + "procedure fill(Box c)\n    c.v[0] += 1\n\n"
+                   "procedure main()\n    Box b\n    call fill(b)\n")
 
+
+class ArrayFieldTests(unittest.TestCase):
+  """A field may itself be an array; it expands the same way a variable does."""
+
+  def test_the_field_expands_element_by_element(self):
+    model = model_of(ARRAY_FIELD, init="zero", arrays="expand")
+    self.assertEqual(declared(model), ["b_v_0", "b_v_1", "b_v_2", "b_w"])
+
+  def test_a_constant_index_names_the_element(self):
+    model = model_of(ARRAY_FIELD, init="zero", arrays="expand")
+    self.assertEqual(next_branches(model, "b_v_1"), ["(b_v_1 + 1)"])
+    self.assertEqual(next_branches(model, "b_w"), ["(b_w + 2)"])
+
+  def test_a_variable_index_works_and_is_bounds_checked(self):
+    model = model_of(ARRAY_FIELD_DYN, init="zero")
+    self.assertIn("b_v[(i + 1)]", model)
+    self.assertRegex(model, r"\(+i \+ 1\)+ < 3")
+
+  def test_the_field_is_reached_through_a_struct_parameter(self):
+    model = model_of(ARRAY_FIELD_REF, init="zero", arrays="expand")
+    self.assertEqual(next_branches(model, "b_v_0"), ["(b_v_0 + 1)"])
+
+
+class StillRefusedTests(unittest.TestCase):
   def test_an_array_of_structs_is_refused(self):
     src = DEF + "procedure main()\n    Point p[2]\n    p[0].x += 1\n"
     with self.assertRaises(SmvUnsupported):
@@ -135,7 +161,11 @@ class AgreementTests(unittest.TestCase):
   def test_the_model_checker_agrees_with_the_interpreter(self):
     for name, src in (("scalar", SCALAR), ("field-swap", FIELD_SWAP),
                       ("by-ref", BY_REF), ("onward", ONWARD),
-                      ("same-struct", SAME_STRUCT)):
+                      ("same-struct", SAME_STRUCT),
+                      ("array-field", ARRAY_FIELD),
+                      ("array-field-dyn", ARRAY_FIELD_DYN),
+                      ("array-field-oob", ARRAY_FIELD_OOB),
+                      ("array-field-ref", ARRAY_FIELD_REF)):
       with self.subTest(name):
         fails = interpreter_fails(src)
         result = nuxmv.check(model_of(src, init="zero"), binary=BINARY)
