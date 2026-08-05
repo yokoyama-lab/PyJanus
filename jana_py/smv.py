@@ -413,9 +413,15 @@ class _Compiler:
     entry = self._lookup(lval.ident.name, env)
     selectors = list(lval.selectors)
     if isinstance(entry, dict):
-      if not selectors or not isinstance(selectors[0], LvalField):
+      # An array of structs is kept as *field -> tuple over elements*, so the
+      # field selector comes **after** the index in `p[i].a` and before it in
+      # `p.a[i]`.  Take whichever position it is in; what remains indexes the
+      # tuple the field names, which is the ordinary array path.
+      at = next((k for k, sel in enumerate(selectors)
+                 if isinstance(sel, LvalField)), None)
+      if at is None:
         raise SmvUnsupported(f"whole-struct l-value: {lval.ident.name}")
-      field = selectors.pop(0).ident.name
+      field = selectors.pop(at).ident.name
       if field not in entry:
         raise SmvUnsupported(f"no such field: {lval.ident.name}.{field}")
       return entry[field], selectors
@@ -939,15 +945,33 @@ class _Compiler:
     sdef = self.structs.get(decl.typ.name)
     if sdef is None:
       raise SmvUnsupported(f"unknown struct type: {decl.typ.name}")
-    if decl.dimensions:
-      raise SmvUnsupported(f"array of structs: {decl.ident.name}")
     if decl.init_expr is not None:
       raise SmvUnsupported(f"struct initializer: {decl.ident.name}")
+    count = 1
+    if decl.dimensions:
+      if len(decl.dimensions) != 1:
+        raise SmvUnsupported(f"multi-dimensional array of structs: {decl.ident.name}")
+      dim = decl.dimensions[0]
+      if not isinstance(dim, Number):
+        raise SmvUnsupported(f"array of structs of unspecified length: {decl.ident.name}")
+      if not 1 <= dim.value <= _MAX_ARRAY:
+        raise SmvUnsupported(f"array of structs out of range: {decl.ident.name}")
+      count = dim.value
     out: dict = {}
     for field in sdef.fields:
       if field.typ.kind != "int":
         raise SmvUnsupported(f"non-int struct field: {decl.typ.name}.{field.ident.name}")
       init = "0" if self.init_mode == "zero" else None
+      if count > 1 or decl.dimensions:
+        if field.dimensions:
+          raise SmvUnsupported(
+              f"array field inside an array of structs: {decl.ident.name}")
+        # Field-major: one array per field, `p_x[0]` / `p_x[1]`.  The native
+        # encoding needs it that way (an array variable per field), and it keeps
+        # the name the same as a plain struct's field.
+        out[field.ident.name] = self._expand_array(
+            f"{decl.ident.name}_{field.ident.name}", count, [init] * count)
+        continue
       name = f"{decl.ident.name}_{field.ident.name}"
       if field.dimensions:
         # A field may itself be an array.  It expands exactly as a top-level
