@@ -78,6 +78,7 @@ from .ast import IfStmt
 from .ast import LocalStmt
 from .ast import ArrayExpr
 from .ast import LvalExpr
+from .ast import LvalField
 from .ast import LvalIndex
 from .ast import ModOp
 from .ast import Number
@@ -104,9 +105,11 @@ _BLOCK_CHARS = 4000
 #: the model up rather than fail; refuse instead of emitting it.
 _MAX_ARRAY = 256
 
-#: A source name resolves either to one SMV variable (a scalar) or, for an
-#: expanded array, to the tuple of its elements' variables.
-_Env = dict  # dict[str, str | tuple[str, ...]]
+#: A source name resolves to one SMV variable (a scalar), to the tuple of its
+#: elements' variables (an expanded array), or to a mapping from field name to
+#: either of those (an expanded struct).  A struct field has no struct type of
+#: its own in this dialect's corpus, so the nesting stops there.
+_Env = dict  # dict[str, str | tuple[str, ...] | dict[str, str | tuple[str, ...]]]
 
 #: Reserved in SMV (plus `pc`, which names the program counter).  A Janus
 #: variable with one of these names is renamed, the way `c_codegen.py` renames
@@ -149,6 +152,7 @@ class _Compiler:
       raise SmvUnsupported("no main procedure")
     self.program = program
     self.procs = {p.procname.name: p for p in program.procs}
+    self.structs = {sd.ident.name: sd for sd in (program.struct_defs or [])}
     self.init_mode = init
     self.assume = assume
     self.max_depth = max_depth
@@ -309,12 +313,12 @@ class _Compiler:
     aliasing question between a constant and a variable index is the same
     equality as between two variables, just with one side decided.
     """
-    entry = self._lookup(lval.ident.name, env)
+    entry, selectors = self._base_of(lval, env)
     if not isinstance(entry, tuple):
       return None
-    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
-      raise SmvUnsupported("struct field or multi-dimensional l-value")
-    index = lval.selectors[0].expr
+    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
+      raise SmvUnsupported("multi-dimensional l-value")
+    index = selectors[0].expr
     if isinstance(index, Number):
       return entry, str(index.value)
     return entry, self._dynamic_index(index, env, obl, len(entry))
@@ -366,16 +370,16 @@ class _Compiler:
     a false alarm and "no" would be unsound.  Deciding it needs the
     index-precise test `RevArr.wf_assign` formalises.
     """
-    entry = self._lookup(lval.ident.name, env)
-    if not lval.selectors:
+    entry, selectors = self._base_of(lval, env)
+    if not selectors:
       if isinstance(entry, tuple):
         raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
       return entry == name
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
-      raise SmvUnsupported("struct field or multi-dimensional l-value")
-    index = lval.selectors[0].expr
+    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
+      raise SmvUnsupported("multi-dimensional l-value")
+    index = selectors[0].expr
     if isinstance(index, Number):
       return 0 <= index.value < len(entry) and entry[index.value] == name
     if name in entry:
@@ -388,6 +392,25 @@ class _Compiler:
       raise SmvUnsupported(f"variable out of the fragment: {name}")
     return env[name]
 
+  def _base_of(self, lval, env: _Env):
+    """Strip a leading field selector, giving `(entry, remaining selectors)`.
+
+    A struct is one entry per field, so `p.x` resolves the field first and then
+    behaves exactly like a scalar or array named `p_x`.
+    """
+    entry = self._lookup(lval.ident.name, env)
+    selectors = list(lval.selectors)
+    if isinstance(entry, dict):
+      if not selectors or not isinstance(selectors[0], LvalField):
+        raise SmvUnsupported(f"whole-struct l-value: {lval.ident.name}")
+      field = selectors.pop(0).ident.name
+      if field not in entry:
+        raise SmvUnsupported(f"no such field: {lval.ident.name}.{field}")
+      return entry[field], selectors
+    if selectors and isinstance(selectors[0], LvalField):
+      raise SmvUnsupported(f"field of a non-struct: {lval.ident.name}")
+    return entry, selectors
+
   def _lval_name(self, lval, env: _Env) -> str:
     """The SMV variable an l-value denotes.
 
@@ -395,16 +418,16 @@ class _Compiler:
     named by a **constant** index.  A variable index needs a `case` over the
     elements and is not translated yet.
     """
-    entry = self._lookup(lval.ident.name, env)
-    if not lval.selectors:
+    entry, selectors = self._base_of(lval, env)
+    if not selectors:
       if isinstance(entry, tuple):
         raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
       return entry
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
-      raise SmvUnsupported("struct field or multi-dimensional l-value")
-    index = lval.selectors[0].expr
+    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
+      raise SmvUnsupported("multi-dimensional l-value")
+    index = selectors[0].expr
     if not isinstance(index, Number):
       raise SmvUnsupported("variable array index")
     if not 0 <= index.value < len(entry):
@@ -419,10 +442,12 @@ class _Compiler:
     statement, so reaching it is the error.  A variable index is not decided
     here — it is refused by `_lval_name` until the `case` encoding exists.
     """
-    entry = env.get(lval.ident.name)
-    if not isinstance(entry, tuple) or not lval.selectors:
+    if lval.ident.name not in env:
       return False
-    selector = lval.selectors[0]
+    entry, selectors = self._base_of(lval, env)
+    if not isinstance(entry, tuple) or not selectors:
+      return False
+    selector = selectors[0]
     if not isinstance(selector, LvalIndex):
       return False
     if not isinstance(selector.expr, Number):
@@ -455,16 +480,16 @@ class _Compiler:
     is exactly the case the bounds obligation leaves; a one-element array needs
     no `case` at all.
     """
-    entry = self._lookup(lval.ident.name, env)
-    if not lval.selectors:
+    entry, selectors = self._base_of(lval, env)
+    if not selectors:
       if isinstance(entry, tuple):
         raise SmvUnsupported(f"whole-array l-value: {lval.ident.name}")
       return self._val(entry)
     if not isinstance(entry, tuple):
       raise SmvUnsupported(f"indexing a non-array: {lval.ident.name}")
-    if len(lval.selectors) != 1 or not isinstance(lval.selectors[0], LvalIndex):
-      raise SmvUnsupported("struct field or multi-dimensional l-value")
-    index = lval.selectors[0].expr
+    if len(selectors) != 1 or not isinstance(selectors[0], LvalIndex):
+      raise SmvUnsupported("multi-dimensional l-value")
+    index = selectors[0].expr
     if isinstance(index, Number):
       if not 0 <= index.value < len(entry):
         raise SmvUnsupported(f"index out of bounds: {lval.ident.name}[{index.value}]")
@@ -562,8 +587,8 @@ class _Compiler:
     if isinstance(s, SwapStmt):
       if self._oob_lval(s.left, env) or self._oob_lval(s.right, env):
         return self._unconditional_error()
-      lentry = self._lookup(s.left.ident.name, env)
-      rentry = self._lookup(s.right.ident.name, env)
+      lentry, _ = self._base_of(s.left, env)
+      rentry, _ = self._base_of(s.right, env)
       if isinstance(lentry, tuple) or isinstance(rentry, tuple):
         if not (isinstance(lentry, tuple) and isinstance(rentry, tuple)):
           raise SmvUnsupported("swap between a scalar and an array cell")
@@ -596,7 +621,7 @@ class _Compiler:
     raise SmvUnsupported(f"statement outside the fragment: {type(s).__name__}")
 
   def _assign(self, s: AssignStmt, env: _Env) -> None:
-    entry = self._lookup(s.lval.ident.name, env)
+    entry, _ = self._base_of(s.lval, env)
     if isinstance(entry, tuple):
       return self._assign_cell(s, env, entry)
     target = self._lval_name(s.lval, env)
@@ -815,6 +840,18 @@ class _Compiler:
       return
     inner: _Env = {}
     for param, arg in zip(proc.params, s.args):
+      if param.typ.kind == "struct":
+        if not isinstance(arg, LvalExpr) or arg.lval.selectors:
+          raise SmvUnsupported("argument is not a plain variable")
+        resolved = self._lookup(arg.lval.ident.name, env)
+        if not isinstance(resolved, dict):
+          raise SmvUnsupported(
+              f"argument does not match the parameter's shape: {param.ident.name}")
+        # By reference, exactly as for arrays: the same field entries, so a
+        # write inside the callee updates the caller's struct.  This also makes
+        # a formal passed onward to a third procedure resolve correctly.
+        inner[param.ident.name] = resolved
+        continue
       if param.typ.kind != "int":
         raise SmvUnsupported("non-scalar parameter")
       if not isinstance(arg, LvalExpr) or arg.lval.selectors:
@@ -896,11 +933,39 @@ class _Compiler:
       return cells
     return tuple(self._declare(f"{decl.ident.name}_{i}", inits[i]) for i in range(size))
 
+  def _declare_struct(self, decl, env: _Env) -> dict:
+    """One SMV variable per field.
+
+    A field is itself a scalar or an array, and no field has a struct type in
+    this dialect's corpus, so the expansion bottoms out here.  Array fields are
+    a later step; they are refused rather than half-translated.
+    """
+    sdef = self.structs.get(decl.typ.name)
+    if sdef is None:
+      raise SmvUnsupported(f"unknown struct type: {decl.typ.name}")
+    if decl.dimensions:
+      raise SmvUnsupported(f"array of structs: {decl.ident.name}")
+    if decl.init_expr is not None:
+      raise SmvUnsupported(f"struct initializer: {decl.ident.name}")
+    out: dict = {}
+    for field in sdef.fields:
+      if field.typ.kind != "int":
+        raise SmvUnsupported(f"non-int struct field: {decl.typ.name}.{field.ident.name}")
+      if field.dimensions:
+        raise SmvUnsupported(f"array field: {decl.typ.name}.{field.ident.name}")
+      init = "0" if self.init_mode == "zero" else None
+      out[field.ident.name] = self._declare(
+          f"{decl.ident.name}_{field.ident.name}", init)
+    return out
+
   def run(self) -> str:
     main = self.program.main
     assert main is not None
     env: _Env = {}
     for decl in main.vdecls:
+      if decl.typ.kind == "struct":
+        env[decl.ident.name] = self._declare_struct(decl, env)
+        continue
       if decl.typ.kind != "int":
         raise SmvUnsupported(f"non-scalar declaration: {decl.ident.name}")
       if decl.dimensions:
