@@ -1,3 +1,7 @@
+// @summary:    swapping variables of different types
+// @error-kind: execution
+// @error:      Can't swap variables of type `int' and `stack'
+
 procedure main()
     int x
     stack s

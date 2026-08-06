@@ -1,3 +1,7 @@
+// @summary:    two procedures with the same name
+// @error-kind: validation
+// @error:      Procedure `foo' is already defined
+
 procedure foo()
     skip
 

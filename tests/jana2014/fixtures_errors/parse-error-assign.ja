@@ -1,2 +1,6 @@
+// @summary:    junk inside the index on the left of an assignment
+// @error-kind: parsing
+// @error:      Unexpected "#"
+
 procedure main()
     x[#] += 5

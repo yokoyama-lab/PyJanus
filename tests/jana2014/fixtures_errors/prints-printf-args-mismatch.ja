@@ -1,3 +1,7 @@
+// @summary:    more arguments than the format string consumes
+// @error-kind: execution
+// @error:      Not all arguments where used during string formatting
+
 procedure main()
   int x
   int y

@@ -1,3 +1,7 @@
+// @summary:    a delocal giving a different type from its local
+// @error-kind: execution
+// @error:      Type of variable `x' does not match local declaration:
+
 procedure main()
     local int x = 0
     skip

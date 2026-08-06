@@ -1,3 +1,7 @@
+// @summary:    `error` written without its parentheses, so it parses as a bare word
+// @error-kind: parsing
+// @error:      Unexpected "a"
+
 procedure main()
     int x
 

@@ -1,3 +1,7 @@
+// @summary:    `top` applied to something that is not a stack
+// @error-kind: execution
+// @error:      Couldn't match expected type `stack'
+
 procedure main()
     int x
     int y

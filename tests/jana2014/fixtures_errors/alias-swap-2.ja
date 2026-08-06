@@ -1,3 +1,7 @@
+// @summary:    swapping an array cell with one whose index reads the same array
+// @error-kind: execution
+// @error:      Identifiers `a' and `a' are aliases
+
 procedure main()
   int a[2] = {1,2}
 

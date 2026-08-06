@@ -1,3 +1,7 @@
+// @summary:    the program itself raises `error` when run without the modular flag
+// @error-kind: execution
+// @error:      User error: Program has been run without modular flag
+
 procedure main()
   int a
   // This should be positive no matter what

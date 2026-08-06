@@ -1,3 +1,7 @@
+// @summary:    a procedure with two parameters of the same name
+// @error-kind: validation
+// @error:      Procedure `foo' has duplicate arguments
+
 procedure foo(int x, int x)
     skip
 

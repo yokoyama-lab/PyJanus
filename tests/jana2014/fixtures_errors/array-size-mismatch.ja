@@ -1,3 +1,7 @@
+// @summary:    passing an array whose size differs from the formal's
+// @error-kind: execution
+// @error:      Expecting array of size [3] but got size [4]
+
 procedure foo(int x[3])
     skip
 

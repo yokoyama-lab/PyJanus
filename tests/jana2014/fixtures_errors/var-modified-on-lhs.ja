@@ -1,3 +1,7 @@
+// @summary:    an assignment whose index expression reads the array being updated
+// @error-kind: execution
+// @error:      Identifiers `x' and `x' are aliases
+
 procedure main()
     int x[2]
     x[x[0]] ^= 1

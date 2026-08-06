@@ -1,3 +1,7 @@
+// @summary:    a from-loop entry assertion failing on the backward run
+// @error-kind: execution
+// @error:      Assertion failed: should be false
+
 procedure foo(int x)
     from x = 1
     until x = 0

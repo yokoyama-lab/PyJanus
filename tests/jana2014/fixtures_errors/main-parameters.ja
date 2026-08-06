@@ -1,2 +1,6 @@
+// @summary:    declaring parameters on `main`
+// @error-kind: parsing
+// @error:      Unexpected "i"
+
 procedure main(int foo)
     skip

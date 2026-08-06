@@ -1,2 +1,6 @@
+// @summary:    a file with no `main` procedure
+// @error-kind: validation
+// @error:      No main procedure has been defined
+
 procedure foo()
     skip

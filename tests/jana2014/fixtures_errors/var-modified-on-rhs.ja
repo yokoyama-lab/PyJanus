@@ -1,3 +1,7 @@
+// @summary:    an assignment whose right side reads the variable being updated
+// @error-kind: execution
+// @error:      Identifiers `x' and `x' are aliases
+
 procedure main()
     int x
     x += x

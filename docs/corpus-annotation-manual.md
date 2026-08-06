@@ -233,10 +233,14 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 |---|---|---|
 | `clean-accumulation` | 入力をそのまま残し、結果を別の変数に `+=` で積み上げる。`uncall` すると引き算で綺麗に戻る | 合計、内積、フィボナッチ、線形探索 |
 | `ancilla-flag` | 比較や判定の結果を、余分な1ビット（フラグ変数・フラグ配列）に記録している | 条件付き交換、二分探索 |
-| `history-stack` | `stack` 型の変数があり、`push` / `pop` で捨てる情報を退避している | 可逆ユークリッド互除法、バブルソート |
+| `history-stack` | 捨てる情報を**退避**している。**退避先はスタックでも配列でもよい**（`stack` + `push`/`pop` が典型だが、`heapgarbage[]` のような配列も同じ） | 可逆ユークリッド互除法、バブルソート、可逆ヒープ |
 | `bennett-uncompute` | 補助的な値を計算 → 使う → **同じ計算を逆向きに実行して消す**（`call f` の後に対応する `uncall f` があり、結果だけが残る） | 逆BWT |
 | `plain` | 上のどれも使っていない。もともと1対1対応（全単射）の計算で、入力を消費して出力に変えている | ランレングス符号化、グレイコード変換 |
 
+- **`ancilla-flag` と `history-stack` の境目は「1決定あたり1ビットか、捨てた値そのものか」**です。
+  入れ物がスタックか配列かは関係ありません（2026-08-06 に先生が確定）。
+  比較の結果を1ビット記録 → `ancilla-flag`。商・上書きされた値・順列・オフセットのように
+  **値を退避** → `history-stack`
 - **迷ったら `stack` という単語がファイルにあるか**を見てください。あれば `history-stack` が有力です
 - `plain` と `clean-accumulation` の区別: 実行後に**入力がそのまま残っていれば** `clean-accumulation`、
   **入力がゼロになって消えていれば** `plain`
@@ -684,8 +688,9 @@ grep -h "@source" tests/jana2014/fixtures/examples/*.ja | sort | uniq -c | sort 
 §2 手順5 の判定表に照らして、5分類が妥当かを見ます。全部を疑う必要はありません。
 **判断が割れやすいのは次のパターン**です。
 
-- **スタックではなく配列に履歴を積む本** — `binary_heap_g` は `heapgarbage[]` 等の
-  配列に履歴を積みますが `history-stack` にしてあります。妥当か
+- ~~スタックではなく配列に履歴を積む本~~ — **決着済み**（2026-08-06）。`binary_heap_g` の
+  ように配列に履歴を積む本も `history-stack` で正しい。**入れ物は分類に影響しない**。
+  32本の `_g` を確認したところ、既存の分類はこのルールで一貫している
 - **`bennett-uncompute` と `clean-accumulation` の境目** — 補助を作って消しているのか、
   そもそも入力を壊していないのか
 - **`plain` が広すぎないか** — 26本が `plain` です。うち何本かは実は

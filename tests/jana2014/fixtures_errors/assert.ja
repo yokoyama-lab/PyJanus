@@ -1,2 +1,6 @@
+// @summary:    an explicit assert that does not hold
+// @error-kind: execution
+// @error:      Assertion failed: should be true
+
 procedure main()
     assert(0=1)

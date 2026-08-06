@@ -1,2 +1,6 @@
+// @summary:    junk where a statement is expected
+// @error-kind: parsing
+// @error:      Expecting identifier
+
 procedure main()
     %#=)#(%

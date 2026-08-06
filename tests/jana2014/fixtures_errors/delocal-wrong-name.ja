@@ -1,3 +1,7 @@
+// @summary:    a delocal naming a different variable from its local
+// @error-kind: execution
+// @error:      Variable names does not match in local declaration:
+
 procedure main()
     local int foo = 0
     local int bar = 0

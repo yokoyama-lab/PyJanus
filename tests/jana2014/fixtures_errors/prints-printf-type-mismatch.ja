@@ -1,3 +1,7 @@
+// @summary:    an argument whose type does not fit its format specifier
+// @error-kind: execution
+// @error:      Type mismatch for `%a' format specifier
+
 procedure main()
   int x
   int y

@@ -111,12 +111,32 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 「どのプログラムがどのコアで検証されているか」の表が無いため、**検証されていない
 ことに気づけない**。§1.1 と同じ穴の別の顔である。
 
-### 1.5 エラー fixture の期待値が散在
+### 1.5 エラー fixture の期待値が散在 → **解消済み**
 
 `tests/jana2014/fixtures_errors/*.ja`（52本）のうち、期待エラーメッセージが
-テスト側にハードコードされているのは数本（`division-by-zero`、`no-main-proc` 等）。
-残りは「非ゼロ終了する」ことしか見ていない可能性が高い。**メッセージが変わっても
-気づかない**。
+テスト側にハードコードされているのは数本だけだった。残りは「非ゼロ終了する」ことしか
+見ておらず、**別のエラーに変わっても気づかない**状態だった。
+
+2026-08-06 に52本すべてへ診断ヘッダを付与:
+
+```
+// @summary:    two scalar formals of the same procedure bound to the same variable
+// @error-kind: execution
+// @error:      Identifiers `a' and `b' are aliases
+```
+
+`@error-kind` は PyJanus が1行目に出す区分（`parsing` 37→実行前、`validation`、
+`execution`）で、**診断が別の段階へ移るのは実際の挙動変化**なのでこれも固定する。
+内訳は execution 37 / parsing 7 / validation 7 / **uncaught 1**。
+
+- **`uncaught` は PyJanus 自身の区分ではない**。診断機構をすり抜けて別の何かが実行を
+  終わらせたときにこの工具が付ける印で、現在唯一の該当が `infinite-recursion`
+  （Python の `RecursionError` がそのまま漏れて `maximum recursion depth exceeded`
+  とだけ出る）。**テストがこの1件という事実を固定している**ので、2件目は黙って
+  増えない
+- **場所（行番号）は意図的に固定していない**。これらのファイルはコメント行が増えるので、
+  行番号に鍵を掛けたゴールデンは編集のたびに壊れる——デバッガのテストから外したのと
+  同じ罠である（§5.1）。場所の検査は `tests/test_error_reporting.py` が持つ
 
 ## 2. 方針
 
@@ -175,7 +195,7 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 | **B** | 97本に `@` ヘッダを付与 | 35–45h | **完了**（LLM が全数生成、`check` 緑） |
 | **C** | 命名・重複の棚卸し | 6h | **完了**（`_g`/`_c`・接頭辞撤去・`array_element_arg_c`） |
 | **D** | 検証被覆マトリクス `docs/corpus-coverage.md` の生成 | 6h | 未着手 |
-| **E** | エラー fixture 52本に期待メッセージ付与 | 8h | 未着手。検査器の拡張が先 |
+| **E** | エラー fixture 52本に期待メッセージ付与 | 8h | **完了**（`tools/check_error_fixtures.py`＋52本注釈） |
 
 ### 3.2 残った人手の仕事（B の完了後）
 
