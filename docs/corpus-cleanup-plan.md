@@ -62,7 +62,7 @@ glob で全数を拾っている:
 avl_delete_g  avl_insert_g  bellman_ford_g  bfs_g  binary_heap_g  bubble_sort_g
 convex_hull_g  counting_sort_g  cuckoo_insert_g  depth_first_search_g  dijkstra_g
 dynamic_array_g  edit_script_g  ext_gcd_g  floyd_warshall_g  gcd_g  hash_chain_g
-heap_sort_g  injective_partition_g  kmp_g  kosaraju_scc_g  landauer_interp_g
+heap_sort_g  lomuto_partition_g  kmp_g  kosaraju_scc_g  landauer_interp_g
 merge_sort_g  modexp_g  next_permutation_g  prim_mst_g  quick_sort_g
 selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 ```
@@ -76,7 +76,7 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
   の回帰用。`array_element_arg_c.ja` などへの改名が妥当（規約自体は満たすので強制ではない）
 - **`matrixmult_c.ja` と `matrixmult_v1_c.ja` は別物**（226行差）。前者は `iterate`、
   後者は `from...loop...until` の明示ループで引数構成も違う。**統合すべきでない**
-- `injective_*` 接頭辞の15本は **2026-06-03/04 に11本、06-30 に4本**が追加された一群。
+- **`injective_*` 接頭辞は撤去済み**（2026-08-06）。15本は **2026-06-03/04 に11本、06-30 に4本**が追加された一群だった。
   コミットメッセージが意図を述べている（"a staircase of eight reversible procedures
   computing **injective integer functions**" / "Each procedure is a **bijection** on its
   array or pair, **with uncall as the inverse**"）。**実演**——計算して印字し、`uncall` で
@@ -84,7 +84,13 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
   15/15（他は 17/82）、ゴミを残すのが 1/15（他は 31/82）。ただし
   **同じ形の本が接頭辞なしにも12本ある**（`fall` / `fib` / `bwt_plain` / `glaisher` 等）
   ので、**接頭辞は性質ではなく追加された時期の記録**。`_g` / `_c` と違い機械検査できない。
-  §4 の #4 で扱う
+  そのため接頭辞を外し、9本は素直に剥がし、剥がすと曖昧になる6本は内容に即した名前にした:
+  `injective_basics` → `int_bijections_c`、`injective_bits` → `bit_bijections_c`、
+  `injective_arithmetic` → `arith_roundtrip_c`、`injective_bennett` → `bennett_divmod_c`、
+  `injective_lehmer` → `lehmer_code_c`、`injective_partition` → `lomuto_partition_g`、
+  `injective_vm` → `stack_vm_c`。副産物として **`gcd_c` / `gcd_g` が同じ算法のクリーン版と
+  ゴミ版として並び**、`arith_coding` / `bwt_inverse` / `lehmer_code` は
+  `docs/textbook-programs-plan.md` §1 の二形態（examples 側と programs 側で同名）に揃った
 - 二形態（I/O なし／あり）の対応が不揃い: 97本のうち **89本に I/O 版が無い**。
   意図的なのか未整備なのか区別できない
 
@@ -201,7 +207,7 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 | 1 | ハイフン等の改名 | **決裁済・実施済**（§1.3） |
 | 2 | `array_element_arg_c.ja` の扱い | 保留。**機能テストであってサンプルではない**ことが判明（§1.3） |
 | 3 | `matrixmult_v1_c.ja` を残すか | **残す**。別実装であることを確認済（§1.3） |
-| 4 | `injective_*` 接頭辞の定義（15本） | **由来は判明**（§1.3）。機械検査できない以上、(a) 定義して12本を追加改名 (b) 接頭辞を外し `@technique`/`@summary` に寄せる、のどちらか。**(b) を推奨** |
+| 4 | `injective_*` 接頭辞（15本） | **決裁済・実施済**: 接頭辞を撤去（§1.3）。分類は `@technique` / `@summary` が担う |
 | 5 | `@source` が突き止められない場合 | `original`、疑わしければ `UNKNOWN` で先生へ |
 | 6 | `@confirmed: UNVERIFIED` / `@oracle` 不一致の処理 | 先生が引き取る。**バグの可能性がある本命** |
 | 7 | 二形態の対応（I/O 版が無い89本） | 当面揃えない。§1.3 を記録するに留める |

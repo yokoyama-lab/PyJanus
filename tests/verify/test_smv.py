@@ -109,7 +109,7 @@ class InitTests(unittest.TestCase):
 
   Locals used to get no `init` at all, leaving them free: the "zero store" was
   not a single state, and every undecided program in the corpus carried free
-  locals (32 of them in `injective_gcd`).  Over-approximating like that is a
+  locals (32 of them in `gcd_c`).  Over-approximating like that is a
   latent false-alarm source, whatever it does to the decision rate.
   """
 

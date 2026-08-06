@@ -10,7 +10,7 @@ the unit tests touch least.
 A program that is genuinely *not* reversible would be expected to fail this and
 should be listed in NOT_REVERSIBLE below (the body+inverse run is then asserted
 to raise instead). That set is currently empty: every example in the corpus is
-reversible. (`injective_iterate_c.ja` used to be listed for its `delocal i = i`
+reversible. (`iterate_c.ja` used to be listed for its `delocal i = i`
 loop-counter idiom, but it was rewritten to an `iterate` form and is reversible
 now.)
 """

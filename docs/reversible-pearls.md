@@ -26,12 +26,12 @@ Bird らの calculation（等式変形によるアルゴリズム導出）の伝
 | `reversible_gates` / `toffoli_gate` | 普遍可逆ゲート Toffoli・Fredkin | 制御保存ゲート（各自己逆） |
 | `bitwise_ops` | 式中ビット演算 `& | ^` | 検証コア `BAnd/BOr/BXor`（`Z.land/lor/lxor`） |
 | `base_convert` | 基数変換（Horner 桁抽出）整数 → 桁列 | `d[i] += (n / b^i) % b`（純式・`+=` のみ，`uncall` で減算） |
-| `lehmer_code`（I/O）/ `injective_lehmer`（両コア） | 順列 ⇄ Lehmer符号 ⇄ 整数（PFAD ch.12） | インプレース左ランク変換＋階乗進法（local コピー乗算） |
+| `lehmer_code`（I/O）/ `lehmer_code_c`（両コア） | 順列 ⇄ Lehmer符号 ⇄ 整数（PFAD ch.12） | インプレース左ランク変換＋階乗進法（local コピー乗算） |
 | `cantor_pair` | Cantor ペアリング ℕ×ℕ → ℕ | `z += (x+y)(x+y+1)/2 + y`（純式・`+=` のみ） |
-| `injective_partition`（両コア）/ `partition`（I/O） | 可逆 Lomuto partition（quicksort の心臓部） | 走査位置ごとの分岐ビットを `flags[]` に記録（sort_network と同型）；恒等swap は内側 `if j > lo+p` で抑止 |
-| `injective_arith_coding`（両コア）/ `arith_coding`（I/O） | 整数算術符号化＝双射 rANS（PFAD ch.24–25） | 状態写像 `x ↦ (x/f)·M + C + x%f` を値保存 divmod の鏡像で実現（`/=`/`*=` なし・純式 `/ % *` のみ）；`if` は slot 判定 `x%M < f0` で閉じ `uncall` が復号器 |
-| `injective_bwt_inverse`（両コア）/ `bwt_inverse`（I/O） | **逆BWT＝LF-mapping**（PFAD ch.13 + Bird&Mu JFP2004） | 計数→累積C→`T[i]=C[L[i]]+rank`→`path`巡回→`s[n-1-k]=L[path[k]]`；入れ子添字でポインタ追跡，ancilla は Bennett 流に uncompute し s のみ残す；`uncall` が前方BWT（固定長・sentinel 付き） |
-| `injective_*`（既存） | 単射算術・iterate 等 | — |
+| `lomuto_partition_g`（両コア）/ `partition`（I/O） | 可逆 Lomuto partition（quicksort の心臓部） | 走査位置ごとの分岐ビットを `flags[]` に記録（sort_network と同型）；恒等swap は内側 `if j > lo+p` で抑止 |
+| `arith_coding_c`（両コア）/ `arith_coding`（I/O） | 整数算術符号化＝双射 rANS（PFAD ch.24–25） | 状態写像 `x ↦ (x/f)·M + C + x%f` を値保存 divmod の鏡像で実現（`/=`/`*=` なし・純式 `/ % *` のみ）；`if` は slot 判定 `x%M < f0` で閉じ `uncall` が復号器 |
+| `bwt_inverse_c`（両コア）/ `bwt_inverse`（I/O） | **逆BWT＝LF-mapping**（PFAD ch.13 + Bird&Mu JFP2004） | 計数→累積C→`T[i]=C[L[i]]+rank`→`path`巡回→`s[n-1-k]=L[path[k]]`；入れ子添字でポインタ追跡，ancilla は Bennett 流に uncompute し s のみ残す；`uncall` が前方BWT（固定長・sentinel 付き） |
+| `int_bijections_c` / `bit_bijections_c` / `arith_roundtrip_c` / `iterate_c`（既存） | 単射算術・ビット演算・iterate の実演 | — |
 
 ## 将来候補（Bird/JFP 由来）
 
@@ -60,12 +60,12 @@ Boyer–Moore / KMP（ch.16–17），maximum segment sum 系。
 ## 推奨シーケンス
 
 - **Tier 1（完了）**: ✅ ① 基数変換（`base_convert`）・✅ ③ Lehmer rank/unrank
-  （`lehmer_code` I/O ＋ `injective_lehmer` 両コア）・✅ ② Cantor ペアリング（`cantor_pair`）
-- **Tier 2（中）**: ✅ 可逆 Lomuto partition（`injective_partition` 両コア ＋ `partition` I/O；
+  （`lehmer_code` I/O ＋ `lehmer_code_c` 両コア）・✅ ② Cantor ペアリング（`cantor_pair`）
+- **Tier 2（中）**: ✅ 可逆 Lomuto partition（`lomuto_partition_g` 両コア ＋ `partition` I/O；
   swap 決定を `flags[]` に記録し `uncall` が逆スキャッタ）・✅ ④ 整数算術符号化＝双射 rANS
-  （`injective_arith_coding` 両コア ＋ `arith_coding` I/O；状態 divmod を値保存分解で `+=/-=` 化，
+  （`arith_coding_c` 両コア ＋ `arith_coding` I/O；状態 divmod を値保存分解で `+=/-=` 化，
   `uncall` が復号器）
-- **Tier 3（目玉）**: ✅ ⑤ **逆BWT＝LF-mapping**（`injective_bwt_inverse` 両コア ＋ `bwt_inverse`
+- **Tier 3（目玉）**: ✅ ⑤ **逆BWT＝LF-mapping**（`bwt_inverse_c` 両コア ＋ `bwt_inverse`
   I/O；固定長 n=5・sentinel 付きで `uncall` が前方BWT，ancilla は Bennett 流に uncompute）。
   残課題: L を消費する**インプレース版**（s が L の置換である点を使う）と可変長・⑥ 双射BWT への発展
 

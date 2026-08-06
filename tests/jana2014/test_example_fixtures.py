@@ -61,8 +61,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # fibb is fully garbage-free: it also clears n.
     self.assertIn("fibb: r=5 n=0 x1=0 x2=0", result.stdout)
 
-  def test_injective_basics_staircase(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_basics_c.ja")
+  def test_int_bijections_staircase(self) -> None:
+    result = run_program(EXAMPLE_DIR / "int_bijections_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn("inc:        x=6", result.stdout)
     self.assertIn("neg:        x=-6", result.stdout)
@@ -74,8 +74,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # Cantor pairing pi(3, 4) = (3+4)(3+4+1)/2 + 3 = 28 + 3 = 31
     self.assertIn("cantor:     z=31", result.stdout)
 
-  def test_injective_cipher_sbox_feistel_with_key_schedule(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_cipher_sbox_c.ja")
+  def test_cipher_sbox_feistel_with_key_schedule(self) -> None:
+    result = run_program(EXAMPLE_DIR / "cipher_sbox_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Master key 6 with constants (0, 5, 11, 14) gives round keys
     # (6, 3, 13, 8) under XOR-mixing.
@@ -87,8 +87,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall key_schedule clears the derived round keys.
     self.assertIn("rk cleared:  0 0 0 0", result.stdout)
 
-  def test_injective_ca_rule90_second_order(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_ca_rule90_c.ja")
+  def test_ca_rule90_second_order(self) -> None:
+    result = run_program(EXAMPLE_DIR / "ca_rule90_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # After 3 second-order Rule-90 steps from a single-cell impulse, the
     # newer slot (a) holds state[t=3], the older slot (b) holds state[t=2].
@@ -98,8 +98,8 @@ class AdaptedExampleTests(unittest.TestCase):
     self.assertIn("a restored: 00000000", result.stdout)
     self.assertIn("b restored: 00001000", result.stdout)
 
-  def test_injective_vm_stack_machine_roundtrip(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_vm_c.ja")
+  def test_stack_vm_stack_machine_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "stack_vm_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Program [PUSH 5, PUSH 3, ADD, PUSH 10, SUB] yields stack <5, 8, 2>.
     self.assertIn("after run:    top=2 below=8", result.stdout)
@@ -107,8 +107,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # the stack again.
     self.assertIn("after uncall: size=0", result.stdout)
 
-  def test_injective_lehmer_perm_to_factorial_base(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_lehmer_c.ja")
+  def test_lehmer_code_perm_to_factorial_base(self) -> None:
+    result = run_program(EXAMPLE_DIR / "lehmer_code_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Lehmer left-rank code of [2, 0, 3, 1].
     self.assertIn("code:     0 0 2 1", result.stdout)
@@ -117,8 +117,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall of the chain restores the permutation and clears the integer.
     self.assertIn("restored: 2 0 3 1 (int=0)", result.stdout)
 
-  def test_injective_partition_reversible_lomuto(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_partition_g.ja")
+  def test_lomuto_partition_reversible_lomuto(self) -> None:
+    result = run_program(EXAMPLE_DIR / "lomuto_partition_g.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # pivot = a[7] = 6; five elements are smaller, so the pivot lands at index 5.
     self.assertIn("part a:    3 2 5 1 4 6 7 8  (pivot@5)", result.stdout)
@@ -129,8 +129,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # already-sorted, pivot is the max: nothing moves, final pivot swap suppressed.
     self.assertIn("part b:    1 2 3 4  (pivot@3)  flags=111", result.stdout)
 
-  def test_injective_arith_coding_rans_roundtrip(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_arith_coding_c.ja")
+  def test_arith_coding_rans_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "arith_coding_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # rANS folds [1,0,1,0] into x = 25 under the f0=3,f1=1 model, consuming the
     # message (every symbol ends 0) and leaving the q,r ancillas clean.
@@ -138,8 +138,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall is the decoder: it reads the symbols back and clears x to 0.
     self.assertIn("decoded:   msg=1010   x=0  (q=0 r=0)", result.stdout)
 
-  def test_injective_bwt_inverse_lf_mapping_roundtrip(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_bwt_inverse_c.ja")
+  def test_bwt_inverse_lf_mapping_roundtrip(self) -> None:
+    result = run_program(EXAMPLE_DIR / "bwt_inverse_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # L = [1,2,3,1,0], I = 4 is the BWT of s = [3,1,2,1,0]; LF reconstruction
     # recovers s, with all ancillas uncomputed (only s survives).
@@ -147,8 +147,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall is the forward BWT: it clears s and hands (L, I) back.
     self.assertIn("restored:  L=12310 I=4 s=00000", result.stdout)
 
-  def test_injective_mini_cipher_three_round_feistel(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_mini_cipher_c.ja")
+  def test_mini_cipher_three_round_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "mini_cipher_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Three rounds of additive Feistel over Z/256 with round keys
     # (200, 150, 91) map (100, 42) -> (250, 231). Round 0 triggers a
@@ -157,8 +157,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # uncall reverses the cipher and clears every log bit.
     self.assertIn("decrypt:  L=100 R=42  logs=000", result.stdout)
 
-  def test_injective_sort_network_with_swap_log(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_sort_network_c.ja")
+  def test_sort_network_with_swap_log(self) -> None:
+    result = run_program(EXAMPLE_DIR / "sort_network_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Fully reversed input: all five comparators swap.
     self.assertIn("sort4 a:   1 2 3 4  log=11111", result.stdout)
@@ -167,8 +167,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # Already-sorted input: no comparator swaps.
     self.assertIn("sort4 b:   1 2 3 4  log=00000", result.stdout)
 
-  def test_injective_gcd_reversible_euclidean(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_gcd_c.ja")
+  def test_gcd_reversible_euclidean(self) -> None:
+    result = run_program(EXAMPLE_DIR / "gcd_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn("gcd(12,18): a=12 b=18 g=6", result.stdout)
     # uncall the Bennett-wrapped GCD restores g=0 with a, b untouched.
@@ -177,8 +177,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # Edge case: gcd(0, n) = n (the loop runs zero iterations).
     self.assertIn("gcd(0,9):   a=0 b=9 g=9", result.stdout)
 
-  def test_injective_bennett_divmod_garbage_free(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_bennett_c.ja")
+  def test_bennett_divmod_divmod_garbage_free(self) -> None:
+    result = run_program(EXAMPLE_DIR / "bennett_divmod_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # Forward: divmod_clean preserves x and d, fills q and r.
     self.assertIn("divmod(17,5): x=17 d=5 q=3 r=2", result.stdout)
@@ -187,8 +187,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # Edge case: x < d gives q=0, r=x.
     self.assertIn("divmod(3,5):  x=3 q=0 r=3", result.stdout)
 
-  def test_injective_arithmetic_factorial_ipow_horner(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_arithmetic_c.ja")
+  def test_arith_roundtrip_factorial_ipow_horner(self) -> None:
+    result = run_program(EXAMPLE_DIR / "arith_roundtrip_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn("factorial:  5! = 120", result.stdout)
     self.assertIn("ipow:       2^10 = 1024", result.stdout)
@@ -196,8 +196,8 @@ class AdaptedExampleTests(unittest.TestCase):
     # Reversibility: uncall of each procedure clears the result.
     self.assertIn("cleared:    fact=0 pow=0 y=0", result.stdout)
 
-  def test_injective_iterate_cumsum_xor_feistel(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_iterate_c.ja")
+  def test_iterate_cumsum_xor_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "iterate_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     self.assertIn("cumsum:     1 3 6 10 15", result.stdout)
     self.assertIn("cumsum^-1:  1 2 3 4 5", result.stdout)
@@ -206,8 +206,8 @@ class AdaptedExampleTests(unittest.TestCase):
     self.assertIn("feistel4:   L=181 R=552", result.stdout)
     self.assertIn("feistel4^-1: L=5 R=7", result.stdout)
 
-  def test_injective_bits_xor_gray_feistel(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_bits_c.ja")
+  def test_bit_bijections_xor_gray_feistel(self) -> None:
+    result = run_program(EXAMPLE_DIR / "bit_bijections_c.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # xor_key is an involution: applying the same key twice restores the input.
     self.assertIn("xor_key:    a=6 (k=10)", result.stdout)

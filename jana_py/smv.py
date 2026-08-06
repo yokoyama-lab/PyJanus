@@ -119,7 +119,7 @@ _Env = dict  # dict[str, str | tuple[str, ...] | dict[str, str | tuple[str, ...]
 #:
 #: The single letters are the temporal and epistemic operators of nuXmv's logic
 #: — `A`, `E`, `X`, `U`, `T`, `K`, … — and they are the ones that actually bite:
-#: `knapsack.ja` declares `K` and `injective_bwt_inverse.ja` declares `T`, and
+#: `knapsack_c.ja` declares `K` and `bwt_inverse_c.ja` declares `T`, and
 #: both produced a model nuXmv refused to read.  The list below was obtained by
 #: **probing the binary** with a one-variable model, not by reading a grammar;
 #: `K` is reserved by nuXmv without appearing in NuSMV's published one.
@@ -136,9 +136,9 @@ _SMV_RESERVED = frozenset({
     # temporal / epistemic operators
     "A", "E", "F", "G", "H", "K", "O", "S", "T", "U", "V", "X", "Y", "Z",
     "EX", "AX", "EF", "AF", "EG", "AG", "BU", "EBF", "ABF", "EBG", "ABG",
-    # transcendental functions and misc, found the same way — `injective_
-    # arithmetic.ja` declares `exp`, which the corpus-wide malformed check in
-    # `test_smv_reserved.py` caught the moment `iterate` let that program in.
+    # transcendental functions and misc, found the same way —
+    # `arith_roundtrip_c.ja` declares `exp`, which the corpus-wide malformed
+    # check in `test_smv_reserved.py` caught the moment `iterate` let it in.
     "exp", "ln", "sin", "cos", "tan", "pow", "sqrt", "READ", "WRITE", "typeof",
 })
 
