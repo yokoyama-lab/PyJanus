@@ -745,19 +745,33 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
    | 判定 | 件数 |
    |---|---:|
    | `different` | **0** ← `invert.py` に反例なし |
-   | `equivalent` | 1（`cantor_pair_c`）|
+   | `equivalent` | 12（`cantor_pair_c` と `structs_*` 11本）|
    | `partial` | 2（`base_convert_c`, `int_bijections_c`）|
-   | `unknown` | 14 |
-   | `unsupported` | 80 |
+   | `unknown` | 15 |
+   | `unsupported` | 68 |
 
-   **等価性は全域性より厳密に難しい。** 断片に入るのが 17本（全域性検査は 32本）、
-   そのうち決着が 3本（同 19本）。理由は2つで、(a) `P;P†` は元の倍の長さになり
-   恒等写像の仕様が IC3 の負担を増やす、(b) 界面変数が SMV に verbatim で現れることを
-   要求するので、**struct が展開されて `p_x`/`p_y` になる 12本が落ちる**
-   （`structs_*.ja`）。(b) は原理的な制限ではない——展開されたフィールドを比較すれば
-   対応できるので、**被覆率を 12本ぶん上げられる伸びしろがそのまま残っている**。
-   真に予約語で改名されるのは `K`（`knapsack_c`）・`exp`（`arith_roundtrip_c`）・
-   `A`（`bwt_inverse_c`）の3本だけ。
+   **等価性は全域性より難しい**が、struct を展開して比較するようにしてからは差が
+   縮んだ。ソルバに到達するのが 29本（全域性検査は 32本）、決着が 14本（同 19本）。
+   初回の測定では到達 17本・決着 3本で、差の大半は**この検査器側の実装**だった:
+   struct は SMV で `p_x`/`p_y` に展開されるので宣言名 `p` が verbatim には現れず、
+   `structs_*.ja` 12本を「改名されたので拒否」で落としていた。界面を
+   `_interface_smv_names` で同じように展開したら 11本が `equivalent` になった。
+
+   残る原理的な要因は、`P;P†` が元の倍の長さになり恒等写像の仕様が IC3 の負担を
+   増やすこと。真に予約語で改名されるのは `K`（`knapsack_c`）・`exp`
+   （`arith_roundtrip_c`）・`A`（`bwt_inverse_c`）の3本だけ。
+
+   **この測定が `smv.py` のバグを1件出した。** `structs_local_arr_c` と
+   `structs_local_arr2d_c` が `model-error`（nuXmv が
+   `multiple declaration of identifier: e_v` でモデルを拒否）になっていた。
+   `_uniq` は `self.varnames` しか見ないが、native 配列の**base 名は `varnames` に
+   入らない**（入るのはセル `e_v[0]` 等だけ）ので、同じ base 名の配列が2度宣言されると
+   同名のまま出る。同じモデルでスカラーの `e_w` / `e_w__1` は正しく改名されているのに
+   `e_v` だけ二重、という形で出た。`array_bases` を足して `_uniq` がそれも見るように
+   修正（`tests/verify/test_smv_array.py::UniqueNameTests`）。
+   **合成に固有のバグではない**——同名の struct `local`（配列フィールド持ち）が
+   2度現れるプログラムなら素の全域性検査でも踏む。コーパスにその形が無かっただけで、
+   `P;P†` が単一 `local` のプログラムを軒並み二重 `local` にしたので一斉に露出した。
 3. **BMC への退避**。IC3 がタイムアウトした場合に `check_invar_bmc` で「深さ k までは
    破れない」を得る。SAT 側の証明ログ（DRAT）まで取れば下界側の主張が認証つきになる。
 4. ~~`verify_corpus.py` の既定を揃える~~ → **2026-08-05 に実施**（proved 10 → 11）。
