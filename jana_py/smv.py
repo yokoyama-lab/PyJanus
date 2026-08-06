@@ -182,6 +182,15 @@ class _Compiler:
     self.array_decls: list[tuple[str, int]] = []
     #: cell name -> the array it belongs to, so a read can use `a[i]` directly.
     self.array_of: dict[str, str] = {}
+    #: Base names of the native array declarations handed out so far.  They
+    #: never reach `varnames` — only their *cells* (`a[0]`, `a[1]`, …) do — so
+    #: `_uniq` cannot see them there and would hand the same base out twice.
+    #: One model can genuinely declare the same array name twice: composing a
+    #: program with its own inverse (`equiv_smv`) inlines each `local` twice,
+    #: and nuXmv then refuses the model with "multiple declaration of
+    #: identifier".  The scalar path never had this because `_declare` appends
+    #: the name itself.
+    self.array_bases: set[str] = set()
     #: cell tuple -> its shape.  Cells are stored flat in row-major order, so a
     #: rank-2 array is a tuple of `rows * cols` names; the shape is what lets
     #: `A[i][j]` fold to one offset *and* lets each index be checked against its
@@ -210,7 +219,7 @@ class _Compiler:
 
   def _uniq(self, base: str) -> str:
     name = f"{base}_" if base in _SMV_RESERVED else base
-    while name in self.varnames:
+    while name in self.varnames or name in self.array_bases:
       self._uid += 1
       name = f"{base}__{self._uid}"
     return name
@@ -1242,6 +1251,7 @@ class _Compiler:
       # ("Expressions not allowed in array subscripts on left hand side of
       # assignments"), so the per-element conditional update stays.
       base = self._uniq(base_name)
+      self.array_bases.add(base)
       self.array_decls.append((base, size))
       cells = tuple(f"{base}[{i}]" for i in range(size))
       for i, cell in enumerate(cells):
