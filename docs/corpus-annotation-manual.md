@@ -232,15 +232,19 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 | 選ぶ値 | 見分け方 | 例 |
 |---|---|---|
 | `clean-accumulation` | 入力をそのまま残し、結果を別の変数に `+=` で積み上げる。`uncall` すると引き算で綺麗に戻る | 合計、内積、フィボナッチ、線形探索 |
-| `ancilla-flag` | 比較や判定の結果を、余分な1ビット（フラグ変数・フラグ配列）に記録している | 条件付き交換、二分探索 |
-| `history-stack` | 捨てる情報を**退避**している。**退避先はスタックでも配列でもよい**（`stack` + `push`/`pop` が典型だが、`heapgarbage[]` のような配列も同じ） | 可逆ユークリッド互除法、バブルソート、可逆ヒープ |
+| `ancilla-flag` | **単射化のために足した余分な出力**がある。比較結果の1ビットでもよいし、索引・剰余・回転量のような値でもよい。「これが無いと元に戻せない」が「求めたかった答えでもない」もの | 条件付き交換、BWT の索引、整数平方根の剰余 |
+| `history-stack` | 捨てる情報を**ステップごとに積んでいる**。退避先はスタックでも配列でもよい（`stack` + `push`/`pop` が典型だが、`heapgarbage[]` のような配列も同じ） | 可逆ユークリッド互除法、バブルソート、可逆ヒープ |
 | `bennett-uncompute` | 補助的な値を計算 → 使う → **同じ計算を逆向きに実行して消す**（`call f` の後に対応する `uncall f` があり、結果だけが残る） | 逆BWT |
 | `plain` | 上のどれも使っていない。もともと1対1対応（全単射）の計算で、入力を消費して出力に変えている | ランレングス符号化、グレイコード変換 |
 
-- **`ancilla-flag` と `history-stack` の境目は「1決定あたり1ビットか、捨てた値そのものか」**です。
-  入れ物がスタックか配列かは関係ありません（2026-08-06 に先生が確定）。
-  比較の結果を1ビット記録 → `ancilla-flag`。商・上書きされた値・順列・オフセットのように
-  **値を退避** → `history-stack`
+- **`ancilla-flag` と `history-stack` の境目は「1個の余分な出力か、ステップごとに積む記録か」**です
+  （2026-08-07 に先生が確定）。入れ物がスタックか配列かは関係ありません。
+  - **`ancilla-flag`** — 単射化のために足した余分な出力。個数が入力サイズに比例しない。
+    例: BWT の索引 `primary`、整数平方根の剰余、cycle lemma の回転量 `r`、比較1回の判定ビット
+  - **`history-stack`** — **ステップごとに**積む記録。長さが実行の長さに比例する。
+    例: 商のスタック、上書きされた値のログ、ソートの順列、選択ソートのオフセット表
+- **`plain` は「余分な出力が1つも無い」ときだけ**です。入力を消費して出力に変えるだけで、
+  戻すのに追加情報が要らないもの（グレイ符号、ランレングス符号化、Rule 90R、Zagier 対合）
 - **迷ったら `stack` という単語がファイルにあるか**を見てください。あれば `history-stack` が有力です
 - `plain` と `clean-accumulation` の区別: 実行後に**入力がそのまま残っていれば** `clean-accumulation`、
   **入力がゼロになって消えていれば** `plain`
@@ -699,12 +703,16 @@ grep -h "@source" tests/jana2014/fixtures/examples/*.ja | sort | uniq -c | sort 
 **判断が割れやすいのは次のパターン**です。
 
 - ~~スタックではなく配列に履歴を積む本~~ — **決着済み**（2026-08-06）。`binary_heap_g` の
-  ように配列に履歴を積む本も `history-stack` で正しい。**入れ物は分類に影響しない**。
-  32本の `_g` を確認したところ、既存の分類はこのルールで一貫している
-- **`bennett-uncompute` と `clean-accumulation` の境目** — 補助を作って消しているのか、
-  そもそも入力を壊していないのか
-- **`plain` が広すぎないか** — 26本が `plain` です。うち何本かは実は
-  `ancilla-flag`（`ancilla-flag` は4本しかありません）かもしれません
+  ように配列に履歴を積む本も `history-stack` で正しい。**入れ物は分類に影響しない**
+- ~~`plain` が広すぎないか~~ — **決着済み**（2026-08-07）。**単射化のために足した余分な
+  出力があれば `ancilla-flag`** と決まり、26本を見直して3本を移した（`bwt_plain_c` の
+  索引 `primary`、`cycle_lemma_c` の回転量 `r`、`sqrt_g` の剰余）。現在の内訳は
+  clean-accumulation 30 / history-stack 28 / plain 23 / bennett-uncompute 9 / ancilla-flag 7
+- **`bennett-uncompute` と `clean-accumulation` の境目**（**唯一残った論点**） —
+  `bennett_divmod_c` は補助 `xc` / `q` を汚してから `uncall` で消すので bennett、
+  `arith_roundtrip_c` は最初から入力を壊していないので clean、と判定した。
+  ただし **main はどちらも「call してから uncall」**で見かけが同じで、
+  この線引きは手続きの中身で決めている。妥当かを見てほしい
 
 現在の内訳は `python3 tools/check_corpus_meta.py report -q` で見られます。
 

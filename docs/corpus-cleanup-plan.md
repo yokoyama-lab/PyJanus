@@ -259,7 +259,11 @@ skip は理由つきで数えられているが、pytest の要約は総数し�
   `run_length_enc_c.ja`（plain・ゴミ無し）/ `bubble_sort_g.ja`（history-stack・順列がゴミ）/
   `gcd_g.ja`（history-stack・決定ログがゴミ）
 - 進捗: **97/97 注釈済み**（`@oracle` は 4/97）。技法の内訳は
-  clean-accumulation 30 / history-stack 28 / plain 26 / bennett-uncompute 9 / ancilla-flag 4
+  clean-accumulation 30 / history-stack 28 / plain 23 / bennett-uncompute 9 / ancilla-flag 7
+- **技法の分類基準は2026-08-06/07 に確定**（`docs/corpus-annotation-manual.md` §2 手順5）:
+  退避先がスタックか配列かは分類に影響しない。`ancilla-flag` は**単射化のために足した
+  余分な出力**（個数が入力サイズに比例しない）、`history-stack` は**ステップごとに積む
+  記録**（長さが実行長に比例）、`plain` は**余分な出力が1つも無い**もの
 
 ### 5.2 参照実装 (`tests/jana2014/reference/`)
 
