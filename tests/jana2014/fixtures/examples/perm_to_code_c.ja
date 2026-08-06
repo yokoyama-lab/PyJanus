@@ -1,6 +1,6 @@
 // @summary:   inversion code of a permutation: how many earlier entries are smaller
 // @technique: plain
-// @source:    David Gries, The Science of Programming, 1987, p. 270
+// @source:    David Gries, The Science of Programming, Springer, 1981, Chapter 21 "Inverting Perm_to_Code", p. 270; this fixture's X = (2,0,3,1,5,4) is the book's own example (21.10)
 // @confirmed: reproduced by tests/jana2014/reference/perm_to_code_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on x
 // @keep:      x
 // @expect: x[6] = {2, 0, 3, 1, 5, 4}

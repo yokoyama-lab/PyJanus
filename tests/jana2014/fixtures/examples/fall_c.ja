@@ -1,6 +1,6 @@
 // @summary:   free fall in integer steps: each tick the body gains g of speed and falls the average of its speed before and after (g*t + g/2)
 // @technique: plain
-// @source:    Ekima, Reversible-Graph-Algorithms-Janus- (fall.janus)
+// @source:    Sarah Vang Nohr, Reversible-Graph-Algorithms-Janus- (fall.janus), github.com/Ekima; the code of the bachelor's project cited by binary_heap_g
 // @confirmed: reproduced by tests/jana2014/reference/fall_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on g, h, h_r, t, t_end, t_end_r, t_r, v, v_r
 // @keep:      g, h, h_r, t, t_end, t_end_r, v
 // @expect: h_r = 80

@@ -1,6 +1,6 @@
 // @summary:   three ways to write Fibonacci reversibly, on the same n
 // @technique: clean-accumulation
-// @source:    Ekima, Reversible-Graph-Algorithms-Janus- (fibonacci.janus)
+// @source:    Sarah Vang Nohr, Reversible-Graph-Algorithms-Janus- (fibonacci.janus), github.com/Ekima; the code of the bachelor's project cited by binary_heap_g
 // @confirmed: reproduced by tests/jana2014/reference/fib_variants_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on an, ar, ax1, ax2, bn, br, bx1, bx2, n, x1, x2
 // @keep:      an, ar, br, x1, x2
 // @expect: fib  pair: x1=5 x2=8
