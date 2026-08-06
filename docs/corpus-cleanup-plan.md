@@ -23,6 +23,11 @@ glob で全数を拾っている:
 一致して行うプログラム」は全部通る。**どのファイルにも「何を計算するはずか」が
 機械可読な形で書かれていない**。
 
+> **2026-08-06 に解消**: `tests/jana2014/reference/` に **97本すべての Python 参照実装**を
+> 置き、`test_reference_impls.py` が実行結果と突き合わせる。Janus を移植したのではなく
+> アルゴリズムの定義から書いてあるので、**プログラムと食い違いうる**。97本すべて一致。
+> 5本だけ答えの一部を予測しきれず、`PARTIAL` で明示している（§5.2）。
+
 対照的に `tests/jana2014_in_out/programs/*.ja`（52本）は
 `// case: / in: / out: / error:` という機械検査される仕様ヘッダを持ち、
 `test_programs.py` が前進・後退の両方向で照合している。**片方にだけ良い規約がある。**
@@ -192,6 +197,20 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
   `run_length_enc.ja`（plain・ゴミ無し）/ `bubble_sort_g.ja`（history-stack・順列がゴミ）/
   `gcd_g.ja`（history-stack・決定ログがゴミ）
 - 進捗: **4/97**
+
+### 5.2 参照実装 (`tests/jana2014/reference/`)
+
+97本すべてに `expected()` を持つ Python モジュールがある。**Janus を読まず**（`jana_py`
+の import・`.ja` の読み込み・subprocess は衛生テストが禁止）、アルゴリズムの定義から
+書いてある。入力だけは Janus の `main` が持つ定数なので転記する。
+
+- **ゴミは主張しない**。決定ログ・商スタック・ソートの順列は「この可逆符号化の産物」で
+  あって関数の値ではない。`@keep` に載るものがここに載るもの
+- **答えを予測しきれない5本**（`adaptive_huffman` / `ppm_lite` / `matrixmult` /
+  `matrixmult_v1` / `binary_heap`）は `PARTIAL` に理由を書き、テストがその一覧を固定する。
+  勝手に増えない
+- AVL（`avl_insert` / `avl_delete` / `tree_sort`）は独立実装が **key/left/right/ht/root
+  の配列まで完全一致**した。ノード番号の割り当て規約まで含めて合うので、偶然ではない
 
 ### 5.1 見本3本を入れた時点で見つかった罠（対処済み）
 
