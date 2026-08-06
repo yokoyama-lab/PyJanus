@@ -655,16 +655,26 @@ FAIL gcd_g.ja
 > 検証済みの出典には **DOI を付けてあります**。DOI があるものは
 > `curl -s https://api.crossref.org/works/<DOI>` で誰でも即座に再確認できます。
 
-**残っているのは API で引けないもの**です。ここは実物に当たるしかありません。
+> **2026-08-07: 現物のある分も済ませました。** Google Drive にあった PDF と GitHub API で
+> 5種を照合し、**さらに3件の誤りを直しました**。
+>
+> - **Cormen のページ番号6件**を第4版（2022）の現物で特定。選択ソート Exercise 2.2-2 p.33 /
+>   バブルソート Problem 2-2 p.46 / マージソート §2.3.1 p.39 / ヒープソート §6.4 p.170 /
+>   クイックソート §7.1 p.183 / 計数ソート §8.2 p.209 / Lomuto PARTITION p.184
+> - **Gries は 1981 年**（1987 は ISBN 0-387-90641-X の刷）。**p.270 は正しく**、
+>   しかも第21章 "Inverting Perm_to_Code" の例 `X = (2,0,3,1,5,4) → X' = (0,0,2,1,4,4)` が
+>   `perm_to_code_c.ja` の入出力そのものだった
+> - **Lutz は 1986年4月1日付の Landauer 宛書簡**で、言語自体は「1982年ごろ Caltech の
+>   授業で Howard Derby と書いた」と本人が記している
+> - **`S. V. Nohr` は Sarah Vang Nøhr**（University of Copenhagen, 2015年1月17日,
+>   bachelor's project）。**そして `Ekima` はこの人の GitHub アカウント**だった
+>   （`fall_c` / `fib_variants_c` と `binary_heap_g` は同一著者の同一卒業研究）
 
-| 種類 | 残っている確認 |
-|---|---|
-| `Cormen et al., Introduction to Algorithms, 3rd ed., p. NNN` | **ページ番号（5本）**。第3版の現物が要る |
-| `David Gries, The Science of Programming, 1987, p. 270` | ページ番号。現物が要る |
-| `S. V. Nohr, Reversible Graph Algorithms, BSc thesis, Copenhagen University (2015)` | 学位論文。大学のリポジトリで探す |
-| `C. Lutz and H. Derby, Janus: a time-reversible language` | 1982年の学生レポート。書誌が確立していない |
-| `Ekima, Reversible-Graph-Algorithms-Janus-` | GitHub リポジトリ。現存するか |
-| `original` / `classical …` | 本当に独自か。既知の名前が付いていないか |
+**残っているのは書誌を主張していないもの**だけです。`Dijkstra's algorithm` /
+`Jarvis march` / `Rule 90R` / `Toffoli (CCNOT) and Fredkin (CSWAP) gates` /
+`reflected binary Gray code` / `Euclid, Elements VII.1-2` はアルゴリズムの名前であって
+ページも掲載誌も主張していないので、反証しようがありません。`original` /
+`classical …` が本当に独自かの判断だけが残ります。
 
 #### 10.1.1 散文中の誤帰属（12本・要判断）
 

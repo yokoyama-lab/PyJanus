@@ -1,6 +1,6 @@
 // @summary:   prime factorisation in ascending order; the input is consumed to zero
 // @technique: plain
-// @source:    C. Lutz and H. Derby, Janus: a time-reversible language
+// @source:    C. Lutz and H. Derby, Janus: a time-reversible language, Caltech class project (1982), described in C. Lutz's letter to R. Landauer, 1 April 1986
 // @confirmed: reproduced by tests/jana2014/reference/factor_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on fact, num
 // @keep:      fact
 // @expect: fact[20] = {0, 2, 2, 2, 3, 5, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
