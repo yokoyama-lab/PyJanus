@@ -1,6 +1,6 @@
-/* Passing an array of structs by reference: a struct-array parameter is one
- * positional ref (the array base), like a plain array; element fields index it
- * as elem*nfields + offset.  Exercises vjanus against PyJanus. */
+// Passing an array of structs by reference: a struct-array parameter is one
+// positional ref (the array base), like a plain array; element fields index it
+// as elem*nfields + offset.  Exercises vjanus against PyJanus.
 
 struct Cell {
     int v;

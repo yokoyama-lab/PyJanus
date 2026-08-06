@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Closest Pair of Points (brute force, squared distances)
 //
 // Points (x[i], y[i]) with integer coordinates.  Scans all pairs
@@ -8,7 +7,6 @@
 // Everything is integer arithmetic, so the result is exact.  0 energy.
 // Precondition: n >= 2.
 //   forward: res = min over i<j of (x[i]-x[j])^2 + (y[i]-y[j])^2
-//////////////////////////////////////////////////////////////////////
 
 procedure cp_sub(int x[], int y[], int n, int best, int big,
                  stack lg, stack bl)

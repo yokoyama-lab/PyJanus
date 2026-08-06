@@ -1,16 +1,14 @@
-/*
- * Reversible binary (min-)heap -- verified-subset-compliant version.
- * Realizes the reversible binary heap of "Energy-Efficient Algorithms"
- * (arXiv:1605.08448), Theorems 6.7/6.8 (insert / extract-min reversibly,
- * 0 energy).
- *
- * Adapted from S. V. Nohr, "Reversible Graph Algorithms", BSc thesis,
- * Copenhagen University (2015).  This variant avoids constructs outside
- * the verified (vjanus / RevExtract) and C-codegen subset: no
- * multi-declaration locals, no array literals, no size(), no error(),
- * and only constant array sizes.  Behaviour is identical to
- * minheap_Nohr2015.j.
- */
+// Reversible binary (min-)heap -- verified-subset-compliant version.
+// Realizes the reversible binary heap of "Energy-Efficient Algorithms"
+// (arXiv:1605.08448), Theorems 6.7/6.8 (insert / extract-min reversibly,
+// 0 energy).
+//
+// Adapted from S. V. Nohr, "Reversible Graph Algorithms", BSc thesis,
+// Copenhagen University (2015).  This variant avoids constructs outside
+// the verified (vjanus / RevExtract) and C-codegen subset: no
+// multi-declaration locals, no array literals, no size(), no error(),
+// and only constant array sizes.  Behaviour is identical to
+// minheap_Nohr2015.j.
 
 procedure insert(int A[], int heapsize, int key, int garbage[], int garbagecounter)
     heapsize += 1

@@ -14,7 +14,7 @@ prog.ja → lexer + parser (own AST) → lower → extracted run → final store
 The core is **frame-stacked**: locals live in depth-indexed frames (`L d x`), so
 a procedure that recurses while declaring a `local` gets fresh storage per
 activation. That is what lets `vjanus` run programs the earlier flat-store core
-could not (e.g. `stack-operations.ja`'s recursive `reverse`).
+could not (e.g. `stack_operations.ja`'s recursive `reverse`).
 
 ## Build & run
 

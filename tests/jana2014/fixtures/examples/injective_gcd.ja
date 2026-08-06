@@ -1,27 +1,25 @@
-/*
- * Level 6: reversible subtractive Euclidean GCD using a logged inner
- * procedure plus a Bennett wrapper.
- *
- * Subtractive GCD is the canonical "naturally irreversible" loop: each
- * iteration replaces the larger of (a, b) with (larger - smaller), but the
- * choice of which one was larger is forgotten unless we record it. We log
- * the choice into `log[steps]` so the inverter can replay the loop
- * backwards, then wrap the whole thing with the Bennett pattern from the
- * previous fixture to produce a fully garbage-free GCD:
- *
- *   call gcd_clean(a, b, g, log)
- *   //   a, b, log preserved
- *   //   g += gcd(a, b)
- *
- * Preconditions:
- *   a >= 0, b >= 0, not both zero.
- *   log[0..k-1] = 0 on entry, where k is large enough for the worst-case
- *   subtraction count (Fibonacci-like inputs are the slowest).
- *
- * The fi-assertion `log[steps] = 1` is exactly the entry test `a >= b`
- * remembered into the log, which is what makes the if reversible without
- * needing the inverter to recompute the comparison after the subtraction.
- */
+// Level 6: reversible subtractive Euclidean GCD using a logged inner
+// procedure plus a Bennett wrapper.
+//
+// Subtractive GCD is the canonical "naturally irreversible" loop: each
+// iteration replaces the larger of (a, b) with (larger - smaller), but the
+// choice of which one was larger is forgotten unless we record it. We log
+// the choice into `log[steps]` so the inverter can replay the loop
+// backwards, then wrap the whole thing with the Bennett pattern from the
+// previous fixture to produce a fully garbage-free GCD:
+//
+//   call gcd_clean(a, b, g, log)
+//   //   a, b, log preserved
+//   //   g += gcd(a, b)
+//
+// Preconditions:
+//   a >= 0, b >= 0, not both zero.
+//   log[0..k-1] = 0 on entry, where k is large enough for the worst-case
+//   subtraction count (Fibonacci-like inputs are the slowest).
+//
+// The fi-assertion `log[steps] = 1` is exactly the entry test `a >= b`
+// remembered into the log, which is what makes the if reversible without
+// needing the inverter to recompute the comparison after the subtraction.
 
 procedure gcd_destructive(int a, int b, int log[], int steps)
     from steps = 0 loop

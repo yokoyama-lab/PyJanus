@@ -1,8 +1,6 @@
-/*
- * Factorization program
- * Adapted version of example from "Janus: a time-reversible language" by
- * C. Lutz and H. Derby.
- */
+// Factorization program
+// Adapted version of example from "Janus: a time-reversible language" by
+// C. Lutz and H. Derby.
 
 procedure zeroi(int i, int fact[])
     from fact[i+1] = 0 loop

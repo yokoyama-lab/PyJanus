@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Floyd-Warshall (all-pairs shortest paths)
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.4,
@@ -14,7 +13,6 @@
 // (When a relaxation fires we have i!=k and j!=k, so the cells feeding
 // `sum` are never the cell being overwritten.)  0 energy.
 //   outputs: path[] (shortest paths), logs dlog/blog.
-//////////////////////////////////////////////////////////////////////
 
 procedure floyd_warshall(int path[], int v_n, stack dlog, stack blog)
   local int k = 0

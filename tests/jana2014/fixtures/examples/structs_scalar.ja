@@ -1,6 +1,6 @@
-/* Scalar struct values: field read/assign and field swap.
- * Exercises vjanus's struct lowering (each scalar field -> one slot;
- * `p.field` -> that slot) against PyJanus. */
+// Scalar struct values: field read/assign and field swap.
+// Exercises vjanus's struct lowering (each scalar field -> one slot;
+// `p.field` -> that slot) against PyJanus.
 
 struct Point {
     int x;

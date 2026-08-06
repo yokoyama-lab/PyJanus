@@ -1,33 +1,31 @@
-/*
- * Level 11: a reversible second-order Cellular Automaton (Rule 90).
- *
- * Wolfram Rule 90 has neighbor sum mod 2 as its update:
- *
- *     state[i, t+1] = state[i-1, t] XOR state[i+1, t]
- *
- * This is irreversible: many configurations collapse to the same
- * successor. The Margolus / Fredkin "second-order" trick recovers
- * reversibility by mixing the predecessor back into the update:
- *
- *     state[i, t+1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t-1]
- *
- * Because XOR is its own inverse the rule is exactly bijective on pairs
- * (state[t-1], state[t]), and the same expression run with t->t-2 inverts it:
- *
- *     state[i, t-1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t+1]
- *
- * Implementation. We hold two parallel arrays `a` and `b` that take
- * turns being "older" and "newer". Initially:
- *     a = state[t = -1]    (all zeros for the impulse demo)
- *     b = state[t =  0]    (the seed configuration)
- * Each step XORs the Rule-90 contribution from the newer array into the
- * older, which thereby becomes the newest generation. The parity of the
- * loop variable picks which array plays which role; that parity is the
- * if-fi post-condition, which is trivially preserved because t is the
- * read-only iterate variable.
- *
- * Boundary handling is periodic (cyclic ring of n cells).
- */
+// Level 11: a reversible second-order Cellular Automaton (Rule 90).
+//
+// Wolfram Rule 90 has neighbor sum mod 2 as its update:
+//
+//     state[i, t+1] = state[i-1, t] XOR state[i+1, t]
+//
+// This is irreversible: many configurations collapse to the same
+// successor. The Margolus / Fredkin "second-order" trick recovers
+// reversibility by mixing the predecessor back into the update:
+//
+//     state[i, t+1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t-1]
+//
+// Because XOR is its own inverse the rule is exactly bijective on pairs
+// (state[t-1], state[t]), and the same expression run with t->t-2 inverts it:
+//
+//     state[i, t-1] = (state[i-1, t] XOR state[i+1, t]) XOR state[i, t+1]
+//
+// Implementation. We hold two parallel arrays `a` and `b` that take
+// turns being "older" and "newer". Initially:
+//     a = state[t = -1]    (all zeros for the impulse demo)
+//     b = state[t =  0]    (the seed configuration)
+// Each step XORs the Rule-90 contribution from the newer array into the
+// older, which thereby becomes the newest generation. The parity of the
+// loop variable picks which array plays which role; that parity is the
+// if-fi post-condition, which is trivially preserved because t is the
+// read-only iterate variable.
+//
+// Boundary handling is periodic (cyclic ring of n cells).
 
 procedure step_xor(int target[], int source[], int n)
     iterate int i = 1 to n - 2

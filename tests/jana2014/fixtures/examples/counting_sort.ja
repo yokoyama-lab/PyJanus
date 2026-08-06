@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Counting Sort
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1.2.
@@ -11,7 +10,6 @@
 //   uncall  : restores B=0 and C=0 from (A, B, C).
 // A is preserved throughout; C is retained as the reversible log
 // (size k), matching Theorem 6.13 (Reversible Counting Sort).
-//////////////////////////////////////////////////////////////////////
 
 procedure csort(int a[], int n, int b[], int c[], int k)
   // (1) histogram: c[v] = number of elements of a equal to v

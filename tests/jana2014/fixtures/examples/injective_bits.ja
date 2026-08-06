@@ -1,19 +1,17 @@
-/*
- * A second level of reversible injective procedures, focused on bit-level
- * operations and a one-round Feistel network.
- *
- * Because every Janus procedure is bijective on its state, `uncall p(...)`
- * inverts `call p(...)` automatically. For the Gray-code and Feistel
- * examples we exercise the inverse by `uncall` rather than writing a
- * separate decode procedure.
- *
- *   1. xor_key       x -> x XOR k          (involution)
- *   2. xor_into      (x, y) -> (x, y XOR x) (involution; x preserved)
- *   3. gray_encode   (x, g) -> (x, g XOR x XOR (x >> 1))
- *                    g starts at 0, so g ends as the Gray code of x.
- *   4. feistel_round (L, R, K) -> (R, L XOR (R * K))
- *                    one round of a Feistel network with key K.
- */
+// A second level of reversible injective procedures, focused on bit-level
+// operations and a one-round Feistel network.
+//
+// Because every Janus procedure is bijective on its state, `uncall p(...)`
+// inverts `call p(...)` automatically. For the Gray-code and Feistel
+// examples we exercise the inverse by `uncall` rather than writing a
+// separate decode procedure.
+//
+//   1. xor_key       x -> x XOR k          (involution)
+//   2. xor_into      (x, y) -> (x, y XOR x) (involution; x preserved)
+//   3. gray_encode   (x, g) -> (x, g XOR x XOR (x >> 1))
+//                    g starts at 0, so g ends as the Gray code of x.
+//   4. feistel_round (L, R, K) -> (R, L XOR (R * K))
+//                    one round of a Feistel network with key K.
 
 procedure xor_key(int x, int k)
     x ^= k

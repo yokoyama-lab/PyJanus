@@ -1,6 +1,6 @@
-/* Passing a struct by reference: a struct actual expands to one ref per field
- * at the call site, and a struct formal occupies one positional ref per field.
- * Exercises vjanus's struct-parameter lowering against PyJanus. */
+// Passing a struct by reference: a struct actual expands to one ref per field
+// at the call site, and a struct formal occupies one positional ref per field.
+// Exercises vjanus's struct-parameter lowering against PyJanus.
 
 struct Point {
     int x;

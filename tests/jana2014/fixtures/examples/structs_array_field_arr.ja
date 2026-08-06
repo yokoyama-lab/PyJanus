@@ -1,8 +1,8 @@
-/* An array of structs whose fields are themselves arrays: g[k].v[i].  Each
- * element occupies `size` cells (size accounts for the array field), so the
- * cell of g[k].v[i] is k*size + offset(v) + Cantor(i).  Exercises the combined
- * struct-array + array-field lowering against PyJanus, including a cross-element
- * read. */
+// An array of structs whose fields are themselves arrays: g[k].v[i].  Each
+// element occupies `size` cells (size accounts for the array field), so the
+// cell of g[k].v[i] is k*size + offset(v) + Cantor(i).  Exercises the combined
+// struct-array + array-field lowering against PyJanus, including a cross-element
+// read.
 
 struct Row {
     int v[3];

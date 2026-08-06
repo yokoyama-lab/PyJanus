@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Dijkstra (single-source shortest paths, O(V^2))
 //
 // Weighted adjacency matrix w[u*V+v] (0 = no edge, weights > 0).
@@ -10,9 +9,8 @@
 // (the branch mutates its own condition).  0 energy.
 // Unreached vertices keep dist = inf.
 //   outputs: dist[], visited[] (all 1), logs dlog/blog.
-//////////////////////////////////////////////////////////////////////
-
 // u := index of unvisited vertex with minimum dist (fold with logs)
+
 procedure minv_sub(int dist[], int visited[], int v_n, int u, stack lg, stack bl)
   local int j = 0
     from  j = 0

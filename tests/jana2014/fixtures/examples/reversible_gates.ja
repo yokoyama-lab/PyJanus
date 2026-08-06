@@ -9,6 +9,7 @@
 // Both preserve their controls, so each is its own inverse (`uncall` undoes it);
 // together they are universal for reversible computation. Applied across four
 // bit-lanes with assorted controls; lane k swaps/flips per ctrl[k].
+
 procedure toffoli(int a, int b, int t)
     t ^= a * b
 

@@ -1,6 +1,3 @@
-
-
-
 procedure crout(int A[][], int LDU[][], int n)
   local int j = 0
   local int i = 0
@@ -165,4 +162,3 @@ procedure main()
   call multLD(LDU, B, n)
   call multU(LDU, B, n)
   uncall crout(A, LDU, n)
-

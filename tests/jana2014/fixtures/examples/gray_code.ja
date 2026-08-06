@@ -6,6 +6,7 @@
 // Input is baked into main and the encoded vector is left in the store, so
 // tests/jana2014/test_vjanus_corpus.py diffs the Coq-extracted `run` against
 // PyJanus on it. Here bits = 1010 (b3,b1 set) -> Gray 1111.
+
 procedure gray(int bits[])
     iterate int i = 0 to 2
         bits[i] ^= bits[i+1]

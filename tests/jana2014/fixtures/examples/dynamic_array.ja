@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Dynamic Array
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.2,
@@ -18,9 +17,8 @@
 //   add(e)   : append e at the end                (uses/produces 1 dbit)
 //   delete() : extract & return the last element  (uses/produces 1 dbit)
 //   query(i) : copy out data[i]                    (reversible read)
-//////////////////////////////////////////////////////////////////////
-
 // append e; double capacity first if the array is full
+
 procedure da_add(int data[], int length, int cap, stack dbit, int e)
   if length = cap then
     cap *= 2                   // reallocate: double the capacity

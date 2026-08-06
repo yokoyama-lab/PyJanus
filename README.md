@@ -152,8 +152,8 @@ Example programs live under dialect-specific test fixtures:
 | `build-dict.ja` | Dictionary construction with macros and structs |
 | `factor.ja` | Integer factorization |
 | `sqrt.ja` | Integer square root |
-| `run-length-enc.ja` | Run-length encoding |
-| `stack-operations.ja` | Stack push/pop operations |
+| `run_length_enc.ja` | Run-length encoding |
+| `stack_operations.ja` | Stack push/pop operations |
 | `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
 | `reversible_ca_ring.ja` | Rule 90R on a cyclic ring (periodic boundary) |
 | `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |

@@ -1,24 +1,22 @@
-/*
- * Level 8: modular arithmetic and a 3-round Feistel mini block cipher.
- *
- * Modular addition (x + y) mod m is reversible if we record the "did we
- * subtract m" overflow as a single log bit; after the subtract x < m, but
- * x < m is also true in the no-subtract case, so no value-level
- * post-condition distinguishes the two branches. Same `fi log = 1` trick
- * as in the sort network.
- *
- * Using mod_add as the round-mixing primitive, we build a 3-round Feistel
- * cipher operating on (L, R) in Z/m with round keys (K0, K1, K2):
- *
- *     for k in (K0, K1, K2):
- *         t = R XOR k
- *         L = (L + t) mod m
- *         swap(L, R)
- *
- * The XOR is computed into a fresh ancilla, mod_add mutates L, then the
- * ancilla is uncomputed (XOR is its own inverse). uncall of the whole
- * cipher decrypts using the three log bits, one per round.
- */
+// Level 8: modular arithmetic and a 3-round Feistel mini block cipher.
+//
+// Modular addition (x + y) mod m is reversible if we record the "did we
+// subtract m" overflow as a single log bit; after the subtract x < m, but
+// x < m is also true in the no-subtract case, so no value-level
+// post-condition distinguishes the two branches. Same `fi log = 1` trick
+// as in the sort network.
+//
+// Using mod_add as the round-mixing primitive, we build a 3-round Feistel
+// cipher operating on (L, R) in Z/m with round keys (K0, K1, K2):
+//
+//     for k in (K0, K1, K2):
+//         t = R XOR k
+//         L = (L + t) mod m
+//         swap(L, R)
+//
+// The XOR is computed into a fresh ancilla, mod_add mutates L, then the
+// ancilla is uncomputed (XOR is its own inverse). uncall of the whole
+// cipher decrypts using the three log bits, one per round.
 
 procedure mod_add(int x, int y, int m, int log)
     x += y

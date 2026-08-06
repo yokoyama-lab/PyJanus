@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible 0/1 Knapsack (dynamic programming)
 //
 // K[i][w] = best value achievable with items 1..i and capacity w:
@@ -9,7 +8,6 @@
 // stable and the DP is reversible by construction -- no logging
 // (0 energy), as in lcs.j / edit_distance.j.  Answer: K[n][W].
 // Items are 1-indexed (wt[0], val[0] unused).
-//////////////////////////////////////////////////////////////////////
 
 procedure knapsack(int wt[], int val[], int n, int cap, int K[])
   local int i = 1

@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Edit Distance (Levenshtein, dynamic programming)
 //
 // D[i][j] = minimum insert/delete/substitute operations to turn x[1..i]
@@ -9,7 +8,6 @@
 // once from neighbours only, so all branch conditions are stable and the
 // DP is reversible by construction -- no logging (0 energy).
 // D[m][n] is the edit distance.
-//////////////////////////////////////////////////////////////////////
 
 procedure edit_distance(int x[], int m, int y[], int n, int D[])
   // base row D[0][j] = j  and column D[i][0] = i

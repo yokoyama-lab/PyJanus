@@ -1,22 +1,20 @@
-/*
- * Level 5: Bennett's compute-uncompute trick.
- *
- * Janus guarantees that every procedure is bijective on its full state,
- * but a "natural" algorithm often consumes some of its inputs to do
- * useful work. The classical Bennett pattern restores cleanliness:
- *
- *   1. allocate a fresh ancilla
- *   2. call f(input, ancilla)       -- corrupts input, fills ancilla
- *   3. copy the answer to the output -- (e.g. `out += ancilla`)
- *   4. uncall f(input, ancilla)      -- restores input, clears ancilla
- *
- * The end state has the answer in `out` and no garbage anywhere.
- *
- * Below we use integer divmod-by-subtraction as the destructive helper.
- * Repeated `x -= d` is the most natural way to compute (q, r) but it
- * eats x. The wrapper `divmod_clean` keeps x intact.
- */
-
+// Level 5: Bennett's compute-uncompute trick.
+//
+// Janus guarantees that every procedure is bijective on its full state,
+// but a "natural" algorithm often consumes some of its inputs to do
+// useful work. The classical Bennett pattern restores cleanliness:
+//
+//   1. allocate a fresh ancilla
+//   2. call f(input, ancilla)       -- corrupts input, fills ancilla
+//   3. copy the answer to the output -- (e.g. `out += ancilla`)
+//   4. uncall f(input, ancilla)      -- restores input, clears ancilla
+//
+// The end state has the answer in `out` and no garbage anywhere.
+//
+// Below we use integer divmod-by-subtraction as the destructive helper.
+// Repeated `x -= d` is the most natural way to compute (q, r) but it
+// eats x. The wrapper `divmod_clean` keeps x intact.
+//
 // Destructive divmod by subtraction. Preconditions: x >= 0, d > 0.
 //
 // Forward:  (x, d, q=0) -> (x mod d, d, x / d)
@@ -24,6 +22,7 @@
 //
 // Reversible because the entry condition `q = 0` holds only on the first
 // iteration, so the inverter knows where the loop began.
+
 procedure divmod_destructive(int x, int d, int q)
     from q = 0 loop
         x -= d

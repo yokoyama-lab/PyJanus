@@ -1,36 +1,34 @@
-/*
- * Level 12: a more cipher-like block cipher with S-box and round key
- * schedule.
- *
- * 16-bit block (L, R) of two 4-bit nibbles, 4 rounds of Feistel,
- * round function f(R, K) = sbox[R XOR K], round keys derived from an
- * 8-bit master key by XOR with per-round constants. The S-box is the
- * PRESENT cipher's 4-bit S-box (a well-studied lightweight crypto
- * primitive); the inverse table is precomputed so the lookup
- *
- *     x <- sbox[x]
- *
- * is implemented by the standard "swap with table, subtract through the
- * inverse" pattern, which is reversible because sbox is a bijection.
- *
- *      procedure apply_sbox(int x, int sbox[], int inv_sbox[])
- *          local int u = 0
- *              u += sbox[x]            // u  = sbox[x_old]
- *              x <=> u                 // x  = sbox[x_old], u = x_old
- *              u -= inv_sbox[x]        // u -= inv_sbox[sbox[x_old]] = 0
- *          delocal int u = 0
- *
- * Each round mixes f(R, K) into L by XOR, uncomputes the ancilla, then
- * swaps. uncall of the whole cipher is the decryption; uncall of the
- * key schedule clears the derived round keys back to zeros, leaving
- * only the master key.
- *
- * Worked example. Master key 6, plaintext (L=5, R=10):
- *   round keys     = (6, 3, 13, 8)
- *   ciphertext     = (4, 8)
- *   decrypt back   = (5, 10)
- *   rk cleared     = (0, 0, 0, 0)
- */
+// Level 12: a more cipher-like block cipher with S-box and round key
+// schedule.
+//
+// 16-bit block (L, R) of two 4-bit nibbles, 4 rounds of Feistel,
+// round function f(R, K) = sbox[R XOR K], round keys derived from an
+// 8-bit master key by XOR with per-round constants. The S-box is the
+// PRESENT cipher's 4-bit S-box (a well-studied lightweight crypto
+// primitive); the inverse table is precomputed so the lookup
+//
+//     x <- sbox[x]
+//
+// is implemented by the standard "swap with table, subtract through the
+// inverse" pattern, which is reversible because sbox is a bijection.
+//
+//      procedure apply_sbox(int x, int sbox[], int inv_sbox[])
+//          local int u = 0
+//              u += sbox[x]            // u  = sbox[x_old]
+//              x <=> u                 // x  = sbox[x_old], u = x_old
+//              u -= inv_sbox[x]        // u -= inv_sbox[sbox[x_old]] = 0
+//          delocal int u = 0
+//
+// Each round mixes f(R, K) into L by XOR, uncomputes the ancilla, then
+// swaps. uncall of the whole cipher is the decryption; uncall of the
+// key schedule clears the derived round keys back to zeros, leaving
+// only the master key.
+//
+// Worked example. Master key 6, plaintext (L=5, R=10):
+//   round keys     = (6, 3, 13, 8)
+//   ciphertext     = (4, 8)
+//   decrypt back   = (5, 10)
+//   rk cleared     = (0, 0, 0, 0)
 
 procedure apply_sbox(int x, int sbox[], int inv_sbox[])
     local int u = 0

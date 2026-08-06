@@ -5,6 +5,7 @@
 // interpreters — vjanus (frame core) and driverar (flat core) — are diffed
 // against PyJanus on this program by the corpus tests. x=12 (1100), y=10 (1010):
 //   x & y = 8 (1000),  x | y = 14 (1110),  x ^ y = 6 (0110).
+
 procedure main()
     int x
     int y

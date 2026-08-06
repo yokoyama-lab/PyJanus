@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Kosaraju SCC (strongly connected components)
 //
 // Two reversible DFS passes over adjacency matrices:
@@ -11,7 +10,6 @@
 // one decision bit on `blog` (pushed at branch end, top() as the exit
 // assertion).  0 energy.
 //   outputs: comp[], ncomp, order[] (finish order), visited[], blog.
-//////////////////////////////////////////////////////////////////////
 
 procedure dfs1(int adj[], int v_n, int u, int visited[], int order[],
                int cnt, stack blog)

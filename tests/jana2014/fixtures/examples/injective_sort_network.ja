@@ -1,26 +1,24 @@
-/*
- * Level 7: a reversible sorting network.
- *
- * Each comparator is a 2-element compare-and-swap. Sorting throws away the
- * original ordering, so a *bare* comparator is not reversible. The standard
- * Janus trick is to record the swap decision into a log bit per comparator
- * and turn the if-fi post-condition into a check on that log:
- *
- *     if a > b then
- *         a <=> b
- *         log += 1
- *     fi log = 1
- *
- * With distinct comparator outputs there is no value-level post-condition
- * that distinguishes "swap happened" from "no swap" (both end with a <= b),
- * so the per-comparator log is what makes the comparator — and hence the
- * whole network — reversible. The inverter inspects each log[k] to know
- * whether that comparator swapped, and undoes accordingly.
- *
- * We use the optimal 5-comparator network for 4 elements:
- *
- *     (0,1) (2,3) (0,2) (1,3) (1,2)
- */
+// Level 7: a reversible sorting network.
+//
+// Each comparator is a 2-element compare-and-swap. Sorting throws away the
+// original ordering, so a *bare* comparator is not reversible. The standard
+// Janus trick is to record the swap decision into a log bit per comparator
+// and turn the if-fi post-condition into a check on that log:
+//
+//     if a > b then
+//         a <=> b
+//         log += 1
+//     fi log = 1
+//
+// With distinct comparator outputs there is no value-level post-condition
+// that distinguishes "swap happened" from "no swap" (both end with a <= b),
+// so the per-comparator log is what makes the comparator — and hence the
+// whole network — reversible. The inverter inspects each log[k] to know
+// whether that comparator swapped, and undoes accordingly.
+//
+// We use the optimal 5-comparator network for 4 elements:
+//
+//     (0,1) (2,3) (0,2) (1,3) (1,2)
 
 procedure cswap(int a, int b, int log)
     if a > b then

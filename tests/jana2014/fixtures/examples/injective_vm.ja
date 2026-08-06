@@ -1,25 +1,23 @@
-/*
- * Level 10: a reversible stack-machine VM.
- *
- * Each instruction is a (opcode, arg) pair, stored in two parallel arrays.
- * `run` iterates over the program and dispatches to `step`, which handles
- * the four opcodes by chained if-fi branches. The fi post-condition is
- * just the opcode itself (`fi op = k`), which is trivially preserved
- * because `op` is read-only inside `step` -- no log bit needed.
- *
- * Opcodes (all reversible on the stack):
- *
- *   0  PUSH arg   <...>          ->  <..., arg>
- *   1  ADD        <..., a, b>    ->  <..., a, a + b>
- *   2  SUB        <..., a, b>    ->  <..., a, b - a>
- *   3  SWAP       <..., a, b>    ->  <..., b, a>
- *
- * ADD and SUB preserve the lower operand, mirroring the standard
- * reversible-add convention; that lets the inverse instruction (uncall
- * step on the same opcode) recover both operands without any history.
- * uncall of the full program runs every instruction backwards and
- * leaves the stack in its initial (empty) state.
- */
+// Level 10: a reversible stack-machine VM.
+//
+// Each instruction is a (opcode, arg) pair, stored in two parallel arrays.
+// `run` iterates over the program and dispatches to `step`, which handles
+// the four opcodes by chained if-fi branches. The fi post-condition is
+// just the opcode itself (`fi op = k`), which is trivially preserved
+// because `op` is read-only inside `step` -- no log bit needed.
+//
+// Opcodes (all reversible on the stack):
+//
+//   0  PUSH arg   <...>          ->  <..., arg>
+//   1  ADD        <..., a, b>    ->  <..., a, a + b>
+//   2  SUB        <..., a, b>    ->  <..., a, b - a>
+//   3  SWAP       <..., a, b>    ->  <..., b, a>
+//
+// ADD and SUB preserve the lower operand, mirroring the standard
+// reversible-add convention; that lets the inverse instruction (uncall
+// step on the same opcode) recover both operands without any history.
+// uncall of the full program runs every instruction backwards and
+// leaves the stack in its initial (empty) state.
 
 procedure step(int op, int arg, stack s)
     if op = 0 then

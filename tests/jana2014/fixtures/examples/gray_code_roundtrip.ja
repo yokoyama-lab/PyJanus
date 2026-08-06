@@ -4,6 +4,7 @@
 // the initial one (bits = 1010, i.e. bits[3] and bits[1] set). The verified
 // vjanus interpreter and PyJanus are diffed on this by test_vjanus_corpus.py,
 // pinning encode/decode reversibility through the Coq-extracted `run`.
+
 procedure gray(int bits[])
     iterate int i = 0 to 2
         bits[i] ^= bits[i+1]

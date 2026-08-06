@@ -1,8 +1,8 @@
-/* Reverse of a stack-building procedure: `uncall build` must pop back exactly
- * what `call build` pushed, exercising vjanus's push/pop lowering (a top-counter
- * bump plus an XOR swap, since the frame core has no Swap primitive) and the
- * stack-formal by-reference convention in the BACKWARD direction.  Checked
- * against PyJanus. */
+// Reverse of a stack-building procedure: `uncall build` must pop back exactly
+// what `call build` pushed, exercising vjanus's push/pop lowering (a top-counter
+// bump plus an XOR swap, since the frame core has no Swap primitive) and the
+// stack-formal by-reference convention in the BACKWARD direction.  Checked
+// against PyJanus.
 
 procedure build(stack s, int base)
     local int i = 0

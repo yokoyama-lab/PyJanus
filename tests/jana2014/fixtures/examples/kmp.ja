@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Knuth-Morris-Pratt (occurrence counting)
 //
 // The broken kmp.j/kmp1.j guarded their outer loops on the KMP prefix
@@ -14,7 +13,6 @@
 //   kmp_count : cnt = number of (possibly overlapping) occurrences of
 //           p[0..m-1] in t[0..n-1]
 // Preconditions: m >= 1, n >= 1.
-//////////////////////////////////////////////////////////////////////
 
 procedure compf(int p[], int m, int f[], stack gq, stack gb)
   local int j = 0

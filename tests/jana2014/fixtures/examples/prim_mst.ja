@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Prim MST (minimum spanning tree, O(V^2))
 //
 // Undirected weighted graph as a symmetric adjacency matrix w[u*V+v]
@@ -11,9 +10,8 @@
 // Preconditions: graph connected, key[] starts inf except key[0] = 0,
 // parent[] starts -1.
 //   outputs: total = MST weight, parent[] (MST edges), intree[], logs.
-//////////////////////////////////////////////////////////////////////
-
 // u := index of non-tree vertex with minimum key (fold with logs)
+
 procedure minv_sub(int key[], int intree[], int v_n, int u, stack lg, stack bl)
   local int j = 0
     from  j = 0

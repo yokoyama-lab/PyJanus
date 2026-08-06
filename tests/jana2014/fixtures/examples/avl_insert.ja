@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible AVL Tree -- Insert (with rotations)
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3,
@@ -18,9 +17,8 @@
 //             rebalancing branch (whose condition it mutates).
 // Every step is reversible => 0 energy.  `uncall insert` deletes the key
 // and restores the previous tree exactly.
-//////////////////////////////////////////////////////////////////////
-
 // arr[node] := val, logging the overwritten pointer
+
 procedure setchild(int arr[], int node, int val, stack alog)
   local int old = 0
     old ^= arr[node]

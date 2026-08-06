@@ -1,7 +1,7 @@
-/* Local struct with array fields: `local struct Box e = a` where Box has a
- * 1-D array field v[3] and a scalar field w.  vjanus uses a flat RL slot with
- * AAsn(OAdd)/AAsn(OSub) instead of Enter/Exit.  Exercises the new lstructs_flat
- * path against PyJanus. */
+// Local struct with array fields: `local struct Box e = a` where Box has a
+// 1-D array field v[3] and a scalar field w.  vjanus uses a flat RL slot with
+// AAsn(OAdd)/AAsn(OSub) instead of Enter/Exit.  Exercises the new lstructs_flat
+// path against PyJanus.
 
 struct Box {
     int v[3];
