@@ -1,17 +1,15 @@
-/*
- * A third level of reversible injective procedures: bijections on whole
- * arrays, built with `iterate` loops where each step is a local injection.
- *
- *   1. cumsum         arr -> running prefix sum of arr (bijection).
- *                     Inverse is `uncall cumsum`, which reproduces the
- *                     classical "difference" sequence.
- *   2. xor_chain      arr -> running XOR. Same shape as cumsum but with
- *                     XOR; doubly an involution at each step.
- *   3. odd_even_swap  swap arr[2k] and arr[2k+1] for every k (involution).
- *   4. feistel_block  apply `rounds` Feistel rounds to (L, R) under key K.
- *                     Demonstrates how iteration composes reversible
- *                     procedures into a stronger one.
- */
+// A third level of reversible injective procedures: bijections on whole
+// arrays, built with `iterate` loops where each step is a local injection.
+//
+//   1. cumsum         arr -> running prefix sum of arr (bijection).
+//                     Inverse is `uncall cumsum`, which reproduces the
+//                     classical "difference" sequence.
+//   2. xor_chain      arr -> running XOR. Same shape as cumsum but with
+//                     XOR; doubly an involution at each step.
+//   3. odd_even_swap  swap arr[2k] and arr[2k+1] for every k (involution).
+//   4. feistel_block  apply `rounds` Feistel rounds to (L, R) under key K.
+//                     Demonstrates how iteration composes reversible
+//                     procedures into a stronger one.
 
 procedure cumsum(int arr[], int n)
     iterate int i = 1 to n - 1

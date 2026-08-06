@@ -1,6 +1,6 @@
-/* Re-passing a flat struct formal to another procedure: exercises the chain
- * fstructs_flat -> struct_var_field_refs -> [RF(base)] -> argsubst.
- * inner() receives the same base ref as outer(), accesses s.v[0]. */
+// Re-passing a flat struct formal to another procedure: exercises the chain
+// fstructs_flat -> struct_var_field_refs -> [RF(base)] -> argsubst.
+// inner() receives the same base ref as outer(), accesses s.v[0].
 
 struct Box {
     int v[3];

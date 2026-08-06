@@ -1,4 +1,5 @@
 // iterative factorial: linear time
+
 procedure factI(int n, int res)
   res ^= 1
   local int i = 0

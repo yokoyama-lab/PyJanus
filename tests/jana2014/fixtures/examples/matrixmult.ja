@@ -1,4 +1,3 @@
-
 procedure crout(int LDU[][], int n)
   iterate int j = 0 to n-1
     iterate int i = j to n-1
@@ -89,4 +88,3 @@ procedure main()
     call multU(A, B, n)
   end
   call crout(B, n)
-

@@ -1,36 +1,34 @@
-/*
- * Level 8: a reversible Lomuto partition (the heart of quicksort).
- *
- * Partitioning rearranges a[lo..hi] around the pivot a[hi] so that every
- * element < pivot precedes it and every element >= pivot follows it. A bare
- * partition is NOT reversible: it discards which interleaving of small/large
- * elements the input had (many inputs map to the same partitioned layout).
- *
- * As with the reversible sorting network, we record one decision bit per
- * scanned position into flags[]:
- *
- *     if a[j] < a[hi] then            // does a[j] belong left of the pivot?
- *         if j > lo + p then          // is its slot strictly left of j?
- *             a[lo + p] <=> a[j]      // ...then move it there (avoid self-swap)
- *         fi j > lo + p
- *         p += 1
- *         flags[j - lo] += 1
- *     fi flags[j - lo] = 1            // close on the recorded bit, not the value
- *
- * After the swap a[j] no longer holds its original value, so the post-condition
- * must test the recorded flag, not `a[j] < a[hi]` -- exactly the trick that
- * makes the network's comparator reversible. The inner `j > lo + p` guard is
- * positional (data-independent, identical forwards and backwards), so it needs
- * no history: it only suppresses the degenerate a[i] <=> a[i] self-swap, which
- * Janus rejects as an alias.
- *
- * p enters 0 and exits as the count of elements < pivot, i.e. the pivot's final
- * index is lo + p. flags[] enters all-zero with at least (hi - lo) slots.
- *
- *   uncall partition replays the bits in reverse: it scatters each flagged
- *   element back to where it came from, clearing flags and p -- the partition's
- *   inverse, for free.
- */
+// Level 8: a reversible Lomuto partition (the heart of quicksort).
+//
+// Partitioning rearranges a[lo..hi] around the pivot a[hi] so that every
+// element < pivot precedes it and every element >= pivot follows it. A bare
+// partition is NOT reversible: it discards which interleaving of small/large
+// elements the input had (many inputs map to the same partitioned layout).
+//
+// As with the reversible sorting network, we record one decision bit per
+// scanned position into flags[]:
+//
+//     if a[j] < a[hi] then            // does a[j] belong left of the pivot?
+//         if j > lo + p then          // is its slot strictly left of j?
+//             a[lo + p] <=> a[j]      // ...then move it there (avoid self-swap)
+//         fi j > lo + p
+//         p += 1
+//         flags[j - lo] += 1
+//     fi flags[j - lo] = 1            // close on the recorded bit, not the value
+//
+// After the swap a[j] no longer holds its original value, so the post-condition
+// must test the recorded flag, not `a[j] < a[hi]` -- exactly the trick that
+// makes the network's comparator reversible. The inner `j > lo + p` guard is
+// positional (data-independent, identical forwards and backwards), so it needs
+// no history: it only suppresses the degenerate a[i] <=> a[i] self-swap, which
+// Janus rejects as an alias.
+//
+// p enters 0 and exits as the count of elements < pivot, i.e. the pivot's final
+// index is lo + p. flags[] enters all-zero with at least (hi - lo) slots.
+//
+//   uncall partition replays the bits in reverse: it scatters each flagged
+//   element back to where it came from, clearing flags and p -- the partition's
+//   inverse, for free.
 
 procedure partition(int a[], int lo, int hi, int flags[], int p)
     local int j = lo

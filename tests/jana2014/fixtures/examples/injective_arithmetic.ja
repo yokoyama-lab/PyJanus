@@ -1,23 +1,21 @@
-/*
- * A fourth level of reversible injective procedures: arithmetic built from
- * the standard Janus "multiply by a known constant" pattern
- *
- *     local int t = y
- *         y += t * c
- *         y -= t
- *     delocal int t = y / c
- *
- * which leaves y = y_old * c (c nonzero). The delocal closes the loop by
- * dividing the new y back to y_old exactly, since y is by construction a
- * multiple of c.
- *
- *   1. factorial(n, result)   result = n!,        n preserved.
- *   2. ipow(base, exp, result) result = base^exp,  base, exp preserved.
- *   3. horner(x, y, coeffs, n) y += p(x), with p given in Horner form.
- *
- * All three require `result`/`y` to be 0 at entry; on exit, `uncall`
- * restores that zero.
- */
+// A fourth level of reversible injective procedures: arithmetic built from
+// the standard Janus "multiply by a known constant" pattern
+//
+//     local int t = y
+//         y += t * c
+//         y -= t
+//     delocal int t = y / c
+//
+// which leaves y = y_old * c (c nonzero). The delocal closes the loop by
+// dividing the new y back to y_old exactly, since y is by construction a
+// multiple of c.
+//
+//   1. factorial(n, result)   result = n!,        n preserved.
+//   2. ipow(base, exp, result) result = base^exp,  base, exp preserved.
+//   3. horner(x, y, coeffs, n) y += p(x), with p given in Horner form.
+//
+// All three require `result`/`y` to be 0 at entry; on exit, `uncall`
+// restores that zero.
 
 procedure factorial(int n, int result)
     result += 1

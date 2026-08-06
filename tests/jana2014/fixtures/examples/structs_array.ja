@@ -1,6 +1,6 @@
-/* Arrays of structs: element field access `v[i].f`, cross-element field
- * arithmetic, and a field swap across elements.  Exercises vjanus's
- * struct-array lowering (cell index = element*nfields + field offset). */
+// Arrays of structs: element field access `v[i].f`, cross-element field
+// arithmetic, and a field swap across elements.  Exercises vjanus's
+// struct-array lowering (cell index = element*nfields + field offset).
 
 struct Pair {
     int a;

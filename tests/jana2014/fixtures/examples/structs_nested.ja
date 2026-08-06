@@ -1,9 +1,9 @@
-/* Nested struct-by-reference: a procedure passes its OWN struct formals onward
- * to a second procedure, so the per-field ref expansion happens at a nested
- * (non-main) call site (vjanus's struct_var_field_refs via the `fstructs`
- * table, not `gstructs`).  The whole composite is then run backwards with
- * `uncall`, exercising the reverse lowering of a nested by-reference struct
- * call.  Checked against PyJanus. */
+// Nested struct-by-reference: a procedure passes its OWN struct formals onward
+// to a second procedure, so the per-field ref expansion happens at a nested
+// (non-main) call site (vjanus's struct_var_field_refs via the `fstructs`
+// table, not `gstructs`).  The whole composite is then run backwards with
+// `uncall`, exercising the reverse lowering of a nested by-reference struct
+// call.  Checked against PyJanus.
 
 struct Vec {
     int x;

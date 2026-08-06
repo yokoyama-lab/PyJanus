@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Breadth-First Search
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.2,
@@ -12,7 +11,6 @@
 // decision bit on `blog` (did we discover v here?), which is what makes
 // the visited-test reversible.  Nothing is destroyed => 0 energy.
 //   outputs: dist[], visited[], queue[] (visit order), blog.
-//////////////////////////////////////////////////////////////////////
 
 procedure bfs(int adj[], int v_n, int src,
               int dist[], int visited[], int queue[], int head, int tail,

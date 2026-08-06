@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Longest Common Subsequence (dynamic programming)
 //
 // Fills the classic LCS table L[i][j] = length of the LCS of x[1..i] and
@@ -10,7 +9,6 @@
 // branch condition reads only neighbours (never the cell being written).
 // Hence the DP is reversible BY CONSTRUCTION -- no logging needed
 // (0 energy).  L[m][n] holds the answer.
-//////////////////////////////////////////////////////////////////////
 
 procedure lcs(int x[], int m, int y[], int n, int L[])
   local int i = 1

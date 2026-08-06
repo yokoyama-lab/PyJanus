@@ -1,7 +1,7 @@
-/* Struct-valued local: `local struct Ref e = out[j]` copies all fields of the
- * array element into a fresh local struct, used read-only in the body; the
- * delocal asserts e == out[j] and frees.  Exercises vjanus's struct-local
- * lowering (one Enter/Exit per field) against PyJanus. */
+// Struct-valued local: `local struct Ref e = out[j]` copies all fields of the
+// array element into a fresh local struct, used read-only in the body; the
+// delocal asserts e == out[j] and frees.  Exercises vjanus's struct-local
+// lowering (one Enter/Exit per field) against PyJanus.
 
 struct Ref {
     int dist;

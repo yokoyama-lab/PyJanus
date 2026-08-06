@@ -1,9 +1,7 @@
-//////////////////////////////////////////////////////////////////////
 // heapsort with optimal garbage
 // Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.154-
-//////////////////////////////////////////////////////////////////////
-
 // p.154
+
 procedure maxHeapify(int a[], int i, int sz, stack gb)
   // l = i*2, r = i*2+1
   local int largest = 0

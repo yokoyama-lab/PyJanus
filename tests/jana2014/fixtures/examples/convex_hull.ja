@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Convex Hull (Jarvis march / gift wrapping)
 //
 // Integer points (x[i], y[i]).  Start from the lowest point (min y,
@@ -12,9 +11,8 @@
 // (no 3 collinear; the fold uses strict cross-product comparisons).
 //   outputs: hull[i] = 1 iff point i is a hull vertex; hseq = hull
 //   walk; start = starting vertex index.
-//////////////////////////////////////////////////////////////////////
-
 // s := index of lowest point (min y, tie-break min x); s starts = n
+
 procedure low_sub(int x[], int y[], int n, int s, stack lg, stack bl)
   local int j = 0
     from  j = 0

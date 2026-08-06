@@ -394,7 +394,7 @@ assign=proved、120秒・`--init zero`。2026-08-05 実測）。つまり公表�
 （`injective_gcd` 32個、`bwt_plain` 30個、`injective_bwt_inverse` 21個）。
 `--init zero` は「PyJanus が実際に走らせる零ストア」を謳っているので、これは食い違いである。
 
-**ただし決定率は上がらない**——`knapsack` / `lcs` / `run-length-enc` / `glaisher` で
+**ただし決定率は上がらない**——`knapsack` / `lcs` / `run_length_enc` / `glaisher` で
 0 に固定して測ったが4本とも unknown のまま（patch が効いていることを生成物で確認済み）。
 それでも入れる理由は**忠実性**: 過大近似なので誤検出の潜在要因であり、`--init zero` の
 意味と実装を一致させる。
@@ -493,7 +493,7 @@ struct 引数は配列と同じく**同じ実体を束縛**する（`structs_nes
 
 ### [x] 25. 多次元配列
 
-**なぜ**: 残り2本（`matrixmult.ja` / `matrixmult_v1.0.ja`）。`coq/RevLowering.v` に
+**なぜ**: 残り2本（`matrixmult.ja` / `matrixmult_v1.ja`）。`coq/RevLowering.v` に
 Cantor fold の単射性があるので入口はある。小さいが、項目22 の番地計算と同じ問題。
 
 **完了条件**: `a[i][j]` が動く。**+2本**。項目22 の番地計算を再利用する。
@@ -588,7 +588,7 @@ PyJanus と突き合わせること。
   unknown になった。決定率が上がらないまま被覆率だけ広げると `unknown` の列が増えるだけ
   である。項目15〜17 の後に、同じやり方（着手前に実測で scope を決める）で割ること
 
-- **多次元配列**（`matrixmult.ja` / `matrixmult_v1.0.ja` の2本のみ）。項目9〜14 の射程外。
+- **多次元配列**（`matrixmult.ja` / `matrixmult_v1.ja` の2本のみ）。項目9〜14 の射程外。
   `RevLowering.v` に Cantor fold の単射性があるので入口はある
 
 - **CFG 全体の接合**（`coq/README.md` の "The large-block encoding" 末尾）。

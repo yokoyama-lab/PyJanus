@@ -1,21 +1,19 @@
-/*
- * Discrete simulation of a free-falling body.
- *
- * Adapted from Ekima's reversible-graph-algorithms repository (fall.janus,
- * https://github.com/Ekima/Reversible-Graph-Algorithms-Janus-), which uses
- * the same standard jana2014 dialect as this fixture.
- *
- * Variables:
- *   g     gravitational acceleration
- *   t     elapsed time
- *   v     velocity
- *   h     height
- *   t_end duration of the simulation
- *
- * `call fall` runs the simulation forward. The companion `uncall fall` runs
- * the inverse simulation, recovering the initial height from a known final
- * state.
- */
+// Discrete simulation of a free-falling body.
+//
+// Adapted from Ekima's reversible-graph-algorithms repository (fall.janus,
+// https://github.com/Ekima/Reversible-Graph-Algorithms-Janus-), which uses
+// the same standard jana2014 dialect as this fixture.
+//
+// Variables:
+//   g     gravitational acceleration
+//   t     elapsed time
+//   v     velocity
+//   h     height
+//   t_end duration of the simulation
+//
+// `call fall` runs the simulation forward. The companion `uncall fall` runs
+// the inverse simulation, recovering the initial height from a known final
+// state.
 
 procedure fall(int g, int t, int v, int h, int t_end)
     local int halfg = g / 2

@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible All-Pairs Shortest Paths via (min,+) matrix multiplication
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.5,
@@ -16,9 +15,8 @@
 // out, then the subroutine uncalled to erase that log (Bennett's
 // compute-copy-uncompute).  So no per-multiply garbage survives and the
 // whole computation is reversible with 0 energy.
-//////////////////////////////////////////////////////////////////////
-
 // m := min(m, min_k(M[ba+i*V+k] + M[bb+k*V+j])); logs updates on lg/bl
+
 procedure minfold(int m_arr[], int ba, int bb, int i, int j, int v_n,
                   int m, stack lg, stack bl)
   local int k = 0

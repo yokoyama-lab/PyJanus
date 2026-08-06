@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Topological Sort (DFS post-order)
 //
 // DAG as adjacency matrix adj[u*V+v].  A reversible DFS records each
@@ -9,7 +8,6 @@
 // assertion.  0 energy.
 //   outputs: order[k] = k-th vertex in POST-order (read right-to-left
 //   for the topological order), visited[], blog.
-//////////////////////////////////////////////////////////////////////
 
 procedure dfs_post(int adj[], int v_n, int u, int visited[], int order[],
                    int cnt, stack blog)

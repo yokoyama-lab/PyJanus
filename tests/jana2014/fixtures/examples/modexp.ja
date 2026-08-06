@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Modular Exponentiation (square-and-multiply)
 //
 // Computes r = base^e mod m by scanning the W = 8 bits of e (monotone
@@ -10,7 +9,6 @@
 // Preconditions: m >= 2, 0 <= e < 2^8.
 //   forward: (r=0, p=0, pw=0) -> (r = base^e mod m, p,pw,g garbage)
 //   uncall : restores all zeros.
-//////////////////////////////////////////////////////////////////////
 
 procedure modexp(int base, int e, int m, int r, int p, int pw, stack g)
   r += 1                          // r = 1

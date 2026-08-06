@@ -1,35 +1,34 @@
-/*
- * Level 10 (flagship): the inverse Burrows-Wheeler transform via the LF-mapping,
- * as a reversible Janus procedure -- so its `uncall` is the forward BWT.
- *
- * The BWT is a bijection  string  <->  (last column L, primary index I).
- * Bird & Mu (JFP 2004) derive the inverse calculationally; its engine is the
- * LF-mapping (last-to-first). In a reversible language that derived inverse is
- * not something we re-derive -- we write the LF reconstruction forwards and the
- * encoder falls out as `uncall`.
- *
- * LF reconstruction of s from (L, I), with the sentinel 0 (a unique smallest
- * symbol) guaranteeing the rotation permutation is a single n-cycle:
- *
- *   1. counts  cnt[c]      = occurrences of symbol c in L
- *   2. cumul   C[c]        = #{ symbols in L that are < c }   (start of c in F)
- *   3. LF map  T[i]        = C[L[i]] + rank_i,  rank_i = #{ j<i : L[j]=L[i] }
- *   4. walk    path[0] = I, path[k+1] = T[path[k]]            (one n-cycle)
- *   5. emit    s[n-1-k]    = L[path[k]]                       (s comes out reversed)
- *
- * Every step is `dst += pure-expr(other cells)` (the verified cores' += / -=),
- * with nested indexing T[path[k]] / L[path[k]] doing the pointer-chase. The
- * ancillas (cnt, C, occ, T, path) are uncomputed Bennett-style -- build_path
- * fills them, the s copy reads through them, then `uncall build_path` drives
- * them back to 0 -- so inv_bwt leaves ONLY s, with L, I preserved. Hence
- * `uncall inv_bwt` clears s and hands L, I back: it recovers the BWT pair from
- * the string, which is exactly the forward Burrows-Wheeler transform. See
- * docs/reversible-pearls.md (PFAD ch.13 + Bird & Mu JFP 2004).
- *
- * Example: s = [3,1,2,1,0] has BWT L = [1,2,3,1,0], I = 4.
- */
-
+// Level 10 (flagship): the inverse Burrows-Wheeler transform via the LF-mapping,
+// as a reversible Janus procedure -- so its `uncall` is the forward BWT.
+//
+// The BWT is a bijection  string  <->  (last column L, primary index I).
+// Bird & Mu (JFP 2004) derive the inverse calculationally; its engine is the
+// LF-mapping (last-to-first). In a reversible language that derived inverse is
+// not something we re-derive -- we write the LF reconstruction forwards and the
+// encoder falls out as `uncall`.
+//
+// LF reconstruction of s from (L, I), with the sentinel 0 (a unique smallest
+// symbol) guaranteeing the rotation permutation is a single n-cycle:
+//
+//   1. counts  cnt[c]      = occurrences of symbol c in L
+//   2. cumul   C[c]        = #{ symbols in L that are < c }   (start of c in F)
+//   3. LF map  T[i]        = C[L[i]] + rank_i,  rank_i = #{ j<i : L[j]=L[i] }
+//   4. walk    path[0] = I, path[k+1] = T[path[k]]            (one n-cycle)
+//   5. emit    s[n-1-k]    = L[path[k]]                       (s comes out reversed)
+//
+// Every step is `dst += pure-expr(other cells)` (the verified cores' += / -=),
+// with nested indexing T[path[k]] / L[path[k]] doing the pointer-chase. The
+// ancillas (cnt, C, occ, T, path) are uncomputed Bennett-style -- build_path
+// fills them, the s copy reads through them, then `uncall build_path` drives
+// them back to 0 -- so inv_bwt leaves ONLY s, with L, I preserved. Hence
+// `uncall inv_bwt` clears s and hands L, I back: it recovers the BWT pair from
+// the string, which is exactly the forward Burrows-Wheeler transform. See
+// docs/reversible-pearls.md (PFAD ch.13 + Bird & Mu JFP 2004).
+//
+// Example: s = [3,1,2,1,0] has BWT L = [1,2,3,1,0], I = 4.
+//
 // Fill the LF pointer-chase path[] from (L, I); pure ancilla, uncomputable.
+
 procedure build_path(int L[], int I, int n, int A,
                      int cnt[], int C[], int occ[], int T[], int path[])
     // 1. symbol counts

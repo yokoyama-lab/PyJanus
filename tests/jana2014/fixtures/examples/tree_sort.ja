@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Comparison Sort, general case (via reversible AVL tree)
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1,
@@ -18,7 +17,6 @@
 // Every step is a reversible AVL operation, so `uncall sort` restores the
 // empty tree and a zero output: 0 energy.
 //   forward: (a preserved) -> (a, b sorted, AVL tree of distinct keys)
-//////////////////////////////////////////////////////////////////////
 
 procedure setchild(int arr[], int node, int val, stack alog)
   local int old = 0

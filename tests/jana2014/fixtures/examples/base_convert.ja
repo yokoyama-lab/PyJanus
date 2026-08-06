@@ -11,6 +11,7 @@
 // digits back to 0: the map (n,b) |-> digits is injective and cleanly invertible.
 //
 // Here n = 2026, b = 10 -> digits (least-significant first) 6, 2, 0, 2.
+
 procedure to_digits(int n, int b, int d[])
     d[0] += n % b
     d[1] += (n / b) % b

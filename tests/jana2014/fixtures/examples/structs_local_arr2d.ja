@@ -1,5 +1,5 @@
-/* Local struct with 2-D array field: Box.grid[2][2] is accessed in the body.
- * Exercises cantor_val for multi-dim static indices in lstructs_flat. */
+// Local struct with 2-D array field: Box.grid[2][2] is accessed in the body.
+// Exercises cantor_val for multi-dim static indices in lstructs_flat.
 
 struct Box {
     int grid[2][2];

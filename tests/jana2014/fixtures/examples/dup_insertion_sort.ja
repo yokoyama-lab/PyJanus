@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Duplicated Insertion Sort
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.1.1,
@@ -12,9 +11,8 @@
 // pseudocode B[count]=A[i] in the paper).
 //   forward : (a, b=0) -> (a, b sorted)
 //   uncall  : restores b=0 from (a, b).
-//////////////////////////////////////////////////////////////////////
-
 // count += number of elements of a[] strictly smaller than a[i]
+
 procedure rank(int a[], int i, int n, int count)
   local int j = 0
     from  j = 0

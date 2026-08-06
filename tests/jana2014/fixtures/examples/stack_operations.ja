@@ -1,6 +1,6 @@
-/* Various stack operations */
+// Various stack operations
+// Move n stack elements from one stack to another
 
-/* Move n stack elements from one stack to another */
 procedure move_stack(stack src, stack dst, int n)
     local int m = 0
     from m = 0 loop

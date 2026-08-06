@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible Extended Euclidean Algorithm
 //
 // Computes g = gcd(a,b) together with Bezout coefficients x0, y0 such
@@ -12,7 +11,6 @@
 // Precondition: a >= 1, b >= 1.
 //   forward: (a,b, x0=1,x1=0,y0=0,y1=1) -> (g, 0, bezout..., qlog)
 //   uncall : restores the original state.
-//////////////////////////////////////////////////////////////////////
 
 procedure ext_gcd(int a, int b, int x0, int x1, int y0, int y1, stack qlog)
   from  empty(qlog)              // true only on entry

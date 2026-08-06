@@ -197,7 +197,7 @@ procedure main()
 集まりで、上位3つ（stack を除く）は定数引数12本・`iterate` 11本・`^=` 11本である。
 
 多次元対応で入ったのは3本（`structs_array_field` / `structs_array_field_arr` /
-`structs_grid`）で、`matrixmult.ja` と `matrixmult_v1.0.ja` は**入らなかった**——
+`structs_grid`）で、`matrixmult.ja` と `matrixmult_v1.ja` は**入らなかった**——
 どちらも次に `^=` で止まる（`^=` が 9 → 11 に増えているのがそれ）。
 値引数（§13）で入ったのは3本で、こちらも `argument is not a plain variable` 12本のうち
 3本にとどまった。**阻害要因は1本につき1つとは限らない**ので、被覆率の見積もりは
@@ -341,7 +341,7 @@ examples 32本だけなので、以下はそれを列挙する。
 | `fib_variants.ja` | unknown | **refuted** | `fib` と同じ |
 | `glaisher.ja` | unknown | **refuted** | 出力 `dist[]` が 0 でない |
 | `injective_gcd.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
-| `run-length-enc.ja` | unknown | **refuted** | 入力が 0 終端でない |
+| `run_length_enc.ja` | unknown | **refuted** | 入力が 0 終端でない |
 | `sqrt.ja` | unknown | **refuted** | `num < 0` |
 | `injective_partition.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
 | `bwt_plain.ja` | unknown | unknown | — |
@@ -355,7 +355,7 @@ examples 32本だけなので、以下はそれを列挙する。
 **2つの問いは難易度で順序づかない。** 直観では `--init any` の方が強い主張だから
 難しいはずだが、実測は逆である: 未決11本のうち**6本が `any` では決着する**
 （`fib_variants` / `glaisher` / `injective_gcd` / `injective_partition` /
-`run-length-enc` / `sqrt`）。逆向きは `injective_bennett` の1本だけ。理由は単純で、
+`run_length_enc` / `sqrt`）。逆向きは `injective_bennett` の1本だけ。理由は単純で、
 **反例を1本見つける方が不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
 examples の決着は 19本 → 24本に増える。
 
@@ -381,7 +381,7 @@ examples の決着は 19本 → 24本に増える。
 | `zagier.ja` | `x >= -2 & y >= 0 & z >= -6` | 呼び出し時 `x, y, z ≥ 1` | **proved** |
 | `fall.ja` | `t = 0 & v = 0 & t_r = t_end_r` | 順行は静止・時刻0から、逆行は終端時刻から | **proved** |
 | `fib.ja` | `x1 = 0 & x2 = 0 & n >= -5` | 蓄積先が空、段数が非負 | 表明側は証明。残るのは `[bound]` |
-| `run-length-enc.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
+| `run_length_enc.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
 | `sqrt.ja` | `num >= 0 & root = 0` | 非負の被平方数 | unknown |
 | `glaisher.ja` | `dist[…] = 0 & odd[…] >= 0` | 出力が空、入力が非負 | unknown |
 | `injective_gcd.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
@@ -398,7 +398,7 @@ examples の決着は 19本 → 24本に増える。
    **3つだけ**を縛れば証明できる（`g` / `h` / `h_r` / `t_end` / `v_r` は自由）。しかも
    `t_r = t_end_r` は単一変数の範囲ではなく**2つの実行の結線**についての条件で、
    「逆行シミュレーションは順行が到達した時刻から始めよ」と言っている。
-3. **入力の**形式**が条件になることもある。** `run-length-enc.ja` は出力配列を空に
+3. **入力の**形式**が条件になることもある。** `run_length_enc.ja` は出力配列を空に
    しても足りない。反例は `text[0] = 0`——RLE の入力は「0 終端で、先頭が 0 でない」
    という形式を満たさねばならず、これは型では捕まらない種類の前提である。
 
@@ -470,7 +470,7 @@ examples の決着は 19本 → 24本に増える。
 | `knapsack.ja` | Y | 250,543 | 19 | 36 | unknown |
 | `injective_gcd.ja` | Y | 123,892 | 60 | 41 | unknown |
 | `bwt_plain.ja` | Y | 84,041 | 115 | 44 | unknown |
-| `run-length-enc.ja` | Y | 38,661 | 15 | 23 | unknown |
+| `run_length_enc.ja` | Y | 38,661 | 15 | 23 | unknown |
 | `fib_variants.ja` | – | 29,020 | 151 | 12 | unknown |
 | `glaisher.ja` | Y | 19,912 | 29 | 23 | unknown |
 | `fib.ja` | – | 17,856 | 101 | 3 | **proved** |
@@ -518,7 +518,7 @@ large-block は決定率を上げる方向にも下げる方向にも効く: 直
 全設定で 1951 KB・32 位置、`lcs.ja` は 577 KB・19 位置、`knapsack.ja` は 244 KB・19 位置。
 **位置数が変わらないので `_maybe_seal` が発火していない。** モデルが実際に変わる5本
 （`bwt_plain` / `glaisher` / `injective_basics` / `injective_bwt_inverse` /
-`run-length-enc`）を両端 500 と 8000 で nuXmv にかけても、**判定は5本とも同一**
+`run_length_enc`）を両端 500 と 8000 で nuXmv にかけても、**判定は5本とも同一**
 （`injective_basics` が proved、他4本が unknown）。
 
 理由ははっきりしている。**配列の膨張は文をまたぐ累積ではなく、1文の中で起きる。**
@@ -646,7 +646,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
 > 多数の文にまたいで関係づける形になる。累積した複雑さそのものが原因、というのが
 > 残る説明である。
 >
-> **次に測るなら合成ではなく実物を削る**べきである——`run-length-enc` や `glaisher`
+> **次に測るなら合成ではなく実物を削る**べきである——`run_length_enc` や `glaisher`
 > （未決のうち小さい方）を1文ずつ削って、どこで proved に転じるかを見る。合成側は
 > ここまでで打ち止めにしてよい。
 
@@ -700,7 +700,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
 5. **未決の実プログラムを削って境界を探す**。符号化側は出尽くした（位置数 §5.4 /
    block 閾値 §5.6 / モデルサイズ §5.7 は判定不変、零ストアの忠実化 §5.8 だけが+1）。
    合成プログラムでは規模・単一構造のどれも再現しない（§5.9）ので、次は実物——
-   `run-length-enc` や `glaisher` を1文ずつ削り、proved に転じる点を見る。
+   `run_length_enc` や `glaisher` を1文ずつ削り、proved に転じる点を見る。
    **事前条件を与える道も塞がっている**: `sqrt` / `glaisher` / `injective_gcd` は
    反例が指す条件を与えても unknown のままである（§5.3）。つまり難しさは「入力集合が
    広いこと」ではない。

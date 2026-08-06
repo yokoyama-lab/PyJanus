@@ -81,7 +81,7 @@ python3 -m pytest tests/ -q
 - 配列 / 連結リストの反転（`write_reversed.ja` と重複確認）
 
 > 注: 既存 corpus には既に fib・factor(階乗)・`injective_gcd`・`sqrt`・sort(`injective_sort_network`/`sort_n3`)・
-> `run-length-enc`・`gray_code`・`lehmer_code`/`perm-to-code`・`cantor_pair`・`base_convert`・
+> `run_length_enc`・`gray_code`・`lehmer_code`/`perm_to_code`・`cantor_pair`・`base_convert`・
 > 算術符号化・逆BWT・CA(Rule90)・Toffoli/Fredkin・行列積・LZ ファミリ（lz77/78/w/…）などが揃っている。
 > 「基礎」トラックは**これらと重複しない**教材簡潔版・未カバー題を狙う。
 

@@ -1,33 +1,31 @@
-/*
- * Level 9: integer arithmetic coding, done as a bijective range-ANS (rANS) coder.
- *
- * Arithmetic coding folds a message over a probability model into a single
- * integer. The asymmetric numeral system (Duda) makes that fold an EXACT
- * bijection on the integer state x, so the decoder is literally the encoder run
- * backwards -- which in Janus means the decoder is `uncall encode`, derived for
- * free. This is the calculational "invert the coder" pearl that the reversible
- * language embodies directly.
- *
- * Binary model: symbol 0 has frequency f0 = 3, symbol 1 has f1 = 1, total
- * M = 4, cumulatives C0 = 0, C1 = 3. The rANS encoding step is the state map
- *
- *     x  |->  (x / f_s) * M + C_s + (x mod f_s)
- *
- * a bijection whose inverse reads the symbol back from the low slot x mod M:
- * slot in [C_s, C_s + f_s) identifies s. We realise the step with NO destructive
- * `/=` or `*=` (the verified cores have only += / -= / ^=): a value-preserving
- * divmod splits x into (q, r) using `/` and `%` as pure expressions, then the
- * mirror image rebuilds the new state and drives the q, r ancillas back to 0:
- *
- *     q += x / f ;  r += x % f ;  x -= q*f + r        // x := 0, (q,r) hold x
- *     x += q*M ;    x += C + r                          // x := q*M + C + r
- *     q -= x / M ;  r -= x % M - C                      // q,r := 0 again
- *
- * The if-fi over the symbol closes on `x mod M < f0`, the slot test that the
- * decoder uses to recover s -- so each comparator-like step, and the whole
- * coder, is reversible. The message is CONSUMED into x (every m[i] ends 0); the
- * backward run reconstructs it and clears x back to 0.
- */
+// Level 9: integer arithmetic coding, done as a bijective range-ANS (rANS) coder.
+//
+// Arithmetic coding folds a message over a probability model into a single
+// integer. The asymmetric numeral system (Duda) makes that fold an EXACT
+// bijection on the integer state x, so the decoder is literally the encoder run
+// backwards -- which in Janus means the decoder is `uncall encode`, derived for
+// free. This is the calculational "invert the coder" pearl that the reversible
+// language embodies directly.
+//
+// Binary model: symbol 0 has frequency f0 = 3, symbol 1 has f1 = 1, total
+// M = 4, cumulatives C0 = 0, C1 = 3. The rANS encoding step is the state map
+//
+//     x  |->  (x / f_s) * M + C_s + (x mod f_s)
+//
+// a bijection whose inverse reads the symbol back from the low slot x mod M:
+// slot in [C_s, C_s + f_s) identifies s. We realise the step with NO destructive
+// `/=` or `*=` (the verified cores have only += / -= / ^=): a value-preserving
+// divmod splits x into (q, r) using `/` and `%` as pure expressions, then the
+// mirror image rebuilds the new state and drives the q, r ancillas back to 0:
+//
+//     q += x / f ;  r += x % f ;  x -= q*f + r        // x := 0, (q,r) hold x
+//     x += q*M ;    x += C + r                          // x := q*M + C + r
+//     q -= x / M ;  r -= x % M - C                      // q,r := 0 again
+//
+// The if-fi over the symbol closes on `x mod M < f0`, the slot test that the
+// decoder uses to recover s -- so each comparator-like step, and the whole
+// coder, is reversible. The message is CONSUMED into x (every m[i] ends 0); the
+// backward run reconstructs it and clears x back to 0.
 
 procedure encode_sym(int x, int m, int q, int r)
     if m = 0 then

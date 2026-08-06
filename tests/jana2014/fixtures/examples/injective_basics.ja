@@ -1,22 +1,20 @@
-/*
- * A staircase of reversible procedures that compute injective integer
- * functions, ordered from trivial to less trivial.
- *
- * Each procedure is reversible as a Janus statement, so `uncall` inverts it
- * exactly. Viewed as a mathematical function from "inputs" to "outputs"
- * (whichever variables we treat as carrying meaning), each step is
- * injective: distinct inputs give distinct outputs.
- *
- *   1. inc        x -> x + 1
- *   2. neg        x -> -x       (XOR-then-add trick)
- *   3. add        (x, y) -> (x, y + x)
- *   4. dbl        x -> 2x
- *   5. mul_const  (x) -> n * x  for a known nonzero constant n
- *   6. mul        (a, b, c) -> (a, b, c + a*b)
- *   7. square     (x, sq) -> (x, sq + x*x)
- *   8. cantor     (a, b, z) -> (a, b, z + pi(a,b))
- *                 where pi(a,b) = (a+b)(a+b+1)/2 + a is the Cantor pairing.
- */
+// A staircase of reversible procedures that compute injective integer
+// functions, ordered from trivial to less trivial.
+//
+// Each procedure is reversible as a Janus statement, so `uncall` inverts it
+// exactly. Viewed as a mathematical function from "inputs" to "outputs"
+// (whichever variables we treat as carrying meaning), each step is
+// injective: distinct inputs give distinct outputs.
+//
+//   1. inc        x -> x + 1
+//   2. neg        x -> -x       (XOR-then-add trick)
+//   3. add        (x, y) -> (x, y + x)
+//   4. dbl        x -> 2x
+//   5. mul_const  (x) -> n * x  for a known nonzero constant n
+//   6. mul        (a, b, c) -> (a, b, c + a*b)
+//   7. square     (x, sq) -> (x, sq + x*x)
+//   8. cantor     (a, b, z) -> (a, b, z + pi(a,b))
+//                 where pi(a,b) = (a+b)(a+b+1)/2 + a is the Cantor pairing.
 
 procedure inc(int x)
     x += 1

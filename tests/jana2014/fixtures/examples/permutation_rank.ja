@@ -1,12 +1,9 @@
-/////////////////////////////////////////////////
 // Er, M. C. (1985).
 // "Enumerating ordered trees lexicographically."
 // The Computer Journal 28(5).
 //
 // p.540 function Rank
 // p.541 procedure Unrank
-/////////////////////////////////////////////////
-
 // procedure fact(int n, int res)
 //   if n=0 then
 //     res ^= 1
@@ -19,7 +16,6 @@
 //       n += 1
 //     delocal int tmp = 0
 //   fi n=0
-
 // procedure perm(int n, int r, int res)
 //   if r=0 then
 //     res ^= 1
@@ -34,8 +30,8 @@
 //       n += 1
 //     delocal int tmp = 0
 //   fi r=0
-
 // iterative factorial: res := n!
+
 procedure fact(int n, int res)
   res ^= 1
   local int i = 0

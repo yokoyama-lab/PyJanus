@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible GCD (subtractive Euclid)
 //
 // Classic Euclidean gcd by repeated subtraction, made reversible by
@@ -8,7 +7,6 @@
 // work here; the log is what lets `uncall` reconstruct the path).
 //   forward: (a,b) with a,b>0, a!=b  ->  (a=b=gcd(a,b), step log)
 //   uncall : restores the original (a,b) from (gcd, log).
-//////////////////////////////////////////////////////////////////////
 
 procedure gcd(int a, int b, stack log)
   from  empty(log)              // true only on first entry

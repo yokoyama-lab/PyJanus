@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////////
 // Reversible AVL Tree -- Delete (with rotations)
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3,
@@ -22,8 +21,6 @@
 // descent (`minkey`), leaving no garbage.  Deleted nodes are unlinked but
 // keep their slots (the paper's O(k) space growth); nothing is destroyed,
 // so `uncall delete` re-inserts the key and restores the exact tree.
-//////////////////////////////////////////////////////////////////////
-
 // dev v2: reversible AVL delete (copy-successor-key approach)
 
 procedure setchild(int arr[], int node, int val, stack alog)
