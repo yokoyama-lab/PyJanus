@@ -33,25 +33,25 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 | 検査 | 検査済み | skip | 被覆率 |
 |---|---:|---:|---:|
-| `reversibility` | 97 | 0 | 100% |
-| `inverse` | 97 | 0 | 100% |
-| `format` | 97 | 0 | 100% |
-| `codegen` | 97 | 0 | 100% |
-| `flat core` | 77 | 20 | 79% |
-| `both cores` | 1 | 96 | 1% |
-| `vjanus` | 97 | 0 | 100% |
-| `vjanus inv` | 97 | 0 | 100% |
-| `step1` | 0 | 97 | 0% |
-| `reference` | 97 | 0 | 100% |
-| `metadata` | 97 | 0 | 100% |
+| `reversibility` | 99 | 0 | 100% |
+| `inverse` | 99 | 0 | 100% |
+| `format` | 99 | 0 | 100% |
+| `codegen` | 99 | 0 | 100% |
+| `flat core` | 79 | 20 | 79% |
+| `both cores` | 1 | 98 | 1% |
+| `vjanus` | 99 | 0 | 100% |
+| `vjanus inv` | 99 | 0 | 100% |
+| `step1` | 0 | 99 | 0% |
+| `reference` | 99 | 0 | 100% |
+| `metadata` | 99 | 0 | 100% |
 
 ## 3. skip の理由
 
 | 検査 | 理由 | 本数 |
 |---|---|---:|
-| `step1` | requires the Haskell reference impleme | 97 |
-| `both cores` | array parameter | 57 |
-| `both cores` | unsupported statement | 14 |
+| `step1` | requires the Haskell reference impleme | 99 |
+| `both cores` | array parameter | 58 |
+| `both cores` | unsupported statement | 15 |
 | `both cores` | structs | 13 |
 | `flat core` | self-recursion + locals | 12 |
 | `flat core` | *= | 4 |
@@ -86,6 +86,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 | `bennett_divmod_c.ja` | o | o | o | o | o | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `bfs_g.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `binary_heap_g.ja` | o | o | o | o | self-recursion + locals | array parameter | o | o | requires the Haskell reference impleme | o | o |
+| `binary_search_g.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `bit_bijections_c.ja` | o | o | o | o | o | operator / | o | o | requires the Haskell reference impleme | o | o |
 | `bitwise_ops_c.ja` | o | o | o | o | o | operator & | o | o | requires the Haskell reference impleme | o | o |
 | `bubble_sort_g.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
@@ -118,6 +119,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 | `glaisher_c.ja` | o | o | o | o | *= | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `gray_code_c.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `gray_code_roundtrip_c.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
+| `hanoi_c.ja` | o | o | o | o | o | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `hash_chain_g.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `heap_sort_g.ja` | o | o | o | o | self-recursion + locals | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `int_bijections_c.ja` | o | o | o | o | o | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
@@ -182,7 +184,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 ## 6. 生きている検査で一度も skip されないプログラム
 
-**1/97 本**が、実際に走る 10 列すべてで検査されている。
+**1/99 本**が、実際に走る 10 列すべてで検査されている。
 
 `fib_c.ja`
 

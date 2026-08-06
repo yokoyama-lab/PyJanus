@@ -1,0 +1,56 @@
+// @summary:   towers of Hanoi: move a tower of three disks between three stacks, counting the moves
+// @technique: clean-accumulation
+// @source:    classical Towers of Hanoi; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/hanoi_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, c, moves, n
+// @keep:      c, moves, n
+// @expect: a = nil
+// @expect: b = nil
+// @expect: c = <1, 2, 3]
+// @expect: moves = 7
+// @expect: n = 3
+//
+// Towers of Hanoi, moving disks between three stacks.
+//
+// The recursion branches only on n, never on the data, so every step is
+// reversible as written: `uncall hanoi` walks the same tree backwards and puts
+// every disk back.  Nothing is recorded, because nothing is forgotten.
+//
+// `moves` counts the moves; it is determined by n (2^n - 1), so it is an
+// accumulated result rather than something the inverse needs.
+
+procedure move(stack src, stack dst)
+    local int d = 0
+        pop(d, src)
+        push(d, dst)
+    delocal int d = 0
+
+procedure hanoi(int n, stack src, stack dst, stack via, int moves)
+    if n = 0 then
+        skip
+    else
+        n -= 1
+        call hanoi(n, src, via, dst, moves)
+        call move(src, dst)
+        moves += 1
+        call hanoi(n, via, dst, src, moves)
+        n += 1
+    fi n = 0
+
+procedure main()
+    stack a
+    stack b
+    stack c
+    int n
+    int moves
+
+    local int d = 0
+        d += 3
+        push(d, a)
+        d += 2
+        push(d, a)
+        d += 1
+        push(d, a)
+    delocal int d = 0
+
+    n += 3
+    call hanoi(n, a, c, b, moves)
