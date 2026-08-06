@@ -77,7 +77,7 @@ python3 tools/check_corpus_meta.py report -q     # 進捗を見る
 python3 tools/check_corpus_meta.py check         # 注釈済みのファイルを検査する
 ```
 
-`report` が `annotated 3/97` のように出て、`check` が `0 failed` で終われば
+`report` が `annotated 4/97` のように出て、`check` が `0 failed` で終われば
 準備完了です。
 
 もうひとつ、`@oracle`（後述）を書くときに使うコマンドがあります:
@@ -92,13 +92,14 @@ python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/fib.ja
 
 ### 1.4 見本を読む
 
-すでに3本だけ注釈済みです。**作業を始める前に必ずこの3本を読んでください。**
+すでに4本だけ注釈済みです。**作業を始める前に必ずこの4本を読んでください。**
 
 | ファイル | 技法 | 読みどころ |
 |---|---|---|
 | `tests/jana2014/fixtures/examples/fib.ja` | clean-accumulation | いちばん短い。`@confirmed` に「F(6)=8, F(7)=13」と根拠が書いてある |
-| `tests/jana2014/fixtures/examples/bubble_sort.ja` | history-stack | 捨てる情報をスタックに退避する典型例 |
+| `tests/jana2014/fixtures/examples/bubble_sort_g.ja` | history-stack | 捨てる情報をスタックに退避する典型例 |
 | `tests/jana2014/fixtures/examples/run_length_enc.ja` | plain | 入力を消費して出力に変える、それ自体が可逆な例 |
+| `tests/jana2014/fixtures/examples/gcd_g.ja` | history-stack | **ゴミがある例**。`_g` が付く理由が `@keep` を見ると分かる |
 
 ### 1.5 練習（自己採点できます）
 
@@ -172,14 +173,14 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 
 で自動的に整形できます（コメント以外は一切触りません）。
 
-### 手順5 — 5つの TODO を埋める
+### 手順5 — 6つの TODO を埋める
 
-貼り付けた雛形には `TODO` が5か所あります。これを埋めるのが本番です。
+貼り付けた雛形には `TODO` が6か所あります。これを埋めるのが本番です。
 （`@oracle` だけは、どうしても書けなければ行ごと消して構いません。）
 
 #### `@summary:` — 何を計算するか、英語1行
 
-- 英語1文。難しく書く必要はありません。見本の3本の書き方に揃えてください
+- 英語1文。難しく書く必要はありません。見本の4本の書き方に揃えてください
 - 「何を入力に、何を出力するか」がわかることが条件
 - 例: `computes the greatest common divisor of x and y by reversible Euclid, keeping the quotients on a stack`
 
@@ -224,13 +225,60 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 3. **出典に載っている値と突き合わせる**（教科書に例が載っている場合）
 
 書き方は英語で、**「何と何を照合して、なぜ一致と言えるか」が読んでわかる**ように。
-見本の3本がちょうどこの形です。
+見本の4本がちょうどこの形です。
 
 > **どうしても確認できないとき**は、正直に
 > `@confirmed: UNVERIFIED -- <なぜ確認できなかったか>`
 > と書いてください。**これは失敗ではありません。** `report` がこの行を集めて
 > 先生に見せる仕組みになっています。無理に「確認しました」と書くほうが
 > はるかに悪い結果になります。
+
+#### `@keep:` — 最後に残ってよい変数（＝ゴミの判定）
+
+可逆プログラムは**情報を捨てられない**ので、計算を逆向きに実行できるようにするために
+「本来の答えではない中身」が最後まで残ることがあります。これを**ゴミ (garbage)** と
+呼びます。可逆計算では、ゴミがあるか無いかがプログラムの質を決める中心的な指標です。
+
+`store` コマンドが「最後に値が残っている変数」を全部見せてくれます。そのうち
+
+- **入力**（プログラムが壊さずに保存したもの）
+- **答え**（求めたかったもの）
+
+**だけ**を `@keep:` に並べてください。**残り全部がゴミ**と判定されます。
+何も残らないはずなら `@keep: none` と書きます。
+
+例（`gcd_g.ja`）:
+
+```bash
+$ python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/gcd_g.ja
+gcd_g.ja:
+  a = 12  <- @keep
+  b = 12  <- @keep
+  log = [0, 0, 1]  <- GARBAGE
+```
+
+gcd(48,36)=12 が答えなので `a` と `b` は答え。`log` は「各ステップでどちらが大きかったか」
+の記録で、逆実行のためだけに残っているのでゴミです。だから `@keep: a, b` と書きます。
+
+**ゴミがあると判定されたら、ファイル名の末尾に `_g` を付けます。**
+
+```bash
+git mv tests/jana2014/fixtures/examples/gcd.ja tests/jana2014/fixtures/examples/gcd_g.ja
+```
+
+検査は**両方向**です。ゴミがあるのに `_g` が無ければエラー、`_g` があるのにゴミが
+無くてもエラーになります。どちらのメッセージも「どう直せばよいか」を書いてあります。
+
+判断のこつ:
+
+- **入力がそのまま残っている**のはゴミではありません（`fib.ja` の `n = 5` は入力）
+- **空になったスタック（`nil`）・全部ゼロの配列はゴミになりません**。
+  機械が「中身がすべてゼロなら残っていない」と数えます
+- 名前が `log` / `blog` / `hlog` / `gb` / `tr` / `...garbage` のものは、まずゴミです
+- **答えかゴミか迷うもの**（例: ソートの結果と一緒に残る「並べ替えの順列」）は、
+  **ファイル冒頭のコメントに書いてあることが多い**です。`bubble_sort_g.ja` は
+  "with optimal garbage" と書いてあり、順列 `ord` がゴミだと分かります
+- どうしても決められなければ §6 でエスカレーションしてください
 
 #### `@oracle:` — 正しければ成り立つはずの条件（Python の式）
 
@@ -240,8 +288,8 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 使える名前は `store` コマンドが表示したものです:
 
 ```bash
-$ python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/bubble_sort.ja
-bubble_sort.ja:
+$ python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/bubble_sort_g.ja
+bubble_sort_g.ja:
   a = [10, 20, 30, 40, 50, 60]
   gb = []
   ord = [4, 1, 3, 5, 0, 2]
@@ -267,7 +315,7 @@ bubble_sort.ja:
   （例: `len(a) == 6 and a == sorted(a)` のように「ソート済みであること」だけ書く）
 - **書けないときは `@oracle:` の行ごと削除してください。** 空欄で残すとエラーになります
 
-> 見本の `bubble_sort.ja` は、この欄が実際に間違いを捕まえた例です。
+> 見本の `bubble_sort_g.ja` は、この欄が実際に間違いを捕まえた例です。
 > 最初 `ord` を「小さい順に並べたときの元の位置」と読んで `@oracle` を書いたところ
 > `False` になり、正しくは「元の位置 i の要素が最終的に行き着く順位」だと判明しました。
 > **`@confirmed` の散文だけなら気づかずに通っていた間違いです。**
@@ -410,7 +458,7 @@ FAIL gcd.ja
 FAIL gcd.ja
      missing `@confirmed:`
 ```
-→ 5つの TODO のうち埋め忘れがあります（`@oracle` は行ごと消せば省略できます）。**途中まで書いたヘッダはエラーになります**
+→ 6つの TODO のうち埋め忘れがあります（`@oracle` は行ごと消せば省略できます）。**途中まで書いたヘッダはエラーになります**
 （書きかけと未着手を区別するためです）。全部埋めるか、ヘッダごと消すかのどちらかに
 してください。
 
@@ -443,6 +491,27 @@ FAIL gcd.ja
 → ヘッダは**ファイルの1行目から**、**雛形の順番のまま**、**間に空行を入れず**に
 置きます。`python3 tools/check_corpus_meta.py normalize <ファイル>` を実行すると
 自動で並べ直してくれます。
+
+```
+FAIL gcd.ja
+     the run leaves garbage (log) but the name does not end in `_g`: rename to gcd_g.ja, or add those to `@keep:`
+```
+→ `@keep:` に挙げなかった変数に値が残っています。**`log` が本当にゴミなら**
+`git mv` でファイル名を `gcd_g.ja` にします。**`log` が実は答えの一部なら**
+`@keep: a, b, log` に直します。どちらかを選ぶのがあなたの判断です。
+
+```
+FAIL fib_g.ja
+     the name ends in `_g` but the run leaves no garbage: rename to fib.ja, or narrow `@keep:`
+```
+→ 逆向きの不一致です。`@keep:` に挙げすぎている（本当はゴミなのに答えだと書いた）か、
+`_g` が余計かのどちらかです。
+
+```
+FAIL gcd_g.ja
+     `@keep:` names lgo, which the final store does not have (it has: a, b, log)
+```
+→ 変数名の綴り間違いです。`store` コマンドの表示から写してください。
 
 ```
 FAIL gcd-2.ja

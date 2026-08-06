@@ -15,6 +15,7 @@ This tool checks a metadata header that pins that missing information:
     // @technique: clean-accumulation
     // @source:    Yokoyama & Gluck, PEPM 2007, Fig. 1
     // @confirmed: F(1)=F(2)=1 gives 1,1,2,3,5,8,13, so n=5 yields (8,13)
+    // @keep:      n
     // @oracle:    n == 5 and x1 == 0 and x2 == 0
     // @expect: 0 8 13
     // @expect: n = 5
@@ -41,6 +42,14 @@ instead and `report` lists them.
 
 `@confirmed` is the part no machine can check: how a human established that the
 pinned values are the right ones.
+
+`@keep` names the variables the run is *supposed* to leave non-zero: the inputs
+the program preserves, plus the answer.  Everything else still holding a value
+is **garbage** -- the history a reversible program must retain to stay
+injective (a quotient stack, a decision log, a sorting permutation).  Which of
+the survivors is the answer cannot be read off a run, so that one line is
+declared and the rest is derived; a program with garbage must be named `..._g.ja`
+and the check is two-sided, so a `_g` name with no garbage fails too.
 
 Annotating is incremental.  A file with no `@` fields at all is reported as
 unannotated, not as a failure, so the corpus can be annotated a few files at a
@@ -75,9 +84,15 @@ STD = "jana2014"
 
 #: Field order is part of the house style, and `check` enforces it.  `oracle` is
 #: the only optional field; `expect` is the only repeatable one, and comes last.
-ORDER = ("summary", "technique", "source", "confirmed", "oracle", "expect")
-REQUIRED = ("summary", "technique", "source", "confirmed", "expect")
+ORDER = ("summary", "technique", "source", "confirmed", "keep", "oracle", "expect")
+REQUIRED = ("summary", "technique", "source", "confirmed", "keep", "expect")
 REPEATABLE = ("expect",)
+
+#: `@keep: none` means the final store is expected to be entirely trivial.
+KEEP_NONE = "none"
+
+#: A program that leaves garbage says so in its name.  See `garbage_of`.
+GARBAGE_SUFFIX = "_g"
 
 #: The four ways to make an irreversible computation reversible, from
 #: `docs/textbook-programs-plan.md` §3, plus `plain` for programs that are
@@ -202,6 +217,40 @@ def evaluate_oracle(expression: str, store: dict[str, Any]) -> tuple[bool, str]:
 
 def _render(store: dict[str, Any]) -> str:
   return ", ".join(f"{name}={value}" for name, value in store.items())
+
+
+# ---------------------------------------------------------------------------
+# garbage
+# ---------------------------------------------------------------------------
+
+
+def is_trivial(value: Any) -> bool:
+  """True when a store value is all zeros -- an empty stack, a zeroed array."""
+  if isinstance(value, int):
+    return value == 0
+  if isinstance(value, dict):
+    return all(is_trivial(field_value) for field_value in value.values())
+  return all(is_trivial(item) for item in value)
+
+
+def parse_keep(value: str) -> list[str]:
+  if value.strip() == KEEP_NONE:
+    return []
+  return [name.strip() for name in value.split(",") if name.strip()]
+
+
+def garbage_of(store: dict[str, Any], keep: list[str]) -> list[str]:
+  """The variables left holding information that is neither input nor answer.
+
+  Which of the surviving values *is* the answer cannot be read off a run: the
+  program ends, and every non-zero variable looks alike.  So one thing is
+  declared -- `@keep`, the inputs the program preserves plus the result it
+  produces -- and garbage is everything else the run left behind.  A reversible
+  program that must record history to stay injective (a quotient stack, a
+  decision log, a sorting permutation) shows up here, and that is what the
+  `_g` filename suffix marks.
+  """
+  return sorted(name for name, value in store.items() if not is_trivial(value) and name not in keep)
 
 
 # ---------------------------------------------------------------------------
@@ -344,14 +393,47 @@ def check_file(path: Path) -> list[str]:
   problems += diff_expect(meta.fields["expect"], full)
 
   oracle = meta.one("oracle")
+  if not (oracle or meta.one("keep")):
+    return problems
+  try:
+    store = parse_store(store_lines)
+  except ValueError as exc:
+    return problems + [f"the store could not be parsed, so @keep/@oracle cannot be checked: {exc}"]
+
   if oracle:
-    try:
-      store = parse_store(store_lines)
-    except ValueError as exc:
-      return problems + [f"@oracle given, but the store could not be parsed: {exc}"]
     ok, detail = evaluate_oracle(oracle, store)
     if not ok:
       problems.append(f"`@oracle: {oracle}` {detail}")
+
+  problems += check_garbage(path, store, meta.one("keep"))
+  return problems
+
+
+def check_garbage(path: Path, store: dict[str, Any], keep_field: str) -> list[str]:
+  """Check `@keep` against the run, and the `_g` suffix against the garbage."""
+  problems = []
+  keep = parse_keep(keep_field)
+  unknown = [name for name in keep if name not in store]
+  if unknown:
+    problems.append(
+      f"`@keep:` names {', '.join(unknown)}, which the final store does not have "
+      f"(it has: {', '.join(store) or 'nothing'})")
+  kept_trivial = [name for name in keep if name in store and is_trivial(store[name])]
+  if kept_trivial:
+    problems.append(
+      f"`@keep:` names {', '.join(kept_trivial)}, which the run leaves all-zero -- "
+      "keep lists what actually survives, so drop them or use `none`")
+
+  garbage = garbage_of(store, keep)
+  named_g = path.stem.endswith(GARBAGE_SUFFIX)
+  if garbage and not named_g:
+    problems.append(
+      f"the run leaves garbage ({', '.join(garbage)}) but the name does not end in "
+      f"`{GARBAGE_SUFFIX}`: rename to {path.stem}{GARBAGE_SUFFIX}.ja, or add those to `@keep:`")
+  if not garbage and named_g:
+    problems.append(
+      f"the name ends in `{GARBAGE_SUFFIX}` but the run leaves no garbage: "
+      f"rename to {path.stem[:-len(GARBAGE_SUFFIX)]}.ja, or narrow `@keep:`")
   return problems
 
 
@@ -471,6 +553,12 @@ def cmd_report(args: argparse.Namespace) -> int:
     for path in unverified:
       print(f"  {path.name}: {metas[path].one('confirmed')}")
 
+  leaves_garbage = [path for path in annotated if path.stem.endswith(GARBAGE_SUFFIX)]
+  if annotated:
+    print(f"\nleaves garbage (named `{GARBAGE_SUFFIX}`) {len(leaves_garbage)}/{len(annotated)}:")
+    for path in leaves_garbage:
+      print(f"  {path.name}")
+
   badly_named = [path for path in files if not FILENAME_RE.match(path.name)]
   if badly_named:
     print(f"\nnot lowercase_with_underscores ({len(badly_named)}):")
@@ -513,6 +601,11 @@ def cmd_stub(args: argparse.Namespace) -> int:
     print(f"// @technique: TODO one of: {', '.join(TECHNIQUES)}")
     print("// @source:    TODO a citation, or `original`")
     print("// @confirmed: TODO how you checked the values below are the right ones")
+    try:
+      live = [name for name, value in parse_store(store_lines).items() if not is_trivial(value)]
+      print(f"// @keep:      TODO which of these are input-or-answer (the rest is garbage): {', '.join(live) or KEEP_NONE}")
+    except ValueError:
+      print(f"// @keep:      TODO the variables that are input-or-answer, or `{KEEP_NONE}`")
     print("// @oracle:    TODO a Python expression that is True iff the answer is right -- or delete this line")
     for line in full:
       print(f"// @expect: {line}")
@@ -530,9 +623,16 @@ def cmd_store(args: argparse.Namespace) -> int:
   for path in targets(args.files):
     _, store_lines = observe(path)
     store = parse_store(store_lines)
+    keep = parse_keep(parse_meta(path).one("keep") or KEEP_NONE)
     print(f"{path.name}:")
     for name, value in store.items():
-      print(f"  {name} = {value}")
+      if is_trivial(value):
+        note = "  (all zero)"
+      elif name in keep:
+        note = "  <- @keep"
+      else:
+        note = "  <- GARBAGE" if keep else ""
+      print(f"  {name} = {value}{note}")
   return 0
 
 

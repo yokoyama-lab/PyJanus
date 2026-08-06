@@ -50,7 +50,9 @@ glob で全数を拾っている:
 | `matrixmult_v1.0.ja` | `matrixmult_v1.ja`（`.` が識別子として使えないため） |
 
 規約 `^[a-z][a-z0-9_]*\.ja$` は `test_filename_is_lowercase_with_underscores` が
-全数で強制する。残る論点:
+全数で強制する。加えて **`_g` 接尾辞＝ゴミを残すプログラム**（§2 の `@keep`）:
+`gcd.ja` → `gcd_g.ja`、`bubble_sort.ja` → `bubble_sort_g.ja`。注釈が済んだ本から
+順に判定されるので、残りは B フェーズの中で確定する。残る論点:
 
 - **`test2.ja` は「サンプル」ではなく機能テスト**だった。中身は
   `call test_rev(test_array[0]) // doesn't work` の8行で、**配列要素を実引数に渡せるか**
@@ -92,7 +94,7 @@ glob で全数を拾っている:
 `tools/check_corpus_meta.py` が検査し、`tests/jana2014/test_corpus_metadata.py`
 が CI に載せる。**未注釈のファイルは skip 扱い**なので、途中で止めても CI は緑のまま。
 
-ヘッダの形（`bubble_sort.ja` の実物）:
+ヘッダの形（`bubble_sort_g.ja` の実物）:
 
 ```
 // @summary:   bubble sort that records each comparison outcome on a garbage stack, ...
@@ -114,6 +116,9 @@ glob で全数を拾っている:
 - **`@oracle`** は最終ストアに対する **Python の式**で、「**このプログラムは何を
   計算するはずか**」。プログラムの出力を見ずにアルゴリズムの定義から書くので、
   **プログラムと食い違いうる**——そこが要点。書けない本は行ごと省いてよい
+- **`@keep`** は「最後に残ってよい変数」＝入力の保存分と答え。**残り全部がゴミ**と
+  機械が導出し、**ゴミのある本はファイル名が `_g` で終わる**ことを両方向で強制する
+  （ゴミがあるのに `_g` が無い／`_g` があるのにゴミが無い、どちらもエラー）
 
 ストア出力は小さく規則的な文法（整数・配列・多次元配列・構造体・スタック）なので、
 `store` サブコマンドが Python の値に変換する。`@oracle` はその名前をそのまま使う。
@@ -123,7 +128,7 @@ glob で全数を拾っている:
 - `@technique` は `docs/textbook-programs-plan.md` §3 の4分類 + `plain`。
   埋まれば「アンシラフラグの例を出せ」に即答でき、教材・論文の図表に直結する
 
-> **`@oracle` は導入直後に最初の1件を捕まえた。** 見本の `bubble_sort.ja` で、
+> **`@oracle` は導入直後に最初の1件を捕まえた。** 見本の `bubble_sort_g.ja` で、
 > `ord` を「小さい順に並べたときの元の位置」（argsort）と読んで `@oracle` を書いたら
 > `False` になり、正しくは「元の位置 i の要素が行き着く順位」（rank）だった。
 > **散文の `@confirmed` だけなら、誤った説明のまま通っていた。**
@@ -183,9 +188,10 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 - `tests/jana2014/test_corpus_metadata.py` — CI 連結（97本×3種の parametrize）＋
   パーサ・ストア解釈・oracle 評価・正規化の単体テスト
 - 命名規約と体裁は**全数で強制済み**（未注釈の本も対象。ここは incremental ではない）
-- 見本 3本注釈済み（いずれも `@oracle` つき）: `fib.ja`（clean-accumulation）/
-  `bubble_sort.ja`（history-stack）/ `run_length_enc.ja`（plain）
-- 進捗: **3/97**
+- 見本 4本注釈済み（いずれも `@oracle` つき）: `fib.ja`（clean-accumulation・ゴミ無し）/
+  `run_length_enc.ja`（plain・ゴミ無し）/ `bubble_sort_g.ja`（history-stack・順列がゴミ）/
+  `gcd_g.ja`（history-stack・決定ログがゴミ）
+- 進捗: **4/97**
 
 ### 5.1 見本3本を入れた時点で見つかった罠（対処済み）
 

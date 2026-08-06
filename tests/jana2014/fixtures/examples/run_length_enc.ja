@@ -2,6 +2,7 @@
 // @technique: plain
 // @source:    original
 // @confirmed: text = 1,1,2,2,2,1 is three runs -- 1 twice, 2 three times, 1 once -- so arc holds the pairs (1,2),(2,3),(1,1) = {1,2,2,3,1,1} followed by zeros, as printed. text is left all-zero because the encoding consumes it; that is what makes the map injective rather than merely computable.
+// @keep:      arc
 // @oracle:    arc == [1,2,2,3,1,1] + [0]*8 and text == [0]*7
 // @expect: arc[14] = {1, 2, 2, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0}
 // @expect: text[7] = {0, 0, 0, 0, 0, 0, 0}
