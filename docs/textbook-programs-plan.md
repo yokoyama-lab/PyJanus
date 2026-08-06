@@ -74,11 +74,16 @@ python3 -m pytest tests/ -q
 ### B. 教科書「基礎」トラック（候補・**追加前に既存との重複を必ず確認**）
 古典的可逆計算の定番で、未実装または簡潔な教材版が欲しいもの:
 - ~~ハノイの塔（可逆・手数カウント）~~ → **実装済 `hanoi_c.ja`**（2026-08-07）
-- Ackermann（可逆・履歴スタック）
+- ~~Ackermann（可逆・履歴スタック）~~ → **実装済 `ackermann_c.ja`**（2026-08-07）。
+  なお履歴スタックではなく **compute-uncompute** で書けた（内側の値は (m, n-1) の関数なので
+  記録せず再計算で消せる）。A(2,3) は uncompute で深さが倍になり Python の再帰上限を超える
 - ~~二分探索（アンシラフラグ）~~ → **実装済 `binary_search_g.ja`**（2026-08-07）
 - ~~拡張ユークリッド / モジュラべき乗（履歴）~~ → **既存** `ext_gcd_g.ja` / `modexp_g.ja`
-- ビット計数・パリティ（`bit_bijections_c.ja` と重複確認）
-- 配列 / 連結リストの反転（`write_reversed.ja` と重複確認）
+- ~~ビット計数・パリティ~~ → **実装済 `hamming_c.ja`**（2026-08-07）。`bit_bijections_c.ja` と
+  重複なし（あちらは xor/Gray/Feistel）。パリティは popcount % 2 で足りるので別手続きにしていない
+- 配列 / 連結リストの反転 — `write_reversed.ja` は read/write 3行で配列反転ではなかった。
+  ただし**スタック反転は `stack_operations_c.ja`、隣接交換は `iterate_c.ja` にある**ので、
+  配列版は教材として薄い。優先度は低い
 
 > 注: 既存 corpus には既に fib・factor(階乗)・`gcd_c`・`sqrt`・sort(`sort_network_c`/`sort_n3`)・
 > `run_length_enc`・`gray_code`・`lehmer_code`/`perm_to_code`・`cantor_pair`・`base_convert`・

@@ -1,0 +1,68 @@
+// @summary:   hamming weight of a vector of 8-bit words, and Hamming distance to a second vector
+// @technique: clean-accumulation
+// @source:    R. W. Hamming, Error detecting and error correcting codes, Bell System Technical Journal 29(2), 1950; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/hamming_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, dist, len, parity, weight
+// @keep:      a, b, dist, len, parity, weight
+// @expect: a[4] = {11, 15, 1, 128}
+// @expect: b[4] = {10, 0, 3, 128}
+// @expect: dist = 6
+// @expect: len = 4
+// @expect: parity = 1
+// @expect: weight = 9
+//
+// Hamming weight and Hamming distance over 8-bit words.
+//
+// Counting bits throws information away in general -- many words share a
+// weight -- but not here: the word is never touched. Each count is accumulated
+// into a fresh cell with `+=`, so `uncall` subtracts it back out and the inputs
+// stand untouched throughout. That is the whole technique, and it is why these
+// procedures need no log, no flag and no ancilla.
+//
+// The parity of a word is `popcount8(x) % 2`, so it comes for free from the
+// weight rather than needing its own pass.
+
+procedure popcount8(int x, int n)
+    n += x % 2
+    n += (x / 2) % 2
+    n += (x / 4) % 2
+    n += (x / 8) % 2
+    n += (x / 16) % 2
+    n += (x / 32) % 2
+    n += (x / 64) % 2
+    n += (x / 128) % 2
+
+procedure hamming_weight(int v[], int len, int w)
+    local int i = 0
+    from i = 0 loop
+        call popcount8(v[i], w)
+        i += 1
+    until i = len
+    delocal int i = len
+
+procedure hamming_distance(int a[], int b[], int len, int d)
+    local int i = 0
+    from i = 0 loop
+        local int x = 0
+            x += a[i] ^ b[i]
+            call popcount8(x, d)
+            x -= a[i] ^ b[i]
+        delocal int x = 0
+        i += 1
+    until i = len
+    delocal int i = len
+
+procedure main()
+    int a[4]
+    int b[4]
+    int len
+    int weight
+    int dist
+    int parity
+
+    len += 4
+    a[0] += 11   a[1] += 15   a[2] += 1    a[3] += 128
+    b[0] += 10   b[1] += 0    b[2] += 3    b[3] += 128
+
+    call hamming_weight(a, len, weight)
+    call hamming_distance(a, b, len, dist)
+    parity += weight % 2

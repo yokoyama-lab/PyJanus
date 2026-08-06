@@ -3,7 +3,14 @@
 *`tools/corpus_coverage.py` が pytest の `--junitxml` から生成する。手で編集しない。*
 
 ```bash
-python3 -m pytest tests/ -q --junitxml=/tmp/coverage.xml
+# 表の列になるテストだけでよい（全体を回す必要はない・約9分）
+python3 -m pytest -q -p no:randomly --junitxml=/tmp/coverage.xml \
+  tests/jana2014/test_reversibility_corpus.py tests/jana2014/test_inverse_corpus.py \
+  tests/jana2014/test_format_roundtrip.py tests/jana2014/test_codegen_corpus.py \
+  tests/jana2014/test_verified_corpus.py tests/jana2014/test_verified_cores_corpus.py \
+  tests/jana2014/test_vjanus_corpus.py tests/jana2014/test_vjanus_inverse.py \
+  tests/jana2014/test_reference_impls.py tests/jana2014/test_corpus_metadata.py \
+  tests/janus2026/test_step1_golden.py
 python3 tools/corpus_coverage.py /tmp/coverage.xml > docs/corpus-coverage.md
 ```
 
@@ -33,38 +40,38 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 | 検査 | 検査済み | skip | 被覆率 |
 |---|---:|---:|---:|
-| `reversibility` | 99 | 0 | 100% |
-| `inverse` | 99 | 0 | 100% |
-| `format` | 99 | 0 | 100% |
-| `codegen` | 99 | 0 | 100% |
-| `flat core` | 79 | 20 | 79% |
-| `both cores` | 1 | 98 | 1% |
-| `vjanus` | 99 | 0 | 100% |
-| `vjanus inv` | 99 | 0 | 100% |
-| `step1` | 0 | 99 | 0% |
-| `reference` | 99 | 0 | 100% |
-| `metadata` | 99 | 0 | 100% |
+| `reversibility` | 101 | 0 | 100% |
+| `inverse` | 101 | 0 | 100% |
+| `format` | 101 | 0 | 100% |
+| `codegen` | 101 | 0 | 100% |
+| `flat core` | 80 | 21 | 79% |
+| `both cores` | 1 | 100 | 0% |
+| `vjanus` | 101 | 0 | 100% |
+| `vjanus inv` | 101 | 0 | 100% |
+| `step1` | 0 | 101 | 0% |
+| `reference` | 101 | 0 | 100% |
+| `metadata` | 101 | 0 | 100% |
 
 ## 3. skip の理由
 
 | 検査 | 理由 | 本数 |
 |---|---|---:|
-| `step1` | requires the Haskell reference impleme | 99 |
+| `step1` | requires the Haskell reference impleme | 101 |
 | `both cores` | array parameter | 58 |
-| `both cores` | unsupported statement | 15 |
+| `both cores` | unsupported statement | 16 |
+| `flat core` | self-recursion + locals | 13 |
 | `both cores` | structs | 13 |
-| `flat core` | self-recursion + locals | 12 |
 | `flat core` | *= | 4 |
 | `both cores` | operator / | 3 |
 | `both cores` | array declaration | 2 |
 | `both cores` | unsupported expression | 2 |
+| `both cores` | operator % | 2 |
 | `flat core` | /= | 1 |
 | `flat core` | array of structs w/ array field | 1 |
 | `flat core` | out of fuel | 1 |
 | `flat core` | local struct from non-variable | 1 |
 | `both cores` | operator & | 1 |
 | `both cores` | operator >= | 1 |
-| `both cores` | operator % | 1 |
 | `both cores` | 'left' | 1 |
 | `both cores` | *= | 1 |
 
@@ -74,6 +81,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 | プログラム | `reversibility` | `inverse` | `format` | `codegen` | `flat core` | `both cores` | `vjanus` | `vjanus inv` | `step1` | `reference` | `metadata` |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| `ackermann_c.ja` | o | o | o | o | self-recursion + locals | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `adaptive_huffman_c.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `arith_coding_c.ja` | o | o | o | o | o | operator / | o | o | requires the Haskell reference impleme | o | o |
 | `arith_roundtrip_c.ja` | o | o | o | o | o | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
@@ -119,6 +127,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 | `glaisher_c.ja` | o | o | o | o | *= | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `gray_code_c.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `gray_code_roundtrip_c.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
+| `hamming_c.ja` | o | o | o | o | o | operator % | o | o | requires the Haskell reference impleme | o | o |
 | `hanoi_c.ja` | o | o | o | o | o | unsupported statement | o | o | requires the Haskell reference impleme | o | o |
 | `hash_chain_g.ja` | o | o | o | o | o | array parameter | o | o | requires the Haskell reference impleme | o | o |
 | `heap_sort_g.ja` | o | o | o | o | self-recursion + locals | array parameter | o | o | requires the Haskell reference impleme | o | o |
@@ -184,7 +193,7 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 ## 6. 生きている検査で一度も skip されないプログラム
 
-**1/99 本**が、実際に走る 10 列すべてで検査されている。
+**1/101 本**が、実際に走る 10 列すべてで検査されている。
 
 `fib_c.ja`
 
