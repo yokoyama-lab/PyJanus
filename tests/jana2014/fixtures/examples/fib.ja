@@ -1,3 +1,13 @@
+// @summary:   recursive Fibonacci: fib leaves the pair (F(n+1), F(n+2)) in (x1, x2), which main prints and then uncalls away
+// @technique: clean-accumulation
+// @source:    Yokoyama & Gluck, A reversible programming language and its invertible self-interpreter, PEPM 2007, Fig. 1
+// @confirmed: with F(1)=F(2)=1 the sequence is 1,1,2,3,5,8,13, so n=5 gives (F(6),F(7))=(8,13) -- matches the printed `0 8 13`. The uncall then restores x1=x2=0 and leaves only the input n=5, which is why the store shows zeros.
+// @oracle:    n == 5 and x1 == 0 and x2 == 0  # the uncall left the store clean; the pair itself is in @expect
+// @expect: 0 8 13
+// @expect: n = 5
+// @expect: x1 = 0
+// @expect: x2 = 0
+//
 // Fibonacci example
 // Calculates a fibonacci pair using recursion
 
@@ -22,4 +32,3 @@ procedure main()
     uncall fib(x1, x2, n)
 //    uncall fib(x1, x2, n)
 //    printf("%d %d %d\n", n, x1, x2)
-
