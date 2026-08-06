@@ -1,6 +1,6 @@
 // @summary:   merge sort with the stable sorting permutation left in `ord`
 // @technique: history-stack
-// @source:    Cormen et al., Introduction to Algorithms, 3rd ed., MIT Press, p. 31
+// @source:    Cormen, Leiserson, Rivest and Stein, Introduction to Algorithms, 4th ed., MIT Press, 2022, Section 2.3.1 (MERGE-SORT), p. 39
 // @confirmed: reproduced by tests/jana2014/reference/merge_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, ord, p, r
 // @keep:      a, r
 // @expect: a[8] = {1, 2, 2, 3, 4, 5, 6, 7}
