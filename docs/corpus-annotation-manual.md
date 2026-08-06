@@ -380,7 +380,7 @@ PR の説明欄には次を書いてください:
 ```
 対象: gcd.ja, gray_code_c.ja, ... （10本）
 UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなかった）
-質問: injective_bits_c.ja の technique が ancilla-flag か plain か判断できませんでした
+質問: bit_bijections_c.ja の technique が ancilla-flag か plain か判断できませんでした
 ```
 
 先生のレビューを待つ間は、**次の枝を切って作業を続けて構いません**
@@ -425,7 +425,7 @@ UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなか�
 ## 5. 効率よく進めるコツ
 
 - **似たファイルはまとめて**。`structs_*.ja` は14本ありますが構造がよく似ています。
-  1本理解すれば残りは早く進みます。`injective_*.ja` も同様です
+  1本理解すれば残りは早く進みます。`*_bijections_c.ja` の2本も同様です
 - **短いものから片付けてよい**。`wc -l tests/jana2014/fixtures/examples/*.ja | sort -n`
   で行数順に並びます。ただし飛ばした分は必ず後で戻ってくること
 - **1日3〜4時間を上限に**。集中が切れた状態で `@confirmed` を書くと、

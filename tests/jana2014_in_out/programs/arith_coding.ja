@@ -10,7 +10,7 @@
 // the new state and clears the ancillas. The if-fi closes on the slot test
 // `x mod M < f0`, which is exactly how the decoder recovers the symbol. The
 // message is consumed into x; backward reconstructs it. See the no-I/O twin
-// tests/jana2014/fixtures/examples/injective_arith_coding.ja (checked by the
+// tests/jana2014/fixtures/examples/arith_coding_c.ja (checked by the
 // verified flat-array core) and docs/reversible-pearls.md.
 //
 // Backward consumes the output stream in reverse and reproduces the input.

@@ -10,7 +10,7 @@
 // Bennett-style, so inv_bwt leaves only s with L, I preserved; echoing L and I
 // to the output makes the run reversible end to end (as in cantor_pair -- the
 // version that *consumes* L needs an in-place permutation; see the no-I/O twin
-// tests/jana2014/fixtures/examples/injective_bwt_inverse.ja, checked by the
+// tests/jana2014/fixtures/examples/bwt_inverse_c.ja, checked by the
 // verified flat-array core, and docs/reversible-pearls.md, PFAD ch.13).
 //
 // Backward consumes the output stream in reverse and reproduces the input.

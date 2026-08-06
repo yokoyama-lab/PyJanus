@@ -44,7 +44,7 @@ python3 -m pytest tests/ -q
 
 > **制約（必読）**: 検証コアの可逆代入演算子は `+= / -= / ^=` のみ。**`*= / /=` は無い**。
 > したがって「`N /= b` で N を破壊する divmod ループ」は両コアで検証**不可**（`vjanus` は exit 3 でスキップ）。
-> **回避策＝純式での桁抽出**: `d[i] += (n / b^i) % b`。式中の `/ %`（二項演算 `BDiv/BMod`）は使えるので `+=` だけで可逆になり両コアで検証できる。`base_convert` / `injective_arith_coding` がこの方式。
+> **回避策＝純式での桁抽出**: `d[i] += (n / b^i) % b`。式中の `/ %`（二項演算 `BDiv/BMod`）は使えるので `+=` だけで可逆になり両コアで検証できる。`base_convert` / `arith_coding_c` がこの方式。
 
 プログラム冒頭コメントに「何を計算するか／単射の構造／どの技法か」を明記すると教材価値が上がる。技法は概ね4分類:
 
@@ -77,10 +77,10 @@ python3 -m pytest tests/ -q
 - Ackermann（可逆・履歴スタック）
 - 二分探索（アンシラフラグ）
 - 拡張ユークリッド / モジュラべき乗（履歴）
-- ビット計数・パリティ（`injective_bits_c.ja` と重複確認）
+- ビット計数・パリティ（`bit_bijections_c.ja` と重複確認）
 - 配列 / 連結リストの反転（`write_reversed.ja` と重複確認）
 
-> 注: 既存 corpus には既に fib・factor(階乗)・`injective_gcd`・`sqrt`・sort(`injective_sort_network`/`sort_n3`)・
+> 注: 既存 corpus には既に fib・factor(階乗)・`gcd_c`・`sqrt`・sort(`sort_network_c`/`sort_n3`)・
 > `run_length_enc`・`gray_code`・`lehmer_code`/`perm_to_code`・`cantor_pair`・`base_convert`・
 > 算術符号化・逆BWT・CA(Rule90)・Toffoli/Fredkin・行列積・LZ ファミリ（lz77/78/w/…）などが揃っている。
 > 「基礎」トラックは**これらと重複しない**教材簡潔版・未カバー題を狙う。

@@ -120,6 +120,8 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("--smv", action="store_true", dest="smv", help="emit an nuXmv model whose ERR location is reachable iff a runtime assertion can fail")
   parser.add_argument("--smv-init", dest="smv_init", choices=["any", "zero"], default="zero", help="initial store for --smv: zero (what PyJanus runs, default) or any (prove totality on every input)")
   parser.add_argument("--smv-assume", dest="smv_assume", default=None, metavar="EXPR", help="SMV boolean expression restricting the initial store of --smv (a precondition)")
+  parser.add_argument("--equiv-smv", dest="equiv_smv", default=None, metavar="OTHER.ja", help="emit an nuXmv model that is fully proved iff this program and OTHER.ja compute the same function (checks `P; Q~` against the identity)")
+  parser.add_argument("--equiv-check", dest="equiv_check", action="store_true", help="with --equiv-smv, run nuXmv on the model and print the verdict instead of the model")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
   parser.add_argument("--direction", dest="direction", choices=["forward", "backward"], default="forward", help="execution direction: forward (default) or backward (run the program inverted)")
   parser.add_argument("--expect", dest="expect", default=None, metavar="TEXT", help="compare program output against TEXT; exit 0 if equal, 1 otherwise")
@@ -217,6 +219,27 @@ def main(argv: list[str] | None = None) -> int:
       circuit = synthesize_program(program)
       print(circuit.to_text())
       return 0
+    if args.equiv_smv is not None:
+      phase = "equivalence model generation"
+      from .equiv_smv import check_equivalence_smv, compile_equivalence_to_smv
+      other_text = _Path(args.equiv_smv).read_text(encoding="utf-8")
+      other_pre = preprocess_text(args.equiv_smv, other_text,
+                                  include_dirs=[_Path(d) for d in args.include_dirs],
+                                  std=args.std)
+      other = parse_for_std(args.std, args.equiv_smv, other_pre.text, other_pre.line_origins)
+      validate_program(other, require_main=not args.no_main)
+      if not args.equiv_check:
+        print(compile_equivalence_to_smv(program, other, assume=args.smv_assume).model, end="")
+        return 0
+      phase = "equivalence checking"
+      verdict = check_equivalence_smv(program, other, assume=args.smv_assume)
+      print(f"{verdict.status} (identity={verdict.identity}, totality={verdict.totality})")
+      if verdict.counterexample:
+        print("counterexample: "
+              + ", ".join(f"{k}={v}" for k, v in sorted(verdict.counterexample.items())))
+      # "partial" is a real answer, not a failure: the programs agree wherever
+      # both are defined.  Only a genuine disagreement is an error exit.
+      return 1 if verdict.status == "different" else 0
     if args.smv:
       phase = "SMV generation"
       from .smv import compile_to_smv

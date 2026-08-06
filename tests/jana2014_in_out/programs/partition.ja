@@ -10,7 +10,7 @@
 // to scatter every element back. The inner `j > lo + p` guard is positional, so
 // it needs no history; it only suppresses the degenerate a[i] <=> a[i] self-swap
 // that Janus rejects as an alias. See the no-I/O twin
-// tests/jana2014/fixtures/examples/injective_partition.ja (checked by the
+// tests/jana2014/fixtures/examples/lomuto_partition_g.ja (checked by the
 // verified flat-array core) and docs/reversible-pearls.md.
 //
 // Backward consumes the output stream in reverse and reproduces the input.

@@ -391,7 +391,7 @@ assign=proved、120秒・`--init zero`。2026-08-05 実測）。つまり公表�
 
 **測定済み（2026-08-05）**: `--init zero` でも初期状態は1点ではない。`local` 変数に
 `init` が付かず自由なままで、**未決11本すべてが自由変数を持つ**
-（`injective_gcd` 32個、`bwt_plain` 30個、`injective_bwt_inverse` 21個）。
+（`gcd_c` 32個、`bwt_plain` 30個、`bwt_inverse_c` 21個）。
 `--init zero` は「PyJanus が実際に走らせる零ストア」を謳っているので、これは食い違いである。
 
 **ただし決定率は上がらない**——`knapsack` / `lcs` / `run_length_enc` / `glaisher` で
@@ -415,7 +415,7 @@ assign=proved、120秒・`--init zero`。2026-08-05 実測）。つまり公表�
 **意味を持たない**ことも分かっているので、残る変数は配列長とループ回数である。
 
 **完了条件**: 同じ形のプログラムで (a) 配列長 n、(b) ループ回数 k を振り、
-proved / unknown / gave up の境界を表にする。`injective_bwt_inverse` / `knapsack` / `sqrt` が
+proved / unknown / gave up の境界を表にする。`bwt_inverse_c` / `knapsack` / `sqrt` が
 **timeout でなく IC3 の断念**であることを踏まえ、断念と時間切れを区別して記録する。
 `docs/totality-checking.md` に §5.8 として置く。**当たれば**次に何を変えるべきかが決まり、
 **外れれば**「規模ではなく構造」という結論になる。
@@ -561,8 +561,8 @@ PyJanus と突き合わせること。
 
 - **セル・フィールドの参照渡し `f(a[0])`**（6本、2026-08-05、項目26）。値引数
   （定数・式）とは**別の機構**で、仮引数が特定のセル変数を指す。定数添字の3本
-  （`injective_mini_cipher` / `injective_sort_network` / `array_element_arg`）は安い。変数添字の3本
-  （`adaptive_huffman` / `binary_heap` / `injective_arith_coding`）は仮引数が実行時に
+  （`mini_cipher_c` / `sort_network_c` / `array_element_arg`）は安い。変数添字の3本
+  （`adaptive_huffman` / `binary_heap` / `arith_coding_c`）は仮引数が実行時に
   決まるセルを指すので別物。
 
 ## 保留（ループに入れない）
@@ -691,7 +691,7 @@ PyJanus と突き合わせること。
   連結するだけで済んだ。**+3本**（`structs_array_field` / `_arr` / `structs_grid`、
   いずれも `--init zero` / `--init any` 双方で proved）。項目の予測は +2 で、対象と
   していた `matrixmult*` は**入らなかった**（次に `^=` で止まる）。
-  実装中に **nuXmv の予約識別子**で2本（`knapsack` の `K`、`injective_bwt_inverse` の `T`）が
+  実装中に **nuXmv の予約識別子**で2本（`knapsack` の `K`、`bwt_inverse_c` の `T`）が
   構文エラーになっており、しかも `check` がそれを `unknown` と報告していたことが判明。
   予約語一覧はバイナリを叩いて実測し、`Result.malformed` / `status == "model-error"` を
   足して「読めなかった」を「未決」と区別した（`verify_corpus` 側も。素通りさせると
@@ -731,6 +731,6 @@ PyJanus と突き合わせること。
   これで **`^=` が 11 → 18本**に浮上し、stack に次ぐ壁になった。
   ついでに `local struct Ref e = out[j]`（構造体配列の要素からのコピー）も入れた。
   項目25 で入れた「コーパス全体のモデルが nuXmv に読めるか」テストが再び効いて、
-  新たに断片へ入った `injective_arithmetic_c.ja` の `exp`（予約語）を検出した。
+  新たに断片へ入った `arith_roundtrip_c.ja` の `exp`（予約語）を検出した。
   **被覆率をブロッカー表の足し算で見積もって外したのは4回中3回。** 当たったのは
   着手前に内訳を数えた項目27 だけ。「最初にぶつかる要因」の集計は上界ですらない。

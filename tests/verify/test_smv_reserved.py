@@ -3,7 +3,7 @@
 `A`, `T`, `K` and friends are temporal/epistemic operators in nuXmv's logic, so
 a Janus variable with one of those names produces a model the tool refuses to
 read.  Two corpus programs were in exactly that state — `knapsack_c.ja` declares
-`K` and `injective_bwt_inverse_c.ja` declares `T` — and both were reported as
+`K` and `bwt_inverse_c.ja` declares `T` — and both were reported as
 `unknown`, indistinguishable from "IC3 ran out of time".  They had never been
 checked at all.
 
@@ -38,7 +38,7 @@ BINARY = nuxmv.find_nuxmv()
 #:
 #: This list is *not* the safety net — no list can be, since a program can name
 #: anything.  `test_no_corpus_model_is_malformed` below is, and it earned its
-#: keep: `exp` was added after that test caught `injective_arithmetic_c.ja` the
+#: keep: `exp` was added after that test caught `arith_roundtrip_c.ja` the
 #: moment `iterate` support let the program into the fragment.
 PROBED = ("A E F G H K O S T U V X Y Z EX AX EF AF EG AG BU EBF ABF EBG ABG "
           "count toint bool floor sizeof of ISA COMPUTE PSLSPEC MDEFINE "
@@ -91,7 +91,7 @@ class CorpusTests(unittest.TestCase):
   """The two programs that were never actually checked."""
 
   def test_they_are_now_readable(self):
-    for name in ("knapsack_c.ja", "injective_bwt_inverse_c.ja"):
+    for name in ("knapsack_c.ja", "bwt_inverse_c.ja"):
       with self.subTest(name):
         path = ROOT / "tests/jana2014/fixtures/examples" / name
         model = model_of(path.read_text(encoding="utf-8"), init="zero", style="assign")

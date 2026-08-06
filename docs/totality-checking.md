@@ -154,7 +154,7 @@ procedure main()
 `jana_py/nuxmv.py` の `check` は「性質の判定が1つも取れなかった」を一律に
 `unknown` としていたので、**タイムアウトと区別が付かなかった**。
 
-コーパスに2本あった。`knapsack_c.ja` は `K` を、`injective_bwt_inverse_c.ja` は `T` を
+コーパスに2本あった。`knapsack_c.ja` は `K` を、`bwt_inverse_c.ja` は `T` を
 宣言している。どちらも §5 の表で長らく「IC3 が断念」に数えられていたが、実際には
 **一度も検査にかかっていなかった**。決定率という指標そのものが、この分だけ嘘を
 含んでいたことになる。
@@ -205,7 +205,7 @@ procedure main()
 
 `argument is not a plain variable` に残る6本は、**別の機構**である。値引数（定数・式）は
 値渡しだが、`f(a[0])` は**セルの参照渡し**で、仮引数が特定のセル変数を指す。定数添字なら
-安いが（`injective_mini_cipher` / `injective_sort_network` / `array_element_arg` の3本）、変数添字
+安いが（`mini_cipher_c` / `sort_network_c` / `array_element_arg` の3本）、変数添字
 （`s[i]` / `garbage[garbagecounter]` / `m[i]` の3本）は仮引数が実行時に決まるセルを指すので
 別物である。1つのエラーメッセージが2つの機構を覆っていた。
 
@@ -246,7 +246,7 @@ procedure main()
   混ざっていた。
 - **多次元対応と予約語の修正（§3.5・§12、2026-08-05）**: unsupported 92 → 89、
   断片内 examples 21 → 24、proved 11 → 14（増えた3本はすべて proved）。
-  同時に `knapsack` と `injective_bwt_inverse` が**初めて実際に検査された**——
+  同時に `knapsack` と `bwt_inverse_c` が**初めて実際に検査された**——
   それまでは構文エラーが `unknown` に化けていた。判定は変わらないが、
   **理由が「IC3 が断念」から本物のタイムアウトに変わった**。
 - **値引数（§13、2026-08-05）**: unsupported 89 → 86、断片内 examples 24 → 27、
@@ -285,13 +285,13 @@ procedure main()
 
 examples 97本のうち断片内は**32本**（配列対応前は8本、そのあと 17→21→24→27→29→32）。
 **証明できたのは19本**（`base_convert`, `cantor_pair`, `fall`, `fib`,
-`injective_basics`, `injective_bennett`, `zagier`, および `structs_*` 12本）で、
+`int_bijections_c`, `bennett_divmod_c`, `zagier`, および `structs_*` 12本）で、
 残る13本は未決（`sqrt` は IC3 が断念、他はタイムアウト）。
-以前ここに「`injective_bwt_inverse` / `knapsack` も IC3 が断念」と書いていたが、
+以前ここに「`bwt_inverse_c` / `knapsack` も IC3 が断念」と書いていたが、
 **それは誤りだった**——両者はモデルが構文エラーで、検査にかかっていなかった（§3.5）。
 いまは実際に走って120秒で尽きる。
 `base_convert` は符号化形式を `assign` に揃えて得たもの（§5.4 の追記）、
-`injective_bennett` は零ストアを本当に1点にして得たもの（§5.8）で、どちらも
+`bennett_divmod_c` は零ストアを本当に1点にして得たもの（§5.8）で、どちらも
 アルゴリズムの改善ではない。構造体の4本は断片が広がって入ってきたぶんである。
 `fib_c.ja` は不変量が2本＝ERR だけでなく **BOUND も証明**しており、インライン深さ16で
 再帰が尽きることまで示せている。
@@ -335,27 +335,27 @@ examples 32本だけなので、以下はそれを列挙する。
 | `base_convert_c.ja` | proved | **refuted** | 基数が 0 |
 | `fall_c.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
 | `fib_c.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
-| `injective_basics_c.ja` | proved | **refuted** | 蓄積先が 0 でない |
+| `int_bijections_c.ja` | proved | **refuted** | 蓄積先が 0 でない |
 | `zagier_c.ja` | proved | **refuted** | 三つ組が正でない |
-| `injective_bennett_c.ja` | proved | unknown | — |
+| `bennett_divmod_c.ja` | proved | unknown | — |
 | `fib_variants_c.ja` | unknown | **refuted** | `fib` と同じ |
 | `glaisher_c.ja` | unknown | **refuted** | 出力 `dist[]` が 0 でない |
-| `injective_gcd_c.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
+| `gcd_c.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
 | `run_length_enc_c.ja` | unknown | **refuted** | 入力が 0 終端でない |
 | `sqrt_g.ja` | unknown | **refuted** | `num < 0` |
-| `injective_partition_g.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
+| `lomuto_partition_g.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
 | `bwt_plain_c.ja` | unknown | unknown | — |
 | `edit_distance_c.ja` | unknown | unknown | — |
-| `injective_bwt_inverse_c.ja` | unknown | unknown | — |
+| `bwt_inverse_c.ja` | unknown | unknown | — |
 | `knapsack_c.ja` | unknown | unknown | — |
 | `lcs_c.ja` | unknown | unknown | — |
-| `injective_arithmetic_c.ja` | unknown | unknown | — |
-| `injective_lehmer_c.ja` | unknown | unknown | — |
+| `arith_roundtrip_c.ja` | unknown | unknown | — |
+| `lehmer_code_c.ja` | unknown | unknown | — |
 
 **2つの問いは難易度で順序づかない。** 直観では `--init any` の方が強い主張だから
 難しいはずだが、実測は逆である: 未決11本のうち**6本が `any` では決着する**
-（`fib_variants` / `glaisher` / `injective_gcd` / `injective_partition` /
-`run_length_enc` / `sqrt`）。逆向きは `injective_bennett` の1本だけ。理由は単純で、
+（`fib_variants` / `glaisher` / `gcd_c` / `lomuto_partition_g` /
+`run_length_enc` / `sqrt`）。逆向きは `bennett_divmod_c` の1本だけ。理由は単純で、
 **反例を1本見つける方が不変量を作るより易しく、初期集合が広いほど反例は見つけやすい**。
 examples の決着は 19本 → 24本に増える。
 
@@ -384,9 +384,9 @@ examples の決着は 19本 → 24本に増える。
 | `run_length_enc_c.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
 | `sqrt_g.ja` | `num >= 0 & root = 0` | 非負の被平方数 | unknown |
 | `glaisher_c.ja` | `dist[…] = 0 & odd[…] >= 0` | 出力が空、入力が非負 | unknown |
-| `injective_gcd_c.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
+| `gcd_c.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
 
-（`injective_basics` と `fib_variants` は変数が多く、条件が「補助変数を全部 0 に置く」
+（`int_bijections_c` と `fib_variants` は変数が多く、条件が「補助変数を全部 0 に置く」
 ＝実質 `--init zero` に潰れるので省いた。）
 
 読み取れることが3つある。
@@ -447,7 +447,7 @@ examples の決着は 19本 → 24本に増える。
   測り直してある（proved 10 → 11、下がった本は無し）。
 - **効いたのは large-block だけだった。** 位置数が 36 → 8 に落ちたことで、IC3 が
   探す不変量が「各 pc での条件」ではなく「ループ頭での条件」だけになる。
-  タイムアウトしていた `fall` / `fib` / `injective_basics` がすべて証明に転じた。
+  タイムアウトしていた `fall` / `fib` / `int_bijections_c` がすべて証明に転じた。
 
 > **教訓**: ボトルネックはソルバの能力ではなく**問題の与え方**だった。同じ nuXmv・
 > 同じ IC3・同じ時間制限で、符号化を変えただけで 2/8 が 5/8 になっている。
@@ -466,18 +466,18 @@ examples の決着は 19本 → 24本に増える。
 |---|---|---:|---:|---:|---|
 | `edit_distance_c.ja` | Y | 1,998,234 | 32 | 86 | unknown |
 | `lcs_c.ja` | Y | 591,297 | 19 | 66 | unknown |
-| `injective_bwt_inverse_c.ja` | Y | 321,348 | 64 | 53 | unknown |
+| `bwt_inverse_c.ja` | Y | 321,348 | 64 | 53 | unknown |
 | `knapsack_c.ja` | Y | 250,543 | 19 | 36 | unknown |
-| `injective_gcd_c.ja` | Y | 123,892 | 60 | 41 | unknown |
+| `gcd_c.ja` | Y | 123,892 | 60 | 41 | unknown |
 | `bwt_plain_c.ja` | Y | 84,041 | 115 | 44 | unknown |
 | `run_length_enc_c.ja` | Y | 38,661 | 15 | 23 | unknown |
 | `fib_variants_c.ja` | – | 29,020 | 151 | 12 | unknown |
 | `glaisher_c.ja` | Y | 19,912 | 29 | 23 | unknown |
 | `fib_c.ja` | – | 17,856 | 101 | 3 | **proved** |
-| `injective_basics_c.ja` | – | 10,673 | 4 | 15 | **proved** |
+| `int_bijections_c.ja` | – | 10,673 | 4 | 15 | **proved** |
 | `base_convert_c.ja` | Y | 4,996 | 4 | 6 | unknown |
 | `sqrt_g.ja` | – | 4,294 | 13 | 5 | gave up |
-| `injective_bennett_c.ja` | – | 4,244 | 22 | 13 | unknown |
+| `bennett_divmod_c.ja` | – | 4,244 | 22 | 13 | unknown |
 | `fall_c.ja` | – | 4,130 | 10 | 11 | **proved** |
 | `zagier_c.ja` | – | 2,370 | 9 | 3 | **proved** |
 | `cantor_pair_c.ja` | – | 995 | 4 | 3 | **proved** |
@@ -517,9 +517,9 @@ large-block は決定率を上げる方向にも下げる方向にも効く: 直
 合計では 14% ほど動くが、**未決の大物はまったく動かない**——`edit_distance_c.ja` は
 全設定で 1951 KB・32 位置、`lcs_c.ja` は 577 KB・19 位置、`knapsack_c.ja` は 244 KB・19 位置。
 **位置数が変わらないので `_maybe_seal` が発火していない。** モデルが実際に変わる5本
-（`bwt_plain` / `glaisher` / `injective_basics` / `injective_bwt_inverse` /
+（`bwt_plain` / `glaisher` / `int_bijections_c` / `bwt_inverse_c` /
 `run_length_enc`）を両端 500 と 8000 で nuXmv にかけても、**判定は5本とも同一**
-（`injective_basics` が proved、他4本が unknown）。
+（`int_bijections_c` が proved、他4本が unknown）。
 
 理由ははっきりしている。**配列の膨張は文をまたぐ累積ではなく、1文の中で起きる。**
 `a[i] op= e` は要素ごとの条件付き更新になり、その各分岐が `_read_at` の
@@ -549,7 +549,7 @@ subscripts on left hand side of assignments"）ので、書きは要素ごとの
 | `edit_distance_c.ja` | 1951 KB | 173 KB | **11.2×** |
 | `lcs_c.ja` | 577 KB | 71 KB | 8.1× |
 | `knapsack_c.ja` | 244 KB | 51 KB | 4.7× |
-| `injective_gcd_c.ja` | 121 KB | 34 KB | 3.5× |
+| `gcd_c.ja` | 121 KB | 34 KB | 3.5× |
 | **合計** | **3424 KB** | **584 KB** | **5.9×** |
 
 位置数はほぼ不変（`edit_distance` は 32 のまま、`lcs` は 19 のまま）。配列長に対する
@@ -594,17 +594,17 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
 
 | プログラム | 自由変数 |
 |---|---:|
-| `injective_gcd` | 32 |
+| `gcd_c` | 32 |
 | `bwt_plain` | 30 |
-| `injective_bwt_inverse` | 21 |
-| `injective_bennett` | 6 |
+| `bwt_inverse_c` | 21 |
+| `bennett_divmod_c` | 6 |
 | （他7本） | 1〜5 |
 
 固定してよい理由は意味論にある: `local x = e` は入口で `x` を上書きするので、それ以前の
 値は**死んでいる**。死んだ成分だけが違う状態を消しているので、失敗を隠すことはない。
 
 修正して149本を測り直すと **proved 11 → 12 / unknown 11 → 10**。転じたのは
-`injective_bennett_c.ja`（自由変数6個）である。`--init any` では従来どおり自由のまま
+`bennett_divmod_c.ja`（自由変数6個）である。`--init any` では従来どおり自由のまま
 （`knapsack` で36個）で、そちらは「全入力で全域か」という別の問いだから正しい。
 
 > **効いたのは符号化ではなく、問いを意図に合わせたことだった。** 4案（位置数・block 閾値・
@@ -723,8 +723,41 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
    手続き。またアンシラ（`local`/`delocal`）は比較しない——`delocal` が 0 を課すので
    あって入口の値に戻るわけではなく、比較すれば正しいプログラムが全部反証される。
 
-   残作業: 対象を `PyJanus2PISA` の peephole と regalloc の translation validation に
-   広げること（本文書のコーパスではまだ回していない）。
+   **当初の対象だった `PyJanus2PISA` の peephole は、translation validation の
+   出番ではなかった。** `rocq/Opt.v` に
+   `Corollary peephole_run : forall c s, run (peephole c) s = run c s` があり、
+   `remove_nops_run` / `optimize_run` と併せて**直線コード全体に対する一般証明**が
+   既にある（`Admitted` なし、公理は関数外延性のみ）。プログラムごとの検証は
+   これより弱いので足すものがない。
+   PISA 側で本当に空いているのは Rocq が未着手の部分——**制御フロー・手続き・配列・
+   インライン展開**（`rocq/MANIFEST.md`）。そこを per-program で埋めるなら
+   **PISA 命令列に対する SMV 符号化**が要る（`smv.py` は Janus 用で、PISA には当たらない）。
+   別コンポーネントなので本項の範囲外。
+
+   代わりに回したのは `tools/verify_inverse_corpus.py`——コーパス全体で
+   **`P; P† = id` を記号的に検証する**。`invert.py` は構文的な変換なので、それが
+   意味論的にも逆であることは言語の要であり、`equiv.check_inverse` は有界入力で
+   *テスト*しているだけだった。ここでは無限領域の整数上で per-program に**証明**する。
+   `different` が出たらコーパスの性質ではなく **`invert.py` か符号化のバグ**である。
+
+   **実測（2026-08-06、examples 97本、timeout 30s）**:
+
+   | 判定 | 件数 |
+   |---|---:|
+   | `different` | **0** ← `invert.py` に反例なし |
+   | `equivalent` | 1（`cantor_pair_c`）|
+   | `partial` | 2（`base_convert_c`, `int_bijections_c`）|
+   | `unknown` | 14 |
+   | `unsupported` | 80 |
+
+   **等価性は全域性より厳密に難しい。** 断片に入るのが 17本（全域性検査は 32本）、
+   そのうち決着が 3本（同 19本）。理由は2つで、(a) `P;P†` は元の倍の長さになり
+   恒等写像の仕様が IC3 の負担を増やす、(b) 界面変数が SMV に verbatim で現れることを
+   要求するので、**struct が展開されて `p_x`/`p_y` になる 12本が落ちる**
+   （`structs_*.ja`）。(b) は原理的な制限ではない——展開されたフィールドを比較すれば
+   対応できるので、**被覆率を 12本ぶん上げられる伸びしろがそのまま残っている**。
+   真に予約語で改名されるのは `K`（`knapsack_c`）・`exp`（`arith_roundtrip_c`）・
+   `A`（`bwt_inverse_c`）の3本だけ。
 3. **BMC への退避**。IC3 がタイムアウトした場合に `check_invar_bmc` で「深さ k までは
    破れない」を得る。SAT 側の証明ログ（DRAT）まで取れば下界側の主張が認証つきになる。
 4. ~~`verify_corpus.py` の既定を揃える~~ → **2026-08-05 に実施**（proved 10 → 11）。
@@ -732,7 +765,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
    block 閾値 §5.6 / モデルサイズ §5.7 は判定不変、零ストアの忠実化 §5.8 だけが+1）。
    合成プログラムでは規模・単一構造のどれも再現しない（§5.9）ので、次は実物——
    `run_length_enc` や `glaisher` を1文ずつ削り、proved に転じる点を見る。
-   **事前条件を与える道も塞がっている**: `sqrt` / `glaisher` / `injective_gcd` は
+   **事前条件を与える道も塞がっている**: `sqrt` / `glaisher` / `gcd_c` は
    反例が指す条件を与えても unknown のままである（§5.3）。つまり難しさは「入力集合が
    広いこと」ではない。
 6. **`--init any` を未決プログラムの既定の第二手にする**。§5.3 の実測では未決10本の
@@ -1142,7 +1175,7 @@ s += 1; n += 1 }` は3周。実測）。後退辺で式を読み直す実装は*
 ### 15.1 被覆率は +11 ではなく +3 だった
 
 `iterate` は11本の**最初の**阻害要因だったが、通るようになったのは3本
-（`injective_arithmetic` / `injective_lehmer` / `structs_local`）である。**残る8本は
+（`arith_roundtrip_c` / `lehmer_code_c` / `structs_local`）である。**残る8本は
 次に `^=` で止まる。** これで `^=` が 11 → **18本**に浮上し、stack に次ぐ壁になった。
 
 被覆率をブロッカー表の足し算で見積もって外したのは、これで4回連続である
@@ -1152,7 +1185,7 @@ s += 1; n += 1 }` は3周。実測）。後退辺で式を読み直す実装は*
 
 ### 15.2 予約識別子はここでも出た
 
-`injective_arithmetic_c.ja` が断片に入った瞬間、それが `exp` という変数を持つことが
+`arith_roundtrip_c.ja` が断片に入った瞬間、それが `exp` という変数を持つことが
 問題になった（nuXmv の予約語）。**気づけたのは §3.5 で入れた「コーパス全体のモデルが
 nuXmv に読めるか」というテストが落ちたから**である。予約語の一覧は安全網ではない
 ——プログラムは何とでも名付けられる——**読めるかどうかを毎回確かめる方が安全網**である。

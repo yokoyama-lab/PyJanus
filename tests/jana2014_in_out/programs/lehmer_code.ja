@@ -9,7 +9,7 @@
 //
 // Reading the code as a factorial-base number (sum_k code[k]*k!) gives the
 // integer rank in [0,n!); the no-I/O twin tests/jana2014/fixtures/examples/
-// injective_lehmer.ja does that whole perm<->integer bijection and is checked
+// lehmer_code_c.ja does that whole perm<->integer bijection and is checked
 // by both verified interpreters. See docs/reversible-pearls.md (PFAD ch.12).
 //
 // case: mixed       # [2,0,3,1] -> Lehmer [0,0,2,1]
