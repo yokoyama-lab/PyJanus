@@ -1,6 +1,6 @@
 // @summary:   aVL insertion of 1..7, then deletion of 4 (the root, with two children, so its successor's key moves up)
 // @technique: history-stack
-// @source:    Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3, Theorem 6.12
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 5.3, Theorem 6.12
 // @confirmed: reproduced by tests/jana2014/reference/avl_delete_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on ht, key, left, nfree, right, root
 // @keep:      ht, key, left, nfree, right, root
 // @expect: alog = <4, 6, 5, 4, 4, 5, 0, 6, 6, 0, 2, 3, 4, 4, 5, 0, 2, 3, 0, 4, 4, 0, 2, 3, 0, 1, 0, 2, 2, 0, 1, 0, 0]

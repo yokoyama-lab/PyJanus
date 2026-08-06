@@ -1,6 +1,6 @@
 // @summary:   floyd-Warshall all-pairs shortest paths, in place on the distance matrix
 // @technique: history-stack
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.4, Theorem 6.20
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.4, Theorem 6.20
 // @confirmed: reproduced by tests/jana2014/reference/floyd_warshall_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on inf, path, v_n
 // @keep:      inf, path, v_n
 // @expect: blog = <0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

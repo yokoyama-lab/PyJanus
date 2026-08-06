@@ -1,6 +1,6 @@
 // @summary:   all-pairs shortest paths by repeated min-plus squaring of the weight matrix
 // @technique: clean-accumulation
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.5, Theorem 6.22
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.5, Theorem 6.22
 // @confirmed: reproduced by tests/jana2014/reference/matrix_apsp_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on inf, m_arr, t_n, v_n
 // @keep:      inf, m_arr, t_n, v_n
 // @expect: inf = 10000

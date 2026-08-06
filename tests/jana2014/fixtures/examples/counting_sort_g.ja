@@ -1,6 +1,6 @@
 // @summary:   counting sort
 // @technique: clean-accumulation
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.1.2; cf. Cormen et al., Introduction to Algorithms, 3rd ed., p. 195
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.1.2; cf. Cormen et al., Introduction to Algorithms, 3rd ed., p. 195
 // @confirmed: reproduced by tests/jana2014/reference/counting_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, c, k, n
 // @keep:      a, b, k, n
 // @expect: a[8] = {2, 5, 3, 0, 2, 3, 0, 3}

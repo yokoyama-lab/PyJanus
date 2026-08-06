@@ -1,7 +1,7 @@
 // @summary:   matrix multiplication routed through a Crout LU decomposition
 // @technique: bennett-uncompute
 // @source:    original (Crout LU decomposition, iterate form)
-// @confirmed: UNVERIFIED -- the reference does not predict the product accumulated into A, which depends on how multLD and multU split the factorisation. The rest is reproduced by tests/jana2014/reference/matrixmult_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on B, n
+// @confirmed: reproduced by tests/jana2014/reference/matrixmult_c.py, an independent Python implementation written from the algorithm (only the inputs and the conventions this program fixes are transcribed); it agrees on A, B, n
 // @keep:      A, B, n
 // @expect: A[3][3] = {{22, 254, 1562}, {12, 141, 876}, {22, 238, 1245}}
 // @expect: B[3][3] = {{2, 4, 4}, {4, 1, 1}, {2, 3, 4}}

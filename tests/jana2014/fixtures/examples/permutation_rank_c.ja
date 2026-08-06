@@ -1,6 +1,6 @@
 // @summary:   rank a balanced bit string, then unrank it: the round trip restores it and clears the index
 // @technique: plain
-// @source:    M. C. Er, Enumerating ordered trees lexicographically, The Computer Journal 28(5), 1985, pp. 540-541
+// @source:    M. C. Er, Enumerating ordered trees lexicographically, The Computer Journal 28(5), 1985, pp. 538-542, doi:10.1093/comjnl/28.5.538
 // @confirmed: reproduced by tests/jana2014/reference/permutation_rank_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on b, index, n
 // @keep:      b, n
 // @expect: b[8] = {1, 0, 1, 1, 1, 0, 0, 0}

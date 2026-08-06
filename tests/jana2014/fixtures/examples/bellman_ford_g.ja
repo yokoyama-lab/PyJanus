@@ -1,6 +1,6 @@
 // @summary:   bellman-Ford with negative weights: distances and the predecessor tree
 // @technique: history-stack
-// @source:    Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.3, Theorem 6.18
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.3, Theorem 6.18
 // @confirmed: reproduced by tests/jana2014/reference/bellman_ford_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on dist, e_n, eu, ev, ew, inf, pred, v_n
 // @keep:      dist, e_n, eu, ev, ew, inf, pred, v_n
 // @expect: dist[5] = {0, 2, 4, 7, -2}

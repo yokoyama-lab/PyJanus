@@ -1,6 +1,6 @@
 // @summary:   zagier's involution on triples with x^2 + 4yz fixed -- the one-sentence proof that a prime 1 mod 4 is a sum of two squares
 // @technique: plain
-// @source:    D. Zagier, A one-sentence proof that every prime p = 1 mod 4 is a sum of two squares, Amer. Math. Monthly 97(2), 1990
+// @source:    D. Zagier, A one-sentence proof that every prime p = 1 mod 4 is a sum of two squares, Amer. Math. Monthly 97(2), 1990, p. 144, doi:10.2307/2323918
 // @confirmed: reproduced by tests/jana2014/reference/zagier_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on x, y, z
 // @keep:      x, y, z
 // @expect: x = 1

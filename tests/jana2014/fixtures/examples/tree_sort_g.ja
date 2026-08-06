@@ -1,6 +1,6 @@
 // @summary:   tree sort: insert into an AVL that counts multiplicities, then read it out in order
 // @technique: history-stack
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.1, Theorem 6.5
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.1, Theorem 6.5
 // @confirmed: reproduced by tests/jana2014/reference/tree_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, cnt, ht, key, left, n, nfree, right, root
 // @keep:      a, b, cnt, ht, key, left, n, nfree, right, root
 // @expect: a[6] = {3, 1, 2, 3, 1, 3}
