@@ -1,3 +1,10 @@
+// @summary:   binary -> reflected Gray code, bit 0 least significant
+// @technique: plain
+// @source:    reflected binary Gray code
+// @confirmed: reproduced by tests/jana2014/reference/gray_code_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on bits
+// @keep:      bits
+// @expect: bits[4] = {1, 1, 1, 1}
+//
 // Reflected binary Gray code — no-I/O variant (verified-oracle twin of
 // tests/jana2014_in_out/programs/gray_code.ja).
 //

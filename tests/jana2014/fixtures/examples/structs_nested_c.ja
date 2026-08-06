@@ -1,3 +1,11 @@
+// @summary:   accumulate(p, q) does p += 2q + something; called, uncalled, called again, so the net effect is one application
+// @technique: clean-accumulation
+// @source:    original (a fixture for nested struct-by-reference calls)
+// @confirmed: reproduced by tests/jana2014/reference/structs_nested_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on p, q
+// @keep:      p, q
+// @expect: p = {x = 21, y = 42}
+// @expect: q = {x = 10, y = 20}
+//
 // Nested struct-by-reference: a procedure passes its OWN struct formals onward
 // to a second procedure, so the per-field ref expansion happens at a nested
 // (non-main) call site (vjanus's struct_var_field_refs via the `fstructs`

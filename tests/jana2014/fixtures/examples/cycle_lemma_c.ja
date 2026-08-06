@@ -1,3 +1,15 @@
+// @summary:   dvoretzky and Motzkin's cycle lemma
+// @technique: plain
+// @source:    Dvoretzky and Motzkin cycle lemma; gen_janus hard13-15 experiments (2026-07)
+// @confirmed: reproduced by tests/jana2014/reference/cycle_lemma_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, n, r
+// @keep:      a, n, r
+// @expect: a = 1 1 -1 1 -1
+// @expect: n = 5
+// @expect: r = 1
+// @expect: a[5] = {1, 1, -1, 1, -1}
+// @expect: n = 5
+// @expect: r = 1
+//
 // Cycle lemma (Dvoretzky-Motzkin) normalization: the unique rotation making
 // all prefix sums positive. Injectivity IS the uniqueness theorem.
 //

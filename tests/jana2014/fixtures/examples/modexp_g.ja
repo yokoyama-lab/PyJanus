@@ -1,3 +1,16 @@
+// @summary:   modular exponentiation by repeated squaring
+// @technique: history-stack
+// @source:    classical square-and-multiply; the overwrite log is original
+// @confirmed: reproduced by tests/jana2014/reference/modexp_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on base, e, m, pw, r
+// @keep:      base, e, m, r
+// @expect: base = 7
+// @expect: e = 133
+// @expect: g = <10, 5, 14, 18, 7, 10, 14, 7, 18, 7, 1]
+// @expect: m = 31
+// @expect: p = 7
+// @expect: pw = 0
+// @expect: r = 19
+//
 // Reversible Modular Exponentiation (square-and-multiply)
 //
 // Computes r = base^e mod m by scanning the W = 8 bits of e (monotone

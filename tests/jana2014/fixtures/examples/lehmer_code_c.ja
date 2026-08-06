@@ -1,3 +1,15 @@
+// @summary:   permutation -> Lehmer code -> integer, then both steps undone
+// @technique: plain
+// @source:    Lehmer code and factorial number system; cf. docs/reversible-pearls.md
+// @confirmed: reproduced by tests/jana2014/reference/lehmer_code_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on int_result, n, perm
+// @keep:      n, perm
+// @expect: code:     0 0 2 1
+// @expect: integer:  10
+// @expect: restored: 2 0 3 1 (int=0)
+// @expect: int_result = 0
+// @expect: n = 4
+// @expect: perm[4] = {2, 0, 3, 1}
+//
 // Level 9: Lehmer code and factorial-base integer encoding of permutations.
 //
 // A permutation p of {0, ..., n-1} can be encoded bijectively as an

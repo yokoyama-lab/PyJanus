@@ -1,3 +1,14 @@
+// @summary:   closest pair of points, reported as a squared distance
+// @technique: bennett-uncompute
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/closest_pair_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on big, n, res, x, y
+// @keep:      big, n, res, x, y
+// @expect: big = 1000000
+// @expect: n = 5
+// @expect: res = 13
+// @expect: x[5] = {2, 12, 40, 5, 12}
+// @expect: y[5] = {3, 30, 50, 1, 10}
+//
 // Reversible Closest Pair of Points (brute force, squared distances)
 //
 // Points (x[i], y[i]) with integer coordinates.  Scans all pairs

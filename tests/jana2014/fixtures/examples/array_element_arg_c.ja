@@ -1,3 +1,11 @@
+// @summary:   passing a scalar and an array element to the same incrementing procedure
+// @technique: clean-accumulation
+// @source:    original (a regression fixture, not a sample algorithm)
+// @confirmed: reproduced by tests/jana2014/reference/array_element_arg_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on test_array, test_int
+// @keep:      test_array, test_int
+// @expect: test_array[2] = {43, 17}
+// @expect: test_int = 5
+
 procedure test_rev(int x)
     x += 1
 

@@ -1,3 +1,27 @@
+// @summary:   a staircase of injective integer functions, applied in sequence
+// @technique: clean-accumulation
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/int_bijections_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, c, ca, cb, n, sq, x, y, z
+// @keep:      a, b, c, ca, cb, n, sq, x, y, z
+// @expect: inc:        x=6
+// @expect: neg:        x=-6
+// @expect: add:        x=-6 y=4
+// @expect: dbl:        y=8
+// @expect: mul_const:  y=24 (n=3)
+// @expect: mul:        c=28
+// @expect: square:     sq=36
+// @expect: cantor:     z=31
+// @expect: a = 4
+// @expect: b = 7
+// @expect: c = 28
+// @expect: ca = 3
+// @expect: cb = 4
+// @expect: n = 3
+// @expect: sq = 36
+// @expect: x = -6
+// @expect: y = 24
+// @expect: z = 31
+//
 // A staircase of reversible procedures that compute injective integer
 // functions, ordered from trivial to less trivial.
 //

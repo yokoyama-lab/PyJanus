@@ -1,3 +1,20 @@
+// @summary:   a four-round Feistel cipher with an S-box, encrypted then decrypted, and the key schedule uncalled away
+// @technique: plain
+// @source:    original (the S-box is the PRESENT cipher's 4-bit S-box)
+// @confirmed: reproduced by tests/jana2014/reference/cipher_sbox_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on L, R, inv_sbox, master_key, rk, rounds, sbox
+// @keep:      L, R, inv_sbox, master_key, rounds, sbox
+// @expect: round keys:  6 3 13 8
+// @expect: encrypt:     L=4 R=8
+// @expect: decrypt:     L=5 R=10
+// @expect: rk cleared:  0 0 0 0
+// @expect: L = 5
+// @expect: R = 10
+// @expect: inv_sbox[16] = {5, 14, 15, 8, 12, 1, 2, 13, 11, 4, 6, 3, 0, 7, 9, 10}
+// @expect: master_key = 6
+// @expect: rk[4] = {0, 0, 0, 0}
+// @expect: rounds = 4
+// @expect: sbox[16] = {12, 5, 6, 11, 9, 0, 10, 13, 3, 14, 15, 8, 4, 7, 1, 2}
+//
 // Level 12: a more cipher-like block cipher with S-box and round key
 // schedule.
 //

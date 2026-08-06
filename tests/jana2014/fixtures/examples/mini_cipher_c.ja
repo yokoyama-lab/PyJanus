@@ -1,3 +1,18 @@
+// @summary:   a three-round modular cipher, encrypted then decrypted
+// @technique: ancilla-flag
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/mini_cipher_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on K0, K1, K2, L, R, logs, m
+// @keep:      K0, K1, K2, L, R, m
+// @expect: encrypt:  L=250 R=231  logs=100
+// @expect: decrypt:  L=100 R=42  logs=000
+// @expect: K0 = 200
+// @expect: K1 = 150
+// @expect: K2 = 91
+// @expect: L = 100
+// @expect: R = 42
+// @expect: logs[3] = {0, 0, 0}
+// @expect: m = 256
+//
 // Level 8: modular arithmetic and a 3-round Feistel mini block cipher.
 //
 // Modular addition (x + y) mod m is reversible if we record the "did we

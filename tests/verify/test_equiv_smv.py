@@ -83,6 +83,22 @@ class CompositionTests(unittest.TestCase):
     with self.assertRaises(SmvUnsupported):
       compose_with_inverse(a, b)
 
+  def test_a_clashing_struct_definition_is_refused(self):
+    """Same type name, different fields: the interface check alone misses it.
+
+    `format_vdecl` renders the declaration as `Point p`, so two programs whose
+    `Point` differs still compare equal on the interface.  The composed program
+    keeps P's definitions, so Q†'s field accesses would be resolved against the
+    wrong layout without a word.
+    """
+    a = prog("struct Point {\n    int x;\n    int y;\n};\n"
+             "procedure main()\n    Point p\n    p.x += p.y\n")
+    b = prog("struct Point {\n    int y;\n    int x;\n};\n"
+             "procedure main()\n    Point p\n    p.x += p.y\n")
+    with self.assertRaises(SmvUnsupported) as caught:
+      compose_with_inverse(a, b)
+    self.assertIn("different fields", str(caught.exception))
+
   def test_an_identical_procedure_is_merged_once(self):
     src_proc = "procedure p(int a)\n    a += 1\n"
     a = prog(src_proc + "procedure main()\n    int x\n    call p(x)\n")
@@ -128,6 +144,38 @@ class ModelShapeTests(unittest.TestCase):
     with self.assertRaises(SmvUnsupported) as caught:
       compile_equivalence_to_smv(a, a)
     self.assertIn("does not track the renaming", str(caught.exception))
+
+  def test_a_struct_is_compared_field_by_field(self):
+    """A struct is not one SMV variable: `smv.py` gives every field its own.
+
+    Requiring the *declared* name to appear verbatim refused every program with
+    a struct — 12 of the corpus — because `p` is only ever `p_x` / `p_y` in the
+    model.  The interface has to be expanded the same way the compiler does.
+    """
+    src = ("struct Point {\n    int x;\n    int y;\n};\n"
+           "procedure main()\n    Point p\n    Point q\n"
+           "    p.x += q.y\n")
+    built = compile_equivalence_to_smv(prog(src), prog(src))
+    self.assertEqual(built.compared, ("p_x", "p_y", "q_x", "q_y"))
+    for name in built.compared:
+      self.assertIn(f"{name} = {name}{_FROZEN_SUFFIX}", built.identity_prop)
+
+  def test_an_array_valued_struct_field_is_compared_elementwise(self):
+    src = ("struct Box {\n    int v[2];\n};\n"
+           "procedure main()\n    Box a\n    a.v[0] += a.v[1]\n")
+    built = compile_equivalence_to_smv(prog(src), prog(src))
+    self.assertEqual(built.compared, ("a_v",))
+    self.assertIn(f"a_v[0] = a_v{_FROZEN_SUFFIX}[0]", built.identity_prop)
+    self.assertIn(f"a_v[1] = a_v{_FROZEN_SUFFIX}[1]", built.identity_prop)
+
+  def test_an_unknown_struct_type_is_refused(self):
+    src = "procedure main()\n    Nosuch p\n    skip\n"
+    try:
+      program = prog(src)
+    except Exception:
+      self.skipTest("the dialect rejects an unknown type before we get there")
+    with self.assertRaises(SmvUnsupported):
+      compile_equivalence_to_smv(program, program)
 
   def test_ancillas_are_not_compared(self):
     """A `local` is restored by `delocal`, not by returning to its entry value."""

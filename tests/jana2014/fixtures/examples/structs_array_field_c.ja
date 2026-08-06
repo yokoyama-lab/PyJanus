@@ -1,3 +1,10 @@
+// @summary:   a struct with an array field and a 2-D array field, read across elements
+// @technique: clean-accumulation
+// @source:    original (a fixture for array fields inside a struct)
+// @confirmed: reproduced by tests/jana2014/reference/structs_array_field_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a
+// @keep:      a
+// @expect: a = {v = {5, 7, 5}, grid = {{2, 4}, {0, 4}}, w = 7}
+//
 // Array fields inside a struct: a scalar struct whose fields are themselves
 // arrays (1-D and 2-D), accessed as a.v[i] and a.grid[i][j].  vjanus lays such
 // a struct out flat in one array slot (each array field reserves enough cells

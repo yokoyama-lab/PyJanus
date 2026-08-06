@@ -1,3 +1,16 @@
+// @summary:   a 5-comparator sorting network for 4 elements, logging each swap decision
+// @technique: ancilla-flag
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/sort_network_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, log, log_b
+// @keep:      a, b
+// @expect: sort4 a:   1 2 3 4  log=11111
+// @expect: uncall a:  4 2 3 1  log=00000
+// @expect: sort4 b:   1 2 3 4  log=00000
+// @expect: a[4] = {4, 2, 3, 1}
+// @expect: b[4] = {1, 2, 3, 4}
+// @expect: log[5] = {0, 0, 0, 0, 0}
+// @expect: log_b[5] = {0, 0, 0, 0, 0}
+//
 // Level 7: a reversible sorting network.
 //
 // Each comparator is a 2-element compare-and-swap. Sorting throws away the

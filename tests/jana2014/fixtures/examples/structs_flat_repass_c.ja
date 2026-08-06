@@ -1,3 +1,11 @@
+// @summary:   a struct passed through one procedure into another: the inner call adds v[0] + w, the outer then adds v[1]
+// @technique: clean-accumulation
+// @source:    original (a fixture for re-passing a struct formal)
+// @confirmed: reproduced by tests/jana2014/reference/structs_flat_repass_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, r
+// @keep:      a, r
+// @expect: a = {v = {10, 20, 30}, w = 5}
+// @expect: r = 35
+//
 // Re-passing a flat struct formal to another procedure: exercises the chain
 // fstructs_flat -> struct_var_field_refs -> [RF(base)] -> argsubst.
 // inner() receives the same base ref as outer(), accesses s.v[0].

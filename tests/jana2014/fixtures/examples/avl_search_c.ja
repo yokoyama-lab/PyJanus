@@ -1,3 +1,15 @@
+// @summary:   search in a fixed AVL tree: found returns the key, absent returns 0
+// @technique: clean-accumulation
+// @source:    Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3, Theorem 6.9
+// @confirmed: reproduced by tests/jana2014/reference/avl_search_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on key, left, res5, res8, right, root
+// @keep:      key, left, res5, right, root
+// @expect: key[8] = {-999, 1, 2, 3, 4, 5, 6, 7}
+// @expect: left[8] = {0, 0, 1, 0, 2, 0, 5, 0}
+// @expect: res5 = 5
+// @expect: res8 = 0
+// @expect: right[8] = {0, 0, 3, 0, 6, 0, 7, 0}
+// @expect: root = 4
+//
 // Reversible AVL Tree -- Search
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 5.3,

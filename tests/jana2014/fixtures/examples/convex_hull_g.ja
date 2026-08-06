@@ -1,3 +1,15 @@
+// @summary:   jarvis march: which points lie on the convex hull
+// @technique: history-stack
+// @source:    Jarvis march (gift wrapping)
+// @confirmed: reproduced by tests/jana2014/reference/convex_hull_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on hull, n, start, x, y
+// @keep:      hull, n, x, y
+// @expect: hseq = <4, 3, 1, 0]
+// @expect: hull[6] = {1, 1, 0, 1, 1, 0}
+// @expect: n = 6
+// @expect: start = 0
+// @expect: x[6] = {1, 9, 5, 8, 2, 4}
+// @expect: y[6] = {1, 2, 4, 9, 7, 2}
+//
 // Reversible Convex Hull (Jarvis march / gift wrapping)
 //
 // Integer points (x[i], y[i]).  Start from the lowest point (min y,

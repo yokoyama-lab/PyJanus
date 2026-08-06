@@ -1,3 +1,11 @@
+// @summary:   second-order Rule 90 on a line: each half-step xors the other row's neighbours into this one
+// @technique: plain
+// @source:    Rule 90R (second-order reversible cellular automaton)
+// @confirmed: reproduced by tests/jana2014/reference/reversible_ca_rule90_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b
+// @keep:      a, b
+// @expect: a[5] = {0, 6, 7, 4, 0}
+// @expect: b[5] = {0, 6, 0, 4, 0}
+//
 // Second-order reversible cellular automaton (Rule 90R) — no-I/O variant.
 //
 // The same clean reversible simulation as

@@ -1,3 +1,15 @@
+// @summary:   depth-first search on a directed graph: preorder visit sequence
+// @technique: history-stack
+// @source:    cf. Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.2
+// @confirmed: reproduced by tests/jana2014/reference/depth_first_search_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on adj, cnt, order, v_n, visited
+// @keep:      adj, cnt, order, v_n, visited
+// @expect: adj[25] = {0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0}
+// @expect: blog = <0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+// @expect: cnt = 5
+// @expect: order[5] = {0, 1, 3, 4, 2}
+// @expect: v_n = 5
+// @expect: visited[5] = {1, 1, 1, 1, 1}
+//
 // Reversible Depth-First Search (adjacency matrix, recursive)
 // cf. Nunez de Villavicencio, Demaine et al., "Energy-Efficient
 //   Algorithms" (arXiv:1605.08448), Section 6.2 -- Frank argues BFS and

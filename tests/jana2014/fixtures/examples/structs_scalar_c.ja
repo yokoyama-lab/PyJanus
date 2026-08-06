@@ -1,3 +1,11 @@
+// @summary:   struct fields as lvalues: field-to-field addition, then a swap across structs
+// @technique: clean-accumulation
+// @source:    original (a fixture for scalar struct fields)
+// @confirmed: reproduced by tests/jana2014/reference/structs_scalar_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on p, q
+// @keep:      p, q
+// @expect: p = {x = 10, y = 4}
+// @expect: q = {x = 7, y = 0}
+//
 // Scalar struct values: field read/assign and field swap.
 // Exercises vjanus's struct lowering (each scalar field -> one slot;
 // `p.field` -> that slot) against PyJanus.

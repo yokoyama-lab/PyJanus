@@ -1,3 +1,22 @@
+// @summary:   factorial, integer power and Horner evaluation, each uncalled away again
+// @technique: clean-accumulation
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/arith_roundtrip_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on base, coeffs, deg, exp, fact, n, pow, x, y
+// @keep:      base, coeffs, deg, exp, n, x
+// @expect: factorial:  5! = 120
+// @expect: ipow:       2^10 = 1024
+// @expect: horner:     p(4) = 57
+// @expect: cleared:    fact=0 pow=0 y=0
+// @expect: base = 2
+// @expect: coeffs[3] = {1, 2, 3}
+// @expect: deg = 3
+// @expect: exp = 10
+// @expect: fact = 0
+// @expect: n = 5
+// @expect: pow = 0
+// @expect: x = 4
+// @expect: y = 0
+//
 // A fourth level of reversible injective procedures: arithmetic built from
 // the standard Janus "multiply by a known constant" pattern
 //

@@ -1,3 +1,14 @@
+// @summary:   longest common subsequence, leaving the whole DP table
+// @technique: clean-accumulation
+// @source:    classical LCS DP; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/lcs_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on L, m, n, x, y
+// @keep:      L, m, n, x, y
+// @expect: L[48] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 2, 0, 1, 1, 2, 2, 2, 0, 1, 1, 2, 2, 3, 0, 1, 2, 2, 2, 3, 0, 1, 2, 2, 3, 3, 0, 1, 2, 2, 3, 4}
+// @expect: m = 7
+// @expect: n = 5
+// @expect: x[8] = {0, 1, 2, 3, 2, 4, 1, 2}
+// @expect: y[6] = {0, 2, 4, 3, 1, 2}
+//
 // Reversible Longest Common Subsequence (dynamic programming)
 //
 // Fills the classic LCS table L[i][j] = length of the LCS of x[1..i] and

@@ -1,3 +1,15 @@
+// @summary:   selection sort recording how far ahead each pass found its minimum
+// @technique: history-stack
+// @source:    gen_janus hard13-15 experiments (2026-07)
+// @confirmed: reproduced by tests/jana2014/reference/sort_rank_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, n, tr
+// @keep:      a, n
+// @expect: a = 1 1 2 2 3
+// @expect: n = 5
+// @expect: tr = 1 2 0 1 0
+// @expect: a[5] = {1, 1, 2, 2, 3}
+// @expect: n = 5
+// @expect: tr[5] = {1, 2, 0, 1, 0}
+//
 // In-place sort with an invented compact permutation trace (stable insertion
 // positions), fitting a bank of at most n-1 nonzero cells below n.
 //

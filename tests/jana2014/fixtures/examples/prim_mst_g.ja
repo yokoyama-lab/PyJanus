@@ -1,3 +1,18 @@
+// @summary:   prim's minimum spanning tree: final keys, parents and total weight
+// @technique: history-stack
+// @source:    Prim's algorithm; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/prim_mst_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on inf, intree, key, parent, total, v_n, w
+// @keep:      inf, intree, key, parent, total, v_n, w
+// @expect: blog = <0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0]
+// @expect: dlog = <3, 4, 2, 1, -1, 100000, -1, 100000, 0, -1, 100000, -1, 100000]
+// @expect: inf = 100000
+// @expect: intree[5] = {1, 1, 1, 1, 1}
+// @expect: key[5] = {0, 2, 3, 6, 5}
+// @expect: parent[5] = {-1, 0, 1, 0, 1}
+// @expect: total = 16
+// @expect: v_n = 5
+// @expect: w[25] = {0, 2, 0, 6, 0, 2, 0, 3, 8, 5, 0, 3, 0, 0, 7, 6, 8, 0, 0, 9, 0, 5, 7, 9, 0}
+//
 // Reversible Prim MST (minimum spanning tree, O(V^2))
 //
 // Undirected weighted graph as a symmetric adjacency matrix w[u*V+v]

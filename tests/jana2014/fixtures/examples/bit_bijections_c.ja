@@ -1,3 +1,25 @@
+// @summary:   bit-level injections: keyed xor (an involution), xor-into, Gray coding and a Feistel round, the last two undone again
+// @technique: plain
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/bit_bijections_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on K, L, R, a, g, gx, k, x, y
+// @keep:      K, L, R, a, gx, k, x, y
+// @expect: xor_key:    a=6 (k=10)
+// @expect: xor_key x2: a=12
+// @expect: xor_into:   x=240 y=15
+// @expect: gray_enc:   gx=12 g=10
+// @expect: gray_dec:   gx=12 g=0
+// @expect: feistel:    L=7 R=16 (K=3)
+// @expect: feistel^-1: L=5 R=7
+// @expect: K = 3
+// @expect: L = 5
+// @expect: R = 7
+// @expect: a = 12
+// @expect: g = 0
+// @expect: gx = 12
+// @expect: k = 10
+// @expect: x = 240
+// @expect: y = 15
+//
 // A second level of reversible injective procedures, focused on bit-level
 // operations and a one-round Feistel network.
 //

@@ -1,3 +1,10 @@
+// @summary:   an array of structs that themselves have array fields, read across elements
+// @technique: clean-accumulation
+// @source:    original (a fixture for struct-array plus array-field lowering)
+// @confirmed: reproduced by tests/jana2014/reference/structs_array_field_arr_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on g
+// @keep:      g
+// @expect: g[2] = {{v = {1, 2, 3}, sum = 4}, {v = {4, 0, 0}, sum = 3}}
+//
 // An array of structs whose fields are themselves arrays: g[k].v[i].  Each
 // element occupies `size` cells (size accounts for the array field), so the
 // cell of g[k].v[i] is k*size + offset(v) + Cantor(i).  Exercises the combined

@@ -1,3 +1,15 @@
+// @summary:   merge sort with the stable sorting permutation left in `ord`
+// @technique: history-stack
+// @source:    Cormen et al., Introduction to Algorithms, 3rd ed., MIT Press, p. 31
+// @confirmed: reproduced by tests/jana2014/reference/merge_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, ord, p, r
+// @keep:      a, r
+// @expect: a[8] = {1, 2, 2, 3, 4, 5, 6, 7}
+// @expect: gbfg = 0
+// @expect: gbg = nil
+// @expect: ord[8] = {4, 1, 6, 5, 2, 0, 7, 3}
+// @expect: p = 0
+// @expect: r = 7
+//
 // mergesort using internally optimal garbage with optimal garbage
 // Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.31
 

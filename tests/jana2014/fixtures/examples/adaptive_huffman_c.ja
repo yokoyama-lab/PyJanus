@@ -1,3 +1,19 @@
+// @summary:   adaptive canonical Huffman over the alphabet {1,2,3}, all counts starting 1
+// @technique: bennett-uncompute
+// @source:    gen_janus hard13-15 experiments (2026-07)
+// @confirmed: UNVERIFIED -- the reference does not predict the emitted bits: which losing symbol gets `10` and which `11` is this encoder's convention. The rest is reproduced by tests/jana2014/reference/adaptive_huffman_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on cnt, n, s
+// @keep:      bits, n, nbits
+// @expect: s = 0 0 0 0 0
+// @expect: n = 5
+// @expect: bits = 1 0 1 0 1 0 1 0 1 0
+// @expect: nbits = 10
+// @expect: cnt = 0 0 0
+// @expect: bits[10] = {1, 0, 1, 0, 1, 0, 1, 0, 1, 0}
+// @expect: cnt[3] = {0, 0, 0}
+// @expect: n = 5
+// @expect: nbits = 10
+// @expect: s[5] = {0, 0, 0, 0, 0}
+//
 // Adaptive canonical Huffman coding (alphabet {1,2,3}, all counts start at 1).
 // Consumes the source into the emitted bit stream; the frequency table is
 // uncomputed via `uncall` of the tree-building helper, leaving zero garbage.

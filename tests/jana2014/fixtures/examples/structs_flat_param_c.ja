@@ -1,3 +1,11 @@
+// @summary:   a struct passed by reference: one procedure sums its fields into a scalar, another scales the w field by a value argument
+// @technique: clean-accumulation
+// @source:    original (a fixture for passing a struct by reference)
+// @confirmed: reproduced by tests/jana2014/reference/structs_flat_param_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, r
+// @keep:      a, r
+// @expect: a = {v = {2, 3, 5}, w = 15}
+// @expect: r = 17
+//
 // Struct with array fields passed by reference: exercises case 1 (by-ref pass)
 // and case 2 (array field on formal).  A Box with v[3] and scalar w is passed
 // to add_fields and scaled; vjanus must use fstructs_flat (single RF base) and

@@ -1,3 +1,17 @@
+// @summary:   knuth-Morris-Pratt: the failure function and the number of occurrences
+// @technique: history-stack
+// @source:    Knuth, Morris and Pratt, Fast pattern matching in strings, SIAM J. Comput. 6(2), 1977
+// @confirmed: reproduced by tests/jana2014/reference/kmp_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on cnt, f, m, n, p, t
+// @keep:      cnt, f, m, n, p, t
+// @expect: cnt = 4
+// @expect: f[3] = {0, 0, 1}
+// @expect: gb = <1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0]
+// @expect: gq = <1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]
+// @expect: m = 3
+// @expect: n = 10
+// @expect: p[3] = {1, 2, 1}
+// @expect: t[10] = {1, 2, 1, 2, 1, 2, 1, 1, 2, 1}
+//
 // Reversible Knuth-Morris-Pratt (occurrence counting)
 //
 // The broken kmp.j/kmp1.j guarded their outer loops on the KMP prefix

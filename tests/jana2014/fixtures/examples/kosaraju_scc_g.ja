@@ -1,3 +1,17 @@
+// @summary:   kosaraju's strongly connected components: finish order, then components on the transpose
+// @technique: history-stack
+// @source:    Kosaraju's algorithm; the reversible two-pass formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/kosaraju_scc_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on adj, adjt, comp, ncomp, order, v_n, visited
+// @keep:      adj, adjt, comp, ncomp, order, v_n, visited
+// @expect: adj[25] = {0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0}
+// @expect: adjt[25] = {0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0}
+// @expect: blog = <0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+// @expect: comp[5] = {1, 1, 1, 2, 2}
+// @expect: ncomp = 2
+// @expect: order[5] = {4, 3, 2, 1, 0}
+// @expect: v_n = 5
+// @expect: visited[5] = {1, 1, 1, 1, 1}
+//
 // Reversible Kosaraju SCC (strongly connected components)
 //
 // Two reversible DFS passes over adjacency matrices:
