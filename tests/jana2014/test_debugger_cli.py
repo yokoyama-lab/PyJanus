@@ -10,7 +10,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 FROM_DEBUG_SIMPLE = "tests/jana2014/fixtures/from_debug_simple.ja"
 ITERATE_DEBUG_SIMPLE = "tests/jana2014/fixtures/iterate_debug_simple.ja"
-FIB_EXAMPLE = "tests/jana2014/fixtures/examples/fib.ja"
+# A copy of the corpus's fib.ja, kept here on purpose: the assertions below pin
+# `Break at line N`, so they break whenever a comment is added to the file they
+# read.  The corpus under fixtures/examples/ is being annotated file by file
+# (docs/corpus-annotation-manual.md), so a golden keyed to its line numbers would
+# be a tripwire for that work.  Same reason the two fixtures above are local.
+FIB_EXAMPLE = "tests/jana2014/fixtures/fib_debug.ja"
 
 
 def run_python(args: list[str], stdin: str) -> subprocess.CompletedProcess[str]:
