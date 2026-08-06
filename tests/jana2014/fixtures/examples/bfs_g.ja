@@ -1,6 +1,6 @@
 // @summary:   breadth-first search on an undirected graph: layer distances and visit order
 // @technique: history-stack
-// @source:    Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.2, Theorems 6.15/6.16
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.2, Theorems 6.15/6.16
 // @confirmed: reproduced by tests/jana2014/reference/bfs_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on adj, dist, head, queue, src, tail, v_n, visited
 // @keep:      adj, dist, head, queue, tail, v_n, visited
 // @expect: adj[36] = {0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0}

@@ -1,6 +1,6 @@
 // @summary:   growable array: append five, read one, pop two
 // @technique: ancilla-flag
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 5.2, Theorem 5.5
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 5.2, Theorem 5.5
 // @confirmed: reproduced by tests/jana2014/reference/dynamic_array_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on cap, data, e, length, q, x1, x2
 // @keep:      cap, data, length, q, x1, x2
 // @expect: cap = 8

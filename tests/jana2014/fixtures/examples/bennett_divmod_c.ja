@@ -1,6 +1,6 @@
 // @summary:   clean divmod by compute-use-uncompute: divmod(17,5) is undone, divmod(3,5) is kept
 // @technique: bennett-uncompute
-// @source:    C. H. Bennett, Logical reversibility of computation, IBM J. Res. Dev. 17(6), 1973
+// @source:    C. H. Bennett, Logical reversibility of computation, IBM J. Res. Dev. 17(6), 1973, pp. 525-532, doi:10.1147/rd.176.0525
 // @confirmed: reproduced by tests/jana2014/reference/bennett_divmod_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on d, q, q2, r, r2, x, x2
 // @keep:      d, r2, x, x2
 // @expect: divmod(17,5): x=17 d=5 q=3 r=2

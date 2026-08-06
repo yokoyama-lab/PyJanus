@@ -1,6 +1,6 @@
 // @summary:   inverse Burrows-Wheeler by LF-mapping, then uncalled: every workspace array returns to zero and the input is restored
 // @technique: bennett-uncompute
-// @source:    Bird and Mu, Inverting the Burrows-Wheeler transform (Functional Pearl), JFP 14(6), 2004
+// @source:    Bird and Mu, Inverting the Burrows-Wheeler transform (Functional Pearl), JFP 14(6), 2004, pp. 603-612, doi:10.1017/S0956796804005118
 // @confirmed: reproduced by tests/jana2014/reference/bwt_inverse_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on A, C, I, L, T, cnt, n, occ, path, s
 // @keep:      A, I, L, n
 // @expect: L:         1 2 3 1 0   I=4

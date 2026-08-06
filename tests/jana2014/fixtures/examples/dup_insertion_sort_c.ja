@@ -1,6 +1,6 @@
 // @summary:   insertion sort into a fresh array; the input is preserved
 // @technique: clean-accumulation
-// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.1.1, Theorem 6.6
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.1.1, Theorem 6.6
 // @confirmed: reproduced by tests/jana2014/reference/dup_insertion_sort_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, n
 // @keep:      a, b, n
 // @expect: a[6] = {50, 20, 40, 60, 10, 30}

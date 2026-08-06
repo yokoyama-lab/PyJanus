@@ -43,7 +43,10 @@ with. These modules are the missing second opinion.
 1. **Implement the algorithm, do not transliterate the Janus.** A line-by-line
    port shares the original's bugs and proves nothing. Write what the algorithm
    *is* — `math.gcd`, `sorted`, a two-line recurrence — and let the shapes
-   differ.
+   differ. Where the algorithm leaves a genuine choice open and the program has
+   made one, read that choice off and state it as a named constant with the
+   inputs; then implement around it. A convention is data, like the input. The
+   computation is not.
 2. **Do not import `jana_py`, and do not read the `.ja` file.** The only thing
    copied across is the input, which the Janus `main` hardcodes; put it in a
    module-level constant so the transcription is visible in one place.
@@ -57,19 +60,19 @@ with. These modules are the missing second opinion.
 
 ## Coverage
 
-All 97 examples have one, and all 97 agree.
+All 97 examples have one, all 97 agree, and none of them leaves part of the
+answer unpredicted. `PARTIAL` remains available for a module that cannot predict
+something, and `test_the_partial_references_are_the_declared_ones` pins the list
+of such modules -- currently empty -- so one cannot appear unnoticed.
 
-Five predict less than the whole answer and declare a `PARTIAL` string saying
-what they leave out; `test_the_partial_references_are_the_declared_ones` pins
-that list so it cannot grow quietly.
-
-| module | not predicted |
-|---|---|
-| `adaptive_huffman` | the emitted bits — which losing symbol gets `10` is the encoder's convention |
-| `ppm_lite` | the emitted bits, for the same reason |
-| `matrixmult` | the product in `A` — how `multLD` and `multU` split the factorisation |
-| `matrixmult_v1` | the product in `B`, for the same reason |
-| `binary_heap` | the final array layout, which follows this encoding's sift order |
+Five modules were `PARTIAL` for a while, on the view that the missing piece was
+"the encoder's convention, not something the algorithm determines". That was the
+wrong line to draw. A convention the program fixes -- which of two equally valid
+codes goes to which loser, where the sentinel is parked, which side the
+factorisation is folded in on -- can be read off and written down as a constant,
+exactly the way the inputs are. What must not be copied is the *computation*.
+Declaring the convention and then implementing around it keeps the reference
+independent; refusing to look at the convention only makes it incomplete.
 
 Leaving *garbage* unasserted is not a gap and is not listed: a quotient stack or
 a decision log is an artefact of the reversible encoding, not of the function.

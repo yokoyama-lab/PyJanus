@@ -1,6 +1,6 @@
 // @summary:   depth-first search on a directed graph: preorder visit sequence
 // @technique: history-stack
-// @source:    cf. Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.2
+// @source:    cf. Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Section 6.2
 // @confirmed: reproduced by tests/jana2014/reference/depth_first_search_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on adj, cnt, order, v_n, visited
 // @keep:      adj, cnt, order, v_n, visited
 // @expect: adj[25] = {0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0}

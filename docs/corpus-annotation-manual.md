@@ -632,24 +632,49 @@ FAIL gcd_g.ja
 残っているのは **機械が検査できない3つの欄**と、**参照実装が答えを出しきれなかった5本**です。
 下の4つを、番号順にやってください。
 
-### 10.1 `@source` の裏取り（97件・最優先）
+### 10.1 `@source` の裏取り（残り・最優先）
 
 **LLM がいちばん間違えるのが書誌情報です。** 実在しない論文・違うページ番号・
-著者名の取り違えが起こります。ここは実際に当たって確かめるしかありません。
+著者名の取り違えが起こります。
+
+> **2026-08-06: 外部 API で照合できる分は済ませました。** Semantic Scholar・
+> Crossref・arXiv の API で15種の出典を機械照合し、**2件の誤りを見つけて直しました**。
+>
+> - **arXiv:1605.08448 の著者が違っていた**（12本）。この repo は長らく
+>   「Nunez de Villavicencio, Emil, and Erik D. Demaine et al.」と書いてきましたが、
+>   実際の著者は **Demaine, Lynch, Mirano, Tyagi** で、その名前は arXiv にも
+>   Semantic Scholar にも1件も存在しません。`@source` は直しましたが、
+>   **各ファイル冒頭の散文には元の記述が残っています**（§10.1.1）
+> - **Er 1985 のページ範囲**が `pp. 540-541` になっていました。正しくは
+>   **pp. 538-542**（540/541 は本文中の図の位置）
+>
+> 検証済みの出典には **DOI を付けてあります**。DOI があるものは
+> `curl -s https://api.crossref.org/works/<DOI>` で誰でも即座に再確認できます。
+
+**残っているのは API で引けないもの**です。ここは実物に当たるしかありません。
+
+| 種類 | 残っている確認 |
+|---|---|
+| `Cormen et al., Introduction to Algorithms, 3rd ed., p. NNN` | **ページ番号（5本）**。第3版の現物が要る |
+| `David Gries, The Science of Programming, 1987, p. 270` | ページ番号。現物が要る |
+| `S. V. Nohr, Reversible Graph Algorithms, BSc thesis, Copenhagen University (2015)` | 学位論文。大学のリポジトリで探す |
+| `C. Lutz and H. Derby, Janus: a time-reversible language` | 1982年の学生レポート。書誌が確立していない |
+| `Ekima, Reversible-Graph-Algorithms-Janus-` | GitHub リポジトリ。現存するか |
+| `original` / `classical …` | 本当に独自か。既知の名前が付いていないか |
+
+#### 10.1.1 散文中の誤帰属（12本・要判断）
+
+`avl_*` / `bfs_g` / `bellman_ford_g` 等の**ファイル冒頭コメント**が
+`Nunez de Villavicencio, Emil, and Erik D. Demaine et al.` を出典として挙げています。
+上のとおり誤りですが、**元の記述は repo の作者が書いたもの**なので、
+消してよいかは先生に確認してください（別の文献から孫引きした記録かもしれません）。
 
 ```bash
 grep -h "@source" tests/jana2014/fixtures/examples/*.ja | sort | uniq -c | sort -rn
 ```
 
-同じ出典が何本にも付いているので、**出典の種類ごとに1回調べれば済みます**
-（例: arXiv:1605.08448 は20本以上に付いています）。
-
-| 書いてあるもの | やること |
-|---|---|
-| arXiv 番号・DOI・書名＋ページ | **実物に当たる**。節番号・定理番号・ページが合っているか。arXiv は番号でそのまま引けます |
-| `original` | 本当に独自か、既知のアルゴリズムに名前が付いていないか。付いているなら出典を足す |
-| `classical …; the reversible formulation is original` | 「classical」の部分に定番の出典があるなら足す |
-| `gen_janus hard13-15 experiments (2026-07)` | 内部の実験記録。**そのままでよい**（外部出典ではないため） |
+同じ出典が何本にも付いているので、**出典の種類ごとに1回調べれば済みます**。
+`gen_janus hard13-15 experiments (2026-07)` は内部の実験記録なので**そのままでよい**です。
 
 間違いを見つけたら**直して**、PR の説明に「`@source` 修正: <ファイル> — <何が違ったか>」
 と書いてください。**これがこの作業でいちばん価値のある発見です。**
@@ -668,25 +693,20 @@ grep -h "@source" tests/jana2014/fixtures/examples/*.ja | sort | uniq -c | sort 
 
 現在の内訳は `python3 tools/check_corpus_meta.py report -q` で見られます。
 
-### 10.3 `UNVERIFIED` の5本を埋める
+### 10.3 `UNVERIFIED` — **2026-08-06 に解消済み**
 
 ```bash
-python3 tools/check_corpus_meta.py report -q      # UNVERIFIED の一覧が出ます
+python3 tools/check_corpus_meta.py report -q      # UNVERIFIED は 0 件です
 ```
 
-参照実装が答えの一部を予測しきれなかった5本です。
+参照実装が答えの一部を予測しきれなかった5本（2つの符号化器・Crout の積2本・
+ヒープの並び）は埋まりました。**97本すべてで答え全体が独立に再現されています。**
 
-| ファイル | 予測できていないもの |
-|---|---|
-| `adaptive_huffman_c` / `ppm_lite_c` | 出力ビット列（符号の割り当て規則を読み解く必要がある） |
-| `matrixmult_c` / `matrixmult_v1_c` | Crout 分解を経た積 |
-| `binary_heap_g` | ヒープ配列の最終的な並び |
-
-**仕事は Janus を読んで規則を突き止め、`tests/jana2014/reference/<名前>.py` の
-`expected()` に足すこと**です。足したら
-`python3 -m pytest tests/jana2014/test_reference_impls.py -q -k <名前>` が緑になり、
-`PARTIAL` の行を消せます（`test_the_partial_references_are_the_declared_ones` の
-一覧も更新してください）。**5本のうち1本でも埋まれば成果です。**
+考え方が変わったので書いておきます。当初は「どちらの敗者に `10` を割り当てるかは
+符号化器の流儀であってアルゴリズムが決めることではない」として予測を放棄していました。
+しかし**プログラムが固定した規約は、入力と同じように読み取って定数として宣言してよい**
+のです。禁じられているのは**計算を書き写すこと**であって、規約を見ることではありません。
+規約を宣言したうえで独立に実装すれば、参照実装は独立なままです。
 
 ### 10.4 `@oracle` を書く（93本・ここが本編）
 

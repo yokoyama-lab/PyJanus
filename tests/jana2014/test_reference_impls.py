@@ -170,7 +170,7 @@ class ReferenceHygieneTests(unittest.TestCase):
                for path in self._modules()}
     self.assertEqual(
       sorted(stem for stem, reason in partial.items() if reason),
-      ["adaptive_huffman_c", "binary_heap_g", "matrixmult_c", "matrixmult_v1_c", "ppm_lite_c"])
+      [])
 
 
 if __name__ == "__main__":
