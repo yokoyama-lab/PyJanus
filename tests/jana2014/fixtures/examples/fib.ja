@@ -2,6 +2,7 @@
 // @technique: clean-accumulation
 // @source:    Yokoyama & Gluck, A reversible programming language and its invertible self-interpreter, PEPM 2007, Fig. 1
 // @confirmed: with F(1)=F(2)=1 the sequence is 1,1,2,3,5,8,13, so n=5 gives (F(6),F(7))=(8,13) -- matches the printed `0 8 13`. The uncall then restores x1=x2=0 and leaves only the input n=5, which is why the store shows zeros.
+// @keep:      n
 // @oracle:    n == 5 and x1 == 0 and x2 == 0  # the uncall left the store clean; the pair itself is in @expect
 // @expect: 0 8 13
 // @expect: n = 5

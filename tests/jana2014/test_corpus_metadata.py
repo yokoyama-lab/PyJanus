@@ -26,11 +26,17 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from check_corpus_meta import (  # noqa: E402
   FILENAME_RE,
+  GARBAGE_SUFFIX,
   TECHNIQUES,
   check_file,
+  check_garbage,
   diff_expect,
   evaluate_oracle,
+  garbage_of,
+  is_trivial,
+  observe,
   normalized_text,
+  parse_keep,
   parse_meta,
   parse_store,
   parse_value,
@@ -45,6 +51,22 @@ def test_metadata_header(ja: str) -> None:
   if not parse_meta(path).annotated:
     pytest.skip("no metadata header yet")
   problems = check_file(path)
+  assert not problems, f"{path.name}:\n  " + "\n  ".join(problems)
+
+
+@pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
+def test_garbage_matches_the_filename(ja: str) -> None:
+  """Run the program and see whether it leaves anything `@keep` does not claim.
+
+  `check_file` covers this too; it is spelled out here so that "does this
+  example leave garbage?" is a test you can point at and run on its own.
+  """
+  path = Path(ja)
+  meta = parse_meta(path)
+  if not meta.annotated:
+    pytest.skip("no metadata header yet")
+  _, store_lines = observe(path)
+  problems = check_garbage(path, parse_store(store_lines), meta.one("keep"))
   assert not problems, f"{path.name}:\n  " + "\n  ".join(problems)
 
 
@@ -84,6 +106,7 @@ class MetaParserTests(unittest.TestCase):
       // @technique: clean-accumulation
       // @source:    original
       // @confirmed: 0 + 1 = 1
+      // @keep:      x
       // @expect: x = 1
       procedure main()
     """))
@@ -103,6 +126,7 @@ class MetaParserTests(unittest.TestCase):
       // @technique: magic
       // @source:    original
       // @confirmed: 0 + 1 = 1
+      // @keep:      x
       // @expect: x = 1
     """))
     self.assertTrue(any("magic" in e for e in meta.errors))
@@ -127,6 +151,7 @@ class MetaParserTests(unittest.TestCase):
       // @summary:   adds one
       // @source:    original
       // @confirmed: obvious
+      // @keep:      x
       // @expect: x = 1
     """))
     self.assertTrue(any("in the order" in e for e in out_of_order.errors))
@@ -204,6 +229,63 @@ class OracleTests(unittest.TestCase):
     ok, detail = evaluate_oracle("__import__('os').listdir('.') == []", {})
     self.assertFalse(ok)
     self.assertIn("NameError", detail)
+
+
+class GarbageTests(unittest.TestCase):
+  """A run's leftovers, minus what `@keep` claims, is garbage -- and garbage is
+  visible in the filename. Which survivor is the answer cannot be read off a
+  run, so `@keep` is declared and everything else is derived."""
+
+  def test_trivial_values(self) -> None:
+    self.assertTrue(is_trivial(0))
+    self.assertTrue(is_trivial([]))                    # an emptied stack
+    self.assertTrue(is_trivial([0, 0, [0, 0]]))        # a zeroed array, any rank
+    self.assertTrue(is_trivial({"x": 0, "y": 0}))      # a zeroed struct
+    self.assertFalse(is_trivial(-1))
+    self.assertFalse(is_trivial([0, 0, 1]))
+    self.assertFalse(is_trivial({"x": 0, "y": 3}))
+
+  def test_parse_keep(self) -> None:
+    self.assertEqual(parse_keep("none"), [])
+    self.assertEqual(parse_keep("a, b"), ["a", "b"])
+    self.assertEqual(parse_keep("a"), ["a"])
+
+  def test_garbage_is_what_keep_does_not_claim(self) -> None:
+    store = {"a": 12, "b": 12, "log": [0, 0, 1], "spent": 0}
+    self.assertEqual(garbage_of(store, ["a", "b"]), ["log"])
+    self.assertEqual(garbage_of(store, ["a", "b", "log"]), [])
+    # `spent` is all-zero, so it is not garbage no matter what keep says.
+    self.assertEqual(garbage_of(store, []), ["a", "b", "log"])
+
+  def _garbage_problems(self, name: str, store: dict, keep: str) -> list[str]:
+    return check_garbage(Path(f"/tmp/{name}"), store, keep)
+
+  def test_garbage_demands_the_suffix(self) -> None:
+    problems = self._garbage_problems("gcd.ja", {"a": 12, "log": [1]}, "a")
+    self.assertTrue(any("gcd_g.ja" in p for p in problems))
+
+  def test_suffix_demands_garbage(self) -> None:
+    problems = self._garbage_problems("fib_g.ja", {"n": 5}, "n")
+    self.assertTrue(any("fib.ja" in p for p in problems))
+
+  def test_agreement_is_silent_both_ways(self) -> None:
+    self.assertEqual(self._garbage_problems("gcd_g.ja", {"a": 12, "log": [1]}, "a"), [])
+    self.assertEqual(self._garbage_problems("fib.ja", {"n": 5, "x": 0}, "n"), [])
+
+  def test_keep_naming_a_variable_that_is_not_there(self) -> None:
+    problems = self._garbage_problems("x.ja", {"a": 1}, "a, typo")
+    self.assertTrue(any("typo" in p for p in problems))
+
+  def test_keep_naming_a_variable_the_run_zeroes(self) -> None:
+    problems = self._garbage_problems("x.ja", {"a": 1, "b": 0}, "a, b")
+    self.assertTrue(any("all-zero" in p for p in problems))
+
+  def test_none_means_the_store_should_be_empty(self) -> None:
+    self.assertEqual(self._garbage_problems("x.ja", {"a": 0}, "none"), [])
+    self.assertTrue(self._garbage_problems("x.ja", {"a": 1}, "none"))
+
+  def test_suffix_constant_is_what_the_messages_use(self) -> None:
+    self.assertEqual(GARBAGE_SUFFIX, "_g")
 
 
 class NormalizeTests(unittest.TestCase):

@@ -1,3 +1,13 @@
+// @summary:   reversible subtractive Euclid: replaces (a, b) with (gcd, gcd) and a one-bit-per-step decision log
+// @technique: history-stack
+// @source:    Euclid, Elements VII.1-2 (subtractive form); the log-based reversible encoding is the standard Janus idiom
+// @confirmed: gcd(48,36)=12. By hand: 48>36 so a=12 (push 1); 12<36 so b=24 (push 0); 12<24 so b=12 (push 0); a=b stops. The log is 1,0,0 bottom-to-top, printed top-first as <0, 0, 1], and three steps is what the subtractive algorithm takes here.
+// @keep:      a, b
+// @oracle:    a == gcd(48, 36) and b == a and log == [0, 0, 1]
+// @expect: a = 12
+// @expect: b = 12
+// @expect: log = <0, 0, 1]
+//
 // Reversible GCD (subtractive Euclid)
 //
 // Classic Euclidean gcd by repeated subtraction, made reversible by
