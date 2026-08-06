@@ -14,7 +14,7 @@ prog.ja → lexer + parser (own AST) → lower → extracted run → final store
 The core is **frame-stacked**: locals live in depth-indexed frames (`L d x`), so
 a procedure that recurses while declaring a `local` gets fresh storage per
 activation. That is what lets `vjanus` run programs the earlier flat-store core
-could not (e.g. `stack_operations.ja`'s recursive `reverse`).
+could not (e.g. `stack_operations_c.ja`'s recursive `reverse`).
 
 ## Build & run
 
@@ -28,7 +28,7 @@ Requires the Rocq prover (for the one-time extraction) and `ocamlc`. The store i
 printed in PyJanus's `-s` format, so results compare directly:
 
 ```bash
-coq/vjanus/vjanus -s ../../tests/jana2014/fixtures/examples/fib.ja
+coq/vjanus/vjanus -s ../../tests/jana2014/fixtures/examples/fib_c.ja
 ```
 
 `build.sh` also builds and runs `frame_smoke`, a direct end-to-end check of the

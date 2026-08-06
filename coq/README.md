@@ -273,7 +273,7 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
-  the real fixtures it covers — recursive reference procedures (`fib.ja`),
+  the real fixtures it covers — recursive reference procedures (`fib_c.ja`),
   arrays, and arrays passed by reference; `local`/`delocal`, `for`-loops, value
   arguments, stacks, `/` and `>=` are skipped.
 - `RevSmvAlias.v` — the totality checker's **aliasing** decision: inlining as a
@@ -782,7 +782,7 @@ decision rate: **large-block encoding**. A statement does not get its own progra
 location; straight-line code is executed *symbolically* into a pending map
 (variable → an expression over the block's entry values) plus a path condition,
 and a location is cut only where control actually branches. Going from 36
-locations to 8 on `fall.ja` turned 2/8 proved into 5/8 with the same solver and
+locations to 8 on `fall_c.ja` turned 2/8 proved into 5/8 with the same solver and
 the same time limit — which also made it the largest unverified part of the
 encoding.
 

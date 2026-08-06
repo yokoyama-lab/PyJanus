@@ -52,7 +52,7 @@ semantics). `call` vs `uncall` is recovered from the node's source position,
 since PyJanus's `-a` serializes both identically. Scalars and arrays share the
 verified store's location space (`LS x` vs. `LA a i`), so one global-slot map
 serves both. Only `main`'s declared variables/array cells are compared (via a
-*report list* built from PyJanus's `-s` output). Passes e.g. `fib.ja` (recursive
+*report list* built from PyJanus's `-s` output). Passes e.g. `fib_c.ja` (recursive
 reference procedures) and array-by-reference programs.
 
 Supported beyond the core: reference procedures, arrays (incl. by reference,
