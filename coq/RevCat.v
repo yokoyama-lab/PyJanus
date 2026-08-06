@@ -178,6 +178,232 @@ Theorem rst_cod : forall A B (R : hrel A B), pinj R -> sub_idH (compH R (convH R
 Proof. intros A B R Hp; apply rst_sub_id; exact Hp. Qed.
 
 (* ===================================================================== *)
+(** ** The meet-semilattice of restriction idempotents.
+
+    The partial identities on a fixed object are ordered by inclusion, and
+    under that order composition is their \emph{meet} and [idH] is the top.
+    [sub_idH_comm] above is already the commutativity of that meet; the
+    remaining laws are proved here, so that the semilattice is available as
+    a structure and not only as a collection of facts.
+
+    This is the abstraction that a guard algebra instantiates: in a
+    reversible pebble game a guard cuts out the configurations at which a
+    move is enabled, conjunction of guards is composition of the
+    corresponding partial identities, and ``no constraint'' is [idH]. *)
+
+(** Inclusion order on relations (the counterpart of [heq]). *)
+Definition hle {A B : Type} (R S : hrel A B) : Prop := forall a b, R a b -> S a b.
+
+Lemma hle_refl : forall A B (R : hrel A B), hle R R.
+Proof. intros A B R a b H; exact H. Qed.
+
+Lemma hle_trans : forall A B (R S T : hrel A B), hle R S -> hle S T -> hle R T.
+Proof. intros A B R S T H1 H2 a b H; apply H2, H1, H. Qed.
+
+Lemma hle_antisym : forall A B (R S : hrel A B), hle R S -> hle S R -> heq R S.
+Proof. intros A B R S H1 H2 a b; split; [ apply H1 | apply H2 ]. Qed.
+
+(** Partial identities are closed under composition. *)
+Lemma sub_idH_compH : forall A (E F : hrel A A),
+  sub_idH E -> sub_idH F -> sub_idH (compH E F).
+Proof.
+  intros A E F HE HF a b [m [H1 H2]].
+  assert (a = m) by (apply HE; exact H1); subst m; apply HF; exact H2.
+Qed.
+
+(** ... and are idempotent. *)
+Lemma sub_idH_idem : forall A (E : hrel A A), sub_idH E -> heq (compH E E) E.
+Proof.
+  intros A E HE a b; unfold compH; split.
+  - intros [m [H1 H2]]; assert (a = m) by (apply HE; exact H1); subst m; exact H2.
+  - intro H; assert (a = b) by (apply HE; exact H); subst b; exists a; split; exact H.
+Qed.
+
+(** [idH] is the top. *)
+Lemma sub_idH_le_idH : forall A (E : hrel A A), sub_idH E -> hle E idH.
+Proof. intros A E HE a b H; unfold idH; apply HE; exact H. Qed.
+
+(** Composition is a lower bound of both arguments ... *)
+Lemma compH_le_l : forall A (E F : hrel A A),
+  sub_idH E -> sub_idH F -> hle (compH E F) E.
+Proof.
+  intros A E F HE HF a b [m [H1 H2]].
+  assert (a = m) by (apply HE; exact H1); subst m.
+  assert (a = b) by (apply HF; exact H2); subst b; exact H1.
+Qed.
+
+Lemma compH_le_r : forall A (E F : hrel A A),
+  sub_idH E -> sub_idH F -> hle (compH E F) F.
+Proof.
+  intros A E F HE HF a b [m [H1 H2]].
+  assert (a = m) by (apply HE; exact H1); subst m; exact H2.
+Qed.
+
+(** ... and is the greatest such: it is the meet. *)
+Lemma compH_greatest : forall A (E F G : hrel A A),
+  sub_idH G -> hle G E -> hle G F -> hle G (compH E F).
+Proof.
+  intros A E F G HG H1 H2 a b H.
+  assert (a = b) by (apply HG; exact H); subst b.
+  exists a; split; [ apply H1; exact H | apply H2; exact H ].
+Qed.
+
+(** Packaged: the partial identities on [A] form a meet-semilattice with
+    top [idH] and meet [compH].  (Associativity is [compH_assoc], which
+    holds for all relations.) *)
+Theorem sub_idH_meet_semilattice : forall A (E F G : hrel A A),
+  sub_idH E -> sub_idH F -> sub_idH G ->
+      sub_idH (compH E F)
+   /\ heq (compH E F) (compH F E)
+   /\ heq (compH E E) E
+   /\ hle (compH E F) E
+   /\ hle (compH E F) F
+   /\ (hle G E -> hle G F -> hle G (compH E F))
+   /\ hle E idH.
+Proof.
+  (* [repeat split] would also break apart the [<->] hidden inside [heq];
+     [apply conj] splits only the top-level conjunction. *)
+  intros A E F G HE HF HG; repeat apply conj.
+  - apply sub_idH_compH; assumption.
+  - apply sub_idH_comm; assumption.
+  - apply sub_idH_idem; assumption.
+  - apply compH_le_l; assumption.
+  - apply compH_le_r; assumption.
+  - intros H1 H2; apply compH_greatest; assumption.
+  - apply sub_idH_le_idH; assumption.
+Qed.
+
+(* ===================================================================== *)
+(** ** The remaining Cockett--Lack axioms [R3] and [R4].
+
+    [rst_comp] (R1) and [rst_comm] (R2) are above.  The restriction-category
+    axiomatisation needs two more, and both hold in \textsf{PInj}: *)
+
+(** [R3]: $\overline{\bar{R}\,;S} = \bar{R}\,;\bar{S}$ for $R,S$ out of the
+    same object.  Restricting [S] to the domain of [R] has, as its own
+    domain, the intersection of the two domains. *)
+Theorem rst_R3 : forall A B C (R : hrel A B) (S : hrel A C),
+  pinj R -> pinj S ->
+  heq (rst (compH (rst R) S)) (compH (rst R) (rst S)).
+Proof.
+  intros A B C R S HR HS a b.
+  assert (HRid : sub_idH (rst R)) by (apply rst_sub_id; exact HR).
+  assert (HSid : sub_idH (rst S)) by (apply rst_sub_id; exact HS).
+  destruct HS as [_ cS].
+  unfold rst, compH, convH in *; split.
+  - intros [c [[a' [Ha Sa]] [b' [Hb Sb]]]].
+    (* [rst R] is a partial identity, so [a' = a] and [b' = b]. *)
+    assert (a = a') by (apply HRid; exact Ha); subst a'.
+    assert (b = b') by (apply HRid; exact Hb); subst b'.
+    (* [S] is backwards deterministic, so the shared [c] forces [a = b]. *)
+    assert (a = b) by (eapply cS; unfold convH; eassumption).
+    subst b; exists a; split; [ exact Ha | exists c; split; exact Sa ].
+  - intros [m [Ha Hm]].
+    assert (a = m) by (apply HRid; exact Ha); subst m.
+    assert (a = b) by (apply HSid; exact Hm); subst b.
+    destruct Hm as [c [Sa _]].
+    exists c; split; exists a; split; assumption.
+Qed.
+
+(** [R4]: $R\,;\bar{S} = \overline{R\,;S}\,;R$ for $R : A \to B$,
+    $S : B \to C$.  Testing the domain of [S] after [R] is the same as
+    testing the domain of the composite before [R]. *)
+Theorem rst_R4 : forall A B C (R : hrel A B) (S : hrel B C),
+  pinj R -> pinj S ->
+  heq (compH R (rst S)) (compH (rst (compH R S)) R).
+Proof.
+  intros A B C R S HR HS a c.
+  assert (HSid : sub_idH (rst S)) by (apply rst_sub_id; exact HS).
+  assert (HRSid : sub_idH (rst (compH R S)))
+    by (apply rst_sub_id; apply pinj_compH; assumption).
+  destruct HR as [dR _].
+  unfold rst, compH, convH in *; split.
+  - intros [b [Rab Hb]].
+    assert (b = c) by (apply HSid; exact Hb); subst c.
+    destruct Hb as [d [Sbd _]].
+    exists a; split; [ | exact Rab ].
+    exists d; split; exists b; split; assumption.
+  - intros [a' [Haa' Ra'c]].
+    assert (a = a') by (apply HRSid; exact Haa'); subst a'.
+    destruct Haa' as [e [[b0 [Rab0 Sb0e]] _]].
+    (* [R] is forwards deterministic, so [b0 = c]. *)
+    assert (b0 = c) by (eapply dR; eassumption); subst b0.
+    exists c; split; [ exact Ra'c | exists e; split; exact Sb0e ].
+Qed.
+
+(* ===================================================================== *)
+(** ** Concrete instances (regression checks on a two-element type).
+
+    The general statements above are checked against explicit relations on
+    [bool], so that a later change that vacuously satisfies them is caught. *)
+
+Definition botH {A B : Type} : hrel A B := fun _ _ => False.
+
+(** The partial identity on $\{\mathsf{true}\}$, and its complement. *)
+Definition Etrue  : hrel bool bool := fun a b => a = true  /\ b = true.
+Definition Efalse : hrel bool bool := fun a b => a = false /\ b = false.
+(** A total bijection: negation. *)
+Definition Rneg   : hrel bool bool := fun a b => b = negb a.
+
+Example Etrue_sub_id : sub_idH Etrue.
+Proof. intros a b [Ha Hb]; subst; reflexivity. Qed.
+
+Example Efalse_sub_id : sub_idH Efalse.
+Proof. intros a b [Ha Hb]; subst; reflexivity. Qed.
+
+Example Rneg_pinj : pinj Rneg.
+Proof.
+  split; intros a b b' H1 H2; unfold Rneg, convH in *; subst.
+  - reflexivity.
+  - destruct b, b'; simpl in *; congruence.
+Qed.
+
+(** A total map has the identity as its restriction. *)
+Example rst_Rneg_is_idH : heq (rst Rneg) idH.
+Proof.
+  intros a b; unfold rst, compH, convH, Rneg, idH; split.
+  - intros [c [H1 H2]]; subst c; destruct a, b; simpl in *; congruence.
+  - intro H; subst b; exists (negb a); split; reflexivity.
+Qed.
+
+(** The meet of two disjoint partial identities is the bottom. *)
+Example meet_of_disjoint_is_bot : heq (compH Etrue Efalse) botH.
+Proof.
+  intros a b; unfold compH, Etrue, Efalse, botH; split.
+  - intros [m [[_ Hm] [Hm' _]]]; subst m; discriminate.
+  - contradiction.
+Qed.
+
+(** The meet is idempotent, and [idH] really is above it. *)
+Example meet_idem_true : heq (compH Etrue Etrue) Etrue.
+Proof. apply sub_idH_idem, Etrue_sub_id. Qed.
+
+Example Etrue_below_idH : hle Etrue idH.
+Proof. apply sub_idH_le_idH, Etrue_sub_id. Qed.
+
+(** [R3] and [R4] instantiated at concrete relations. *)
+Example R3_at_Rneg : heq (rst (compH (rst Rneg) Rneg)) (compH (rst Rneg) (rst Rneg)).
+Proof. apply rst_R3; apply Rneg_pinj. Qed.
+
+Example R4_at_Rneg : heq (compH Rneg (rst Rneg)) (compH (rst (compH Rneg Rneg)) Rneg).
+Proof. apply rst_R4; apply Rneg_pinj. Qed.
+
+(** The checks are not vacuous: [Etrue] and [Efalse] are distinct, and
+    [botH] is strictly below [idH] on [bool]. *)
+Example Etrue_neq_Efalse : ~ heq Etrue Efalse.
+Proof.
+  intro H; destruct (H true true) as [H1 _].
+  destruct H1 as [_ Hf]; [ split; reflexivity | discriminate ].
+Qed.
+
+Example botH_strictly_below_idH : hle (@botH bool bool) idH /\ ~ heq (@botH bool bool) idH.
+Proof.
+  split.
+  - intros a b [].
+  - intro H; destruct (H true true) as [_ H2]; exact (H2 eq_refl).
+Qed.
+
+(* ===================================================================== *)
 (** ** Connection: reversible programs are the endomorphisms of \textsf{PInj}.
 
     On one object [state], [hrel state state] is exactly [RevAlgebra.rel],
