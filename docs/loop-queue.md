@@ -231,8 +231,8 @@ fuel インタプリタ `runn : nat -> stmt -> state -> option state` を定義�
 | stack を含む | 31 |
 | struct を含む | 13 |
 
-**当初の「具体長の配列を展開」は +2本にしかならない**（`reversible_gates.ja` /
-`test2.ja` のみ）。配列を正しく扱えば **8 → 49/97**。したがって項目9〜14 は
+**当初の「具体長の配列を展開」は +2本にしかならない**（`reversible_gates_c.ja` /
+`array_element_arg_c.ja` のみ）。配列を正しく扱えば **8 → 49/97**。したがって項目9〜14 は
 「具体長だけ」ではなく**配列一般**を対象にする。前提も測定済み:
 **範囲外アクセスは実行時エラー**（"Array index `[5]' was out of bounds"）、
 **41本中38本が変数添字**、**多次元は2本のみ**（`matrixmult*.ja`）。
@@ -373,7 +373,7 @@ PyJanus の `_check_alias_assign` / `_check_alias_swap` は `_selector_index_exp
 
 **なぜ**: ライブラリ `compile_to_smv` の既定は `style="assign"`、ツール
 `verify_corpus.py` の既定は `trans` で食い違っている。§5 の表は後者で測っており、
-**`assign` の方が少なくとも1本多く証明する**（`base_convert.ja`: trans=unknown /
+**`assign` の方が少なくとも1本多く証明する**（`base_convert_c.ja`: trans=unknown /
 assign=proved、120秒・`--init zero`。2026-08-05 実測）。つまり公表している `proved` は
 下限である。§5.4 は「ASSIGN 形式は判定を1つも変えなかった」と書いていたが、
 配列が断片に入って成り立たなくなった（訂正済み）。
@@ -435,13 +435,13 @@ proved / unknown / gave up の境界を表にする。`injective_bwt_inverse` / 
 | **struct の配列** | 4 |
 | struct の配列＋配列フィールド | 1 |
 
-**フィールドに構造体型は1件も無い**（入れ子なし。`structs_nested.ja` の "nested" は
+**フィールドに構造体型は1件も無い**（入れ子なし。`structs_nested_c.ja` の "nested" は
 呼び出しの入れ子であって型の入れ子ではない）。つまり**配列と同じ話**で、既存の機構
 （`_Env` の値をタプルにする、選択子つき l-value の解決、参照渡しは同じ実体を束縛）が
 そのまま効くはず。
 
 **完了条件**: `Point p` が `p_x` / `p_y` に展開され、`p.x` が直接参照する。参照渡しの
-struct 引数は配列と同じく**同じ実体を束縛**する（`structs_nested.ja` は呼び出しを跨いで
+struct 引数は配列と同じく**同じ実体を束縛**する（`structs_nested_c.ja` は呼び出しを跨いで
 渡すのでそこが効く）。`tests/verify/test_smv_struct.py` に、展開された変数名・
 フィールド参照・参照渡しを固定。**+3本**（`structs_nested` / `structs_param` /
 `structs_scalar`）。149本の分類が悪化していないこと。**新しく通るプログラムは判定だけで
@@ -484,7 +484,7 @@ struct 引数は配列と同じく**同じ実体を束縛**する（`structs_nes
 
 **完了条件**: 149本を `--init any --timeout 120` で走らせ、§5.3 の表を実測で置き換える。
 `refuted` の反例は「欠けている事前条件」なので、**それを列挙する**のが成果物
-（§5.3 が `fib.ja` の `x2 = -1`、`fall.ja` の `t_end = -3` でやったのと同じ形）。
+（§5.3 が `fib_c.ja` の `x2 = -1`、`fall_c.ja` の `t_end = -3` でやったのと同じ形）。
 `--init zero` 側の数値には触れない。
 
 **規模**: 小〜中（測定が主。ただし `any` は難しいので時間はかかる）
@@ -493,7 +493,7 @@ struct 引数は配列と同じく**同じ実体を束縛**する（`structs_nes
 
 ### [x] 25. 多次元配列
 
-**なぜ**: 残り2本（`matrixmult.ja` / `matrixmult_v1.ja`）。`coq/RevLowering.v` に
+**なぜ**: 残り2本（`matrixmult_c.ja` / `matrixmult_v1_c.ja`）。`coq/RevLowering.v` に
 Cantor fold の単射性があるので入口はある。小さいが、項目22 の番地計算と同じ問題。
 
 **完了条件**: `a[i][j]` が動く。**+2本**。項目22 の番地計算を再利用する。
@@ -505,7 +505,7 @@ Cantor fold の単射性があるので入口はある。小さいが、項目22
 ### [x] 26. 定数引数（値渡し）を通す
 
 **測定（2026-08-05）**: `argument is not a plain variable` は**10本**の阻害要因で、
-中身は `call shift(a, 5)` のような**定数引数**である（項目21 で `structs_param.ja` が
+中身は `call shift(a, 5)` のような**定数引数**である（項目21 で `structs_param_c.ja` が
 これに当たって落ちた）。PyJanus は `ConstantParamProxy` で読み取り専用の値として渡す。
 
 **完了条件**: 定数（`Number`）の実引数を、対応する仮引数に**読み取り専用の値**として
@@ -561,7 +561,7 @@ PyJanus と突き合わせること。
 
 - **セル・フィールドの参照渡し `f(a[0])`**（6本、2026-08-05、項目26）。値引数
   （定数・式）とは**別の機構**で、仮引数が特定のセル変数を指す。定数添字の3本
-  （`injective_mini_cipher` / `injective_sort_network` / `test2`）は安い。変数添字の3本
+  （`injective_mini_cipher` / `injective_sort_network` / `array_element_arg`）は安い。変数添字の3本
   （`adaptive_huffman` / `binary_heap` / `injective_arith_coding`）は仮引数が実行時に
   決まるセルを指すので別物。
 
@@ -588,7 +588,7 @@ PyJanus と突き合わせること。
   unknown になった。決定率が上がらないまま被覆率だけ広げると `unknown` の列が増えるだけ
   である。項目15〜17 の後に、同じやり方（着手前に実測で scope を決める）で割ること
 
-- **多次元配列**（`matrixmult.ja` / `matrixmult_v1.ja` の2本のみ）。項目9〜14 の射程外。
+- **多次元配列**（`matrixmult_c.ja` / `matrixmult_v1_c.ja` の2本のみ）。項目9〜14 の射程外。
   `RevLowering.v` に Cantor fold の単射性があるので入口はある
 
 - **CFG 全体の接合**（`coq/README.md` の "The large-block encoding" 末尾）。
@@ -731,6 +731,6 @@ PyJanus と突き合わせること。
   これで **`^=` が 11 → 18本**に浮上し、stack に次ぐ壁になった。
   ついでに `local struct Ref e = out[j]`（構造体配列の要素からのコピー）も入れた。
   項目25 で入れた「コーパス全体のモデルが nuXmv に読めるか」テストが再び効いて、
-  新たに断片へ入った `injective_arithmetic.ja` の `exp`（予約語）を検出した。
+  新たに断片へ入った `injective_arithmetic_c.ja` の `exp`（予約語）を検出した。
   **被覆率をブロッカー表の足し算で見積もって外したのは4回中3回。** 当たったのは
   着手前に内訳を数えた項目27 だけ。「最初にぶつかる要因」の集計は上界ですらない。

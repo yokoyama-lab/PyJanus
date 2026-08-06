@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 FROM_DEBUG_SIMPLE = "tests/jana2014/fixtures/from_debug_simple.ja"
 ITERATE_DEBUG_SIMPLE = "tests/jana2014/fixtures/iterate_debug_simple.ja"
-# A copy of the corpus's fib.ja, kept here on purpose: the assertions below pin
+# A copy of the corpus's fib_c.ja, kept here on purpose: the assertions below pin
 # `Break at line N`, so they break whenever a comment is added to the file they
 # read.  The corpus under fixtures/examples/ is being annotated file by file
 # (docs/corpus-annotation-manual.md), so a golden keyed to its line numbers would

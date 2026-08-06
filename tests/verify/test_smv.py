@@ -178,7 +178,7 @@ class StyleTests(unittest.TestCase):
   """Both output shapes describe the same system; `assign` is much smaller.
 
   The functional form replaces one `next(v) = v` per variable per edge with a
-  single `TRUE` default, which measured about 7x smaller on `fall.ja`.  It made
+  single `TRUE` default, which measured about 7x smaller on `fall_c.ja`.  It made
   no difference to what nuXmv could decide, but a smaller model is the better
   default for the array work to come.
   """

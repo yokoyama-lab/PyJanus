@@ -77,7 +77,7 @@ python3 -m pytest tests/ -q
 - Ackermann（可逆・履歴スタック）
 - 二分探索（アンシラフラグ）
 - 拡張ユークリッド / モジュラべき乗（履歴）
-- ビット計数・パリティ（`injective_bits.ja` と重複確認）
+- ビット計数・パリティ（`injective_bits_c.ja` と重複確認）
 - 配列 / 連結リストの反転（`write_reversed.ja` と重複確認）
 
 > 注: 既存 corpus には既に fib・factor(階乗)・`injective_gcd`・`sqrt`・sort(`injective_sort_network`/`sort_n3`)・

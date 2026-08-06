@@ -106,11 +106,11 @@ class CounterexampleParsingTests(unittest.TestCase):
   useful if it names the variables that carry it.  nuXmv prints array elements
   as `d[0] = 3`; a name pattern that stops at the bracket drops every one of
   them.  Once arrays entered the fragment that was most of the input —
-  `glaisher.ja` came back as five dead locals while its two arrays, the whole
+  `glaisher_c.ja` came back as five dead locals while its two arrays, the whole
   content of the precondition, went unmentioned.
   """
 
-  #: Abridged from a real `--init any` run on `base_convert.ja`.
+  #: Abridged from a real `--init any` run on `base_convert_c.ja`.
   TRACE = """-- invariant pc != 0  is false
 -- as demonstrated by the following execution sequence
 Trace Type: Counterexample

@@ -121,12 +121,12 @@ class CorpusTests(unittest.TestCase):
   """
 
   #: `iterate` was their last blocker.
-  NOW_IN = ("injective_arithmetic.ja", "injective_lehmer.ja", "structs_local.ja")
+  NOW_IN = ("injective_arithmetic_c.ja", "injective_lehmer_c.ja", "structs_local_c.ja")
   #: Past `iterate`, stopped by something else (`^=`, or a cell argument).
-  STILL_OUT = ("gray_code.ja", "gray_code_roundtrip.ja", "injective_ca_rule90.ja",
-               "injective_iterate.ja", "reversible_ca_ring.ja",
-               "reversible_ca_rule90.ja", "reversible_gates.ja",
-               "structs_array_param.ja")
+  STILL_OUT = ("gray_code_c.ja", "gray_code_roundtrip_c.ja", "injective_ca_rule90_c.ja",
+               "injective_iterate_c.ja", "reversible_ca_ring_c.ja",
+               "reversible_ca_rule90_c.ja", "reversible_gates_c.ja",
+               "structs_array_param_c.ja")
 
   def test_they_compile(self):
     for name in self.NOW_IN:

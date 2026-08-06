@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHONPATH = str(ROOT)
-FIB_EXAMPLE = "tests/jana2014/fixtures/examples/fib.ja"
+FIB_EXAMPLE = "tests/jana2014/fixtures/examples/fib_c.ja"
 
 
 def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:

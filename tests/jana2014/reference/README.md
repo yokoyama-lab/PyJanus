@@ -21,12 +21,14 @@ naming the variables that are history rather than answer.
 1. compares every key `expected()` names,
 2. checks that nothing non-trivial survives that is in *neither* list -- a value
    nobody claims is a question, not a detail,
-3. requires the filename to end in `_g` exactly when some declared garbage
-   actually survives the run.
+3. requires the filename to end in `_g` when some declared garbage actually
+   survives the run, and `_c` when none does.
 
-(3) is why the split matters: **32 of the 97 leave garbage** and say so in their
-names. Whether a variable is garbage is decided from the algorithm; whether any
-of it survives is decided by running the program.
+(3) is why the split matters: **32 of the 97 leave garbage (`_g`), 65 are clean
+(`_c`)**. Whether a variable is garbage is decided from the algorithm; whether
+any of it survives is decided by running the program. Naming *every* file one
+way or the other, rather than marking only the dirty ones, means a file nobody
+has classified cannot pass as clean.
 
 ## Why these exist
 

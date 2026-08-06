@@ -80,11 +80,13 @@ def test_every_surviving_value_is_accounted_for(ja: str) -> None:
 
 @pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
 def test_garbage_decides_the_filename(ja: str) -> None:
-  """A program that leaves garbage is named `..._g.ja`; one that does not is not.
+  """Every example says in its name whether it leaves garbage: `_g` or `_c`.
 
   The verdict comes from the reference rather than from the program's own
   header: `GARBAGE` is decided from the algorithm, and whether any of it
-  actually survives is decided by running the program.
+  actually survives is decided by running the program. Naming every file one way
+  or the other -- rather than marking only the dirty ones -- means a file that
+  nobody has classified cannot pass as clean.
   """
   path = Path(ja)
   module = load_reference(path.stem)
@@ -92,13 +94,14 @@ def test_garbage_decides_the_filename(ja: str) -> None:
   store = parse_store(store_lines)
   left = sorted(name for name in module.GARBAGE
                 if name in store and not is_trivial(store[name]))
-  named_g = path.stem.endswith("_g")
-  if left and not named_g:
+  stem, suffix = path.stem[:-2], path.stem[-2:]
+  assert suffix in ("_g", "_c"), (
+    f"{path.name} must end in `_g` (leaves garbage) or `_c` (clean)")
+  if left and suffix != "_g":
     raise AssertionError(
-      f"{path.name} leaves garbage ({', '.join(left)}): rename to {path.stem}_g.ja")
-  if not left and named_g:
-    raise AssertionError(
-      f"{path.name} leaves no garbage: rename to {path.stem[:-2]}.ja")
+      f"{path.name} leaves garbage ({', '.join(left)}): rename to {stem}_g.ja")
+  if not left and suffix != "_c":
+    raise AssertionError(f"{path.name} leaves no garbage: rename to {stem}_c.ja")
 
 
 @pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
@@ -167,7 +170,7 @@ class ReferenceHygieneTests(unittest.TestCase):
                for path in self._modules()}
     self.assertEqual(
       sorted(stem for stem, reason in partial.items() if reason),
-      ["adaptive_huffman", "binary_heap_g", "matrixmult", "matrixmult_v1", "ppm_lite"])
+      ["adaptive_huffman_c", "binary_heap_g", "matrixmult_c", "matrixmult_v1_c", "ppm_lite_c"])
 
 
 if __name__ == "__main__":

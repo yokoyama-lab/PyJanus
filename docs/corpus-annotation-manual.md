@@ -55,7 +55,7 @@ Python 3.10 以上が必要です。
 python3 --version                  # 3.10 以上であること
 
 # サンプルを1本動かしてみる
-python3 -m jana_py.cli --std jana2014 -s tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -s tests/jana2014/fixtures/examples/fib_c.ja
 ```
 
 次のように出れば成功です。
@@ -83,7 +83,7 @@ python3 tools/check_corpus_meta.py check         # 注釈済みのファイル�
 もうひとつ、`@oracle`（後述）を書くときに使うコマンドがあります:
 
 ```bash
-python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/fib.ja
+python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/fib_c.ja
 ```
 
 これは**プログラムが終わった時点の全変数を Python の値として**表示します。
@@ -96,17 +96,17 @@ python3 tools/check_corpus_meta.py store tests/jana2014/fixtures/examples/fib.ja
 
 | ファイル | 技法 | 読みどころ |
 |---|---|---|
-| `tests/jana2014/fixtures/examples/fib.ja` | clean-accumulation | いちばん短い。`@confirmed` に「F(6)=8, F(7)=13」と根拠が書いてある |
+| `tests/jana2014/fixtures/examples/fib_c.ja` | clean-accumulation | いちばん短い。`@confirmed` に「F(6)=8, F(7)=13」と根拠が書いてある |
 | `tests/jana2014/fixtures/examples/bubble_sort_g.ja` | history-stack | 捨てる情報をスタックに退避する典型例 |
-| `tests/jana2014/fixtures/examples/run_length_enc.ja` | plain | 入力を消費して出力に変える、それ自体が可逆な例 |
+| `tests/jana2014/fixtures/examples/run_length_enc_c.ja` | plain | 入力を消費して出力に変える、それ自体が可逆な例 |
 | `tests/jana2014/fixtures/examples/gcd_g.ja` | history-stack | **ゴミがある例**。`_g` が付く理由が `@keep` を見ると分かる |
 
 ### 1.5 練習（自己採点できます）
 
-`fib.ja` の先頭の `// @` で始まる行を**すべていったん消して**、この手順書を見ながら
+`fib_c.ja` の先頭の `// @` で始まる行を**すべていったん消して**、この手順書を見ながら
 自分で復元してみてください。`python3 tools/check_corpus_meta.py check
-tests/jana2014/fixtures/examples/fib.ja` が `0 failed` になれば形式は正解です。
-終わったら `git checkout tests/jana2014/fixtures/examples/fib.ja` で元に戻します。
+tests/jana2014/fixtures/examples/fib_c.ja` が `0 failed` になれば形式は正解です。
+終わったら `git checkout tests/jana2014/fixtures/examples/fib_c.ja` で元に戻します。
 
 ---
 
@@ -219,7 +219,7 @@ python3 tools/check_corpus_meta.py normalize tests/jana2014/fixtures/examples/X.
 確かめ方は、次のうち**できるいちばん上のもの**を使ってください。
 
 1. **定義から手計算する**（入力が小さいときはこれが最良）
-   例: `fib.ja` — 「F(1)=F(2)=1 なので 1,1,2,3,5,8,13。n=5 なら (8,13)」
+   例: `fib_c.ja` — 「F(1)=F(2)=1 なので 1,1,2,3,5,8,13。n=5 なら (8,13)」
 2. **Python で同じ計算をして照合する**（3行程度で書けるなら）
    例: `sorted([50,20,40,60,10,30]) == [10,20,30,40,50,60]` を確認した、と書く
 3. **出典に載っている値と突き合わせる**（教科書に例が載っている場合）
@@ -260,7 +260,7 @@ gcd_g.ja:
 gcd(48,36)=12 が答えなので `a` と `b` は答え。`log` は「各ステップでどちらが大きかったか」
 の記録で、逆実行のためだけに残っているのでゴミです。だから `@keep: a, b` と書きます。
 
-**ゴミがあると判定されたら、ファイル名の末尾に `_g` を付けます。**
+**ゴミがあれば末尾は `_g`、無ければ `_c` です**（97本すべてがどちらかで終わります）。
 
 ```bash
 git mv tests/jana2014/fixtures/examples/gcd.ja tests/jana2014/fixtures/examples/gcd_g.ja
@@ -270,14 +270,15 @@ git mv tests/jana2014/fixtures/examples/gcd.ja tests/jana2014/fixtures/examples/
 無くてもエラーになります。どちらのメッセージも「どう直せばよいか」を書いてあります。
 
 > **この判定は97本すべて済んでいます**（`tests/jana2014/reference/<名前>.py` の
-> `GARBAGE` 宣言。ゴミありは32本）。ですから `_g` の付け外しをする場面は普通は
-> ありません。**あなたの `@keep` が参照実装の `GARBAGE` と食い違うと検査が落ちます**。
+> `GARBAGE` 宣言）。**ゴミありが32本で `_g`、ゴミ無しが65本で `_c`** です。
+> ですから接尾辞を付け替える場面は普通はありません。
+> **あなたの `@keep` が参照実装の `GARBAGE` と食い違うと検査が落ちます**。
 > 落ちたら、どちらが正しいかを考えて §6 で報告してください——**参照実装のほうが
 > 間違っている可能性もあります**。
 
 判断のこつ:
 
-- **入力がそのまま残っている**のはゴミではありません（`fib.ja` の `n = 5` は入力）
+- **入力がそのまま残っている**のはゴミではありません（`fib_c.ja` の `n = 5` は入力）
 - **空になったスタック（`nil`）・全部ゼロの配列はゴミになりません**。
   機械が「中身がすべてゼロなら残っていない」と数えます
 - 名前が `log` / `blog` / `hlog` / `gb` / `tr` / `...garbage` のものは、まずゴミです
@@ -340,7 +341,7 @@ python3 tools/check_corpus_meta.py check tests/jana2014/fixtures/examples/X.ja
 1行足します:
 
 ```
-2026-08-06  10:00-12:30  2.5h  gcd.ja, gray_code.ja, heap_sort_g.ja の3本  / heap_sort は UNVERIFIED
+2026-08-06  10:00-12:30  2.5h  gcd.ja, gray_code_c.ja, heap_sort_g.ja の3本  / heap_sort は UNVERIFIED
 ```
 
 **この記録が謝金の根拠になります。**日付・開始終了時刻・実働時間・
@@ -377,9 +378,9 @@ git push -u origin annotate-batch-1
 PR の説明欄には次を書いてください:
 
 ```
-対象: gcd.ja, gray_code.ja, ... （10本）
+対象: gcd.ja, gray_code_c.ja, ... （10本）
 UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなかった）
-質問: injective_bits.ja の technique が ancilla-flag か plain か判断できませんでした
+質問: injective_bits_c.ja の technique が ancilla-flag か plain か判断できませんでした
 ```
 
 先生のレビューを待つ間は、**次の枝を切って作業を続けて構いません**
@@ -391,7 +392,7 @@ UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなか�
 
 ### 4.1 プログラムが長すぎて読めない
 
-280行を超えるファイルが数本あります（`avl_delete_g.ja`, `permutation_rank.ja`,
+280行を超えるファイルが数本あります（`avl_delete_g.ja`, `permutation_rank_c.ja`,
 `tree_sort_g.ja`）。**全部を理解する必要はありません。** `main` だけを読んで
 「何を入力に何が出るか」がわかれば `@summary` は書けます。
 `@confirmed` が書けなければ `UNVERIFIED` にして先に進んでください。
@@ -415,7 +416,7 @@ UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなか�
 
 ### 4.5 同じに見えるファイルが2つある
 
-`matrixmult.ja` と `matrixmult_v1.ja` のように紛らわしいものがあります。
+`matrixmult_c.ja` と `matrixmult_v1_c.ja` のように紛らわしいものがあります。
 **どちらも普通に注釈してください**（統合するかどうかは先生が決めます）。
 気づいたことは PR の説明に書いてください。
 
@@ -508,7 +509,7 @@ FAIL gcd.ja
 
 ```
 FAIL fib_g.ja
-     the name ends in `_g` but the run leaves no garbage: rename to fib.ja, or narrow `@keep:`
+     the name ends in `_g` but the run leaves no garbage: rename to fib_c.ja, or narrow `@keep:`
 ```
 → 逆向きの不一致です。`@keep:` に挙げすぎている（本当はゴミなのに答えだと書いた）か、
 `_g` が余計かのどちらかです。

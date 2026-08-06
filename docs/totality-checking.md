@@ -55,7 +55,7 @@ PyJanus には既に `jana_py/equiv.py` があり、`P; Q⁻¹` を組んで恒�
 
 出力形式は2つある。`style="assign"`（既定）は変数ごとに次状態関数を1つ書き、`TRUE` の既定枝が
 フレーム条件をすべて吸収する。`style="trans"` は辺の巨大な選言で、遷移ごとに未変更変数の
-`next(v) = v` を並べる。`fall.ja` で前者は後者の約7分の1の大きさだが、**判定結果は完全に同一**
+`next(v) = v` を並べる。`fall_c.ja` で前者は後者の約7分の1の大きさだが、**判定結果は完全に同一**
 だった（§5.4）。
 
 ```bash
@@ -154,7 +154,7 @@ procedure main()
 `jana_py/nuxmv.py` の `check` は「性質の判定が1つも取れなかった」を一律に
 `unknown` としていたので、**タイムアウトと区別が付かなかった**。
 
-コーパスに2本あった。`knapsack.ja` は `K` を、`injective_bwt_inverse.ja` は `T` を
+コーパスに2本あった。`knapsack_c.ja` は `K` を、`injective_bwt_inverse_c.ja` は `T` を
 宣言している。どちらも §5 の表で長らく「IC3 が断念」に数えられていたが、実際には
 **一度も検査にかかっていなかった**。決定率という指標そのものが、この分だけ嘘を
 含んでいたことになる。
@@ -197,7 +197,7 @@ procedure main()
 集まりで、上位3つ（stack を除く）は定数引数12本・`iterate` 11本・`^=` 11本である。
 
 多次元対応で入ったのは3本（`structs_array_field` / `structs_array_field_arr` /
-`structs_grid`）で、`matrixmult.ja` と `matrixmult_v1.ja` は**入らなかった**——
+`structs_grid`）で、`matrixmult_c.ja` と `matrixmult_v1_c.ja` は**入らなかった**——
 どちらも次に `^=` で止まる（`^=` が 9 → 11 に増えているのがそれ）。
 値引数（§13）で入ったのは3本で、こちらも `argument is not a plain variable` 12本のうち
 3本にとどまった。**阻害要因は1本につき1つとは限らない**ので、被覆率の見積もりは
@@ -205,7 +205,7 @@ procedure main()
 
 `argument is not a plain variable` に残る6本は、**別の機構**である。値引数（定数・式）は
 値渡しだが、`f(a[0])` は**セルの参照渡し**で、仮引数が特定のセル変数を指す。定数添字なら
-安いが（`injective_mini_cipher` / `injective_sort_network` / `test2` の3本）、変数添字
+安いが（`injective_mini_cipher` / `injective_sort_network` / `array_element_arg` の3本）、変数添字
 （`s[i]` / `garbage[garbagecounter]` / `m[i]` の3本）は仮引数が実行時に決まるセルを指すので
 別物である。1つのエラーメッセージが2つの機構を覆っていた。
 
@@ -227,7 +227,7 @@ procedure main()
 > **測定条件**: `tools/verify_corpus.py` の既定、すなわち `style=assign` /
 > `arrays=native`（2026-08-05 にライブラリ側と揃えた。§5.4 の追記）。`arrays` を
 > `expand` に変えても**この表は変わらない**（両方で測って一致を確認。§5.7）。`style` を
-> `trans` に落とすと `base_convert.ja` が unknown に戻り proved は 10 になる。
+> `trans` に落とすと `base_convert_c.ja` が unknown に戻り proved は 10 になる。
 
 **内訳は割り切れている**: 断片内 55本＝ examples 32本（proved 19 / unknown 13）
 ＋ error fixture 23本（**全て refuted**）。すなわち **examples から `refuted` は1本も
@@ -293,7 +293,7 @@ examples 97本のうち断片内は**32本**（配列対応前は8本、その�
 `base_convert` は符号化形式を `assign` に揃えて得たもの（§5.4 の追記）、
 `injective_bennett` は零ストアを本当に1点にして得たもの（§5.8）で、どちらも
 アルゴリズムの改善ではない。構造体の4本は断片が広がって入ってきたぶんである。
-`fib.ja` は不変量が2本＝ERR だけでなく **BOUND も証明**しており、インライン深さ16で
+`fib_c.ja` は不変量が2本＝ERR だけでなく **BOUND も証明**しており、インライン深さ16で
 再帰が尽きることまで示せている。
 
 **配列で入った9本は1本も決着していない。** これは能力の問題ではなく規模の問題で、
@@ -319,38 +319,38 @@ examples 32本だけなので、以下はそれを列挙する。
 
 | プログラム | `--init zero` | `--init any` | 反例が言っていること |
 |---|---|---|---|
-| `cantor_pair.ja` | proved | proved | — |
-| `structs_scalar.ja` | proved | proved | — |
-| `structs_nested.ja` | proved | proved | — |
-| `structs_flat_repass.ja` | proved | proved | — |
-| `structs_array.ja` | proved | proved | — |
-| `structs_array_field.ja` | proved | proved | — |
-| `structs_array_field_arr.ja` | proved | proved | — |
-| `structs_grid.ja` | proved | proved | — |
-| `structs_param.ja` | proved | proved | — |
-| `structs_flat_param.ja` | proved | proved | — |
-| `structs_local_arr.ja` | proved | proved | — |
-| `structs_local_arr2d.ja` | proved | proved | — |
-| `structs_local.ja` | proved | proved | — |
-| `base_convert.ja` | proved | **refuted** | 基数が 0 |
-| `fall.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
-| `fib.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
-| `injective_basics.ja` | proved | **refuted** | 蓄積先が 0 でない |
-| `zagier.ja` | proved | **refuted** | 三つ組が正でない |
-| `injective_bennett.ja` | proved | unknown | — |
-| `fib_variants.ja` | unknown | **refuted** | `fib` と同じ |
-| `glaisher.ja` | unknown | **refuted** | 出力 `dist[]` が 0 でない |
-| `injective_gcd.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
-| `run_length_enc.ja` | unknown | **refuted** | 入力が 0 終端でない |
+| `cantor_pair_c.ja` | proved | proved | — |
+| `structs_scalar_c.ja` | proved | proved | — |
+| `structs_nested_c.ja` | proved | proved | — |
+| `structs_flat_repass_c.ja` | proved | proved | — |
+| `structs_array_c.ja` | proved | proved | — |
+| `structs_array_field_c.ja` | proved | proved | — |
+| `structs_array_field_arr_c.ja` | proved | proved | — |
+| `structs_grid_c.ja` | proved | proved | — |
+| `structs_param_c.ja` | proved | proved | — |
+| `structs_flat_param_c.ja` | proved | proved | — |
+| `structs_local_arr_c.ja` | proved | proved | — |
+| `structs_local_arr2d_c.ja` | proved | proved | — |
+| `structs_local_c.ja` | proved | proved | — |
+| `base_convert_c.ja` | proved | **refuted** | 基数が 0 |
+| `fall_c.ja` | proved | **refuted** | 時刻が 0 から始まっていない |
+| `fib_c.ja` | proved（＋BOUND） | **refuted** | `x1 ≠ x2` |
+| `injective_basics_c.ja` | proved | **refuted** | 蓄積先が 0 でない |
+| `zagier_c.ja` | proved | **refuted** | 三つ組が正でない |
+| `injective_bennett_c.ja` | proved | unknown | — |
+| `fib_variants_c.ja` | unknown | **refuted** | `fib` と同じ |
+| `glaisher_c.ja` | unknown | **refuted** | 出力 `dist[]` が 0 でない |
+| `injective_gcd_c.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
+| `run_length_enc_c.ja` | unknown | **refuted** | 入力が 0 終端でない |
 | `sqrt_g.ja` | unknown | **refuted** | `num < 0` |
 | `injective_partition_g.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
-| `bwt_plain.ja` | unknown | unknown | — |
-| `edit_distance.ja` | unknown | unknown | — |
-| `injective_bwt_inverse.ja` | unknown | unknown | — |
-| `knapsack.ja` | unknown | unknown | — |
-| `lcs.ja` | unknown | unknown | — |
-| `injective_arithmetic.ja` | unknown | unknown | — |
-| `injective_lehmer.ja` | unknown | unknown | — |
+| `bwt_plain_c.ja` | unknown | unknown | — |
+| `edit_distance_c.ja` | unknown | unknown | — |
+| `injective_bwt_inverse_c.ja` | unknown | unknown | — |
+| `knapsack_c.ja` | unknown | unknown | — |
+| `lcs_c.ja` | unknown | unknown | — |
+| `injective_arithmetic_c.ja` | unknown | unknown | — |
+| `injective_lehmer_c.ja` | unknown | unknown | — |
 
 **2つの問いは難易度で順序づかない。** 直観では `--init any` の方が強い主張だから
 難しいはずだが、実測は逆である: 未決11本のうち**6本が `any` では決着する**
@@ -365,7 +365,7 @@ examples の決着は 19本 → 24本に増える。
 だけ**で、そこは正直に読む必要がある。断片を広げると `proved` は増えるが、
 増えているのは主に**断片を広げるために書かれたテストプログラム**である。
 
-`zagier.ja` などの挙動が2つの問いの違いを端的に示す: **零ストアでは安全と証明でき、
+`zagier_c.ja` などの挙動が2つの問いの違いを端的に示す: **零ストアでは安全と証明でき、
 全入力では反例が出る**。前者は「PyJanus が実際に走らせる1本の実行は落ちない」、
 後者は「全域単射である」であって、別の主張である。前者だけなら解釈器を走らせれば
 足りるので、模型検査が本当に効くのは後者である。
@@ -377,32 +377,32 @@ examples の決着は 19本 → 24本に増える。
 
 | プログラム | 与えた事前条件（初期ストアの式） | 意味 | 結果 |
 |---|---|---|---|
-| `base_convert.ja` | `b != -10` | 呼び出し時の基数が 0 でない | **proved** |
-| `zagier.ja` | `x >= -2 & y >= 0 & z >= -6` | 呼び出し時 `x, y, z ≥ 1` | **proved** |
-| `fall.ja` | `t = 0 & v = 0 & t_r = t_end_r` | 順行は静止・時刻0から、逆行は終端時刻から | **proved** |
-| `fib.ja` | `x1 = 0 & x2 = 0 & n >= -5` | 蓄積先が空、段数が非負 | 表明側は証明。残るのは `[bound]` |
-| `run_length_enc.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
+| `base_convert_c.ja` | `b != -10` | 呼び出し時の基数が 0 でない | **proved** |
+| `zagier_c.ja` | `x >= -2 & y >= 0 & z >= -6` | 呼び出し時 `x, y, z ≥ 1` | **proved** |
+| `fall_c.ja` | `t = 0 & v = 0 & t_r = t_end_r` | 順行は静止・時刻0から、逆行は終端時刻から | **proved** |
+| `fib_c.ja` | `x1 = 0 & x2 = 0 & n >= -5` | 蓄積先が空、段数が非負 | 表明側は証明。残るのは `[bound]` |
+| `run_length_enc_c.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
 | `sqrt_g.ja` | `num >= 0 & root = 0` | 非負の被平方数 | unknown |
-| `glaisher.ja` | `dist[…] = 0 & odd[…] >= 0` | 出力が空、入力が非負 | unknown |
-| `injective_gcd.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
+| `glaisher_c.ja` | `dist[…] = 0 & odd[…] >= 0` | 出力が空、入力が非負 | unknown |
+| `injective_gcd_c.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
 
 （`injective_basics` と `fib_variants` は変数が多く、条件が「補助変数を全部 0 に置く」
 ＝実質 `--init zero` に潰れるので省いた。）
 
 読み取れることが3つある。
 
-1. **意味のある事前条件が出る。** `zagier.ja` の `x, y, z ≥ 1` は Zagier 対合の
-   定義域そのもので、**模型検査器が定理の仮説を再発見している**。`base_convert.ja` は
+1. **意味のある事前条件が出る。** `zagier_c.ja` の `x, y, z ≥ 1` は Zagier 対合の
+   定義域そのもので、**模型検査器が定理の仮説を再発見している**。`base_convert_c.ja` は
    基数が 0 でないことだけが要る——`d[]` の初期値も `n` の値も自由でよい。
-2. **「全部 0」より弱い条件で足りることがある。** `fall.ja` は10個のスカラのうち
+2. **「全部 0」より弱い条件で足りることがある。** `fall_c.ja` は10個のスカラのうち
    **3つだけ**を縛れば証明できる（`g` / `h` / `h_r` / `t_end` / `v_r` は自由）。しかも
    `t_r = t_end_r` は単一変数の範囲ではなく**2つの実行の結線**についての条件で、
    「逆行シミュレーションは順行が到達した時刻から始めよ」と言っている。
-3. **入力の**形式**が条件になることもある。** `run_length_enc.ja` は出力配列を空に
+3. **入力の**形式**が条件になることもある。** `run_length_enc_c.ja` は出力配列を空に
    しても足りない。反例は `text[0] = 0`——RLE の入力は「0 終端で、先頭が 0 でない」
    という形式を満たさねばならず、これは型では捕まらない種類の前提である。
 
-`fib.ja` の残余は `[bound]`（`n = 17` でインライン深さ16を超える）で、これは
+`fib_c.ja` の残余は `[bound]`（`n = 17` でインライン深さ16を超える）で、これは
 プログラムの事前条件ではなく**道具の限界**である。区別して報告する意味がここにある。
 
 `tests/verify/test_smv_nuxmv.py` の `test_a_precondition_recovers_the_proof` が
@@ -413,7 +413,7 @@ examples の決着は 19本 → 24本に増える。
 上の表を書くには、まず**反例パーサを直す**必要があった。nuXmv は配列を `d[0] = 3` と
 要素ごとに印字するが、パーサの名前パターンが `[` の手前で止まっていたため、
 **配列の中身が丸ごと落ちていた**。配列が断片に入って以降、そこが反例の主要部分である:
-`glaisher.ja` の反例は「死んだローカル5個」として報告されていて、事前条件を担う
+`glaisher_c.ja` の反例は「死んだローカル5個」として報告されていて、事前条件を担う
 `odd[]` と `dist[]` は1つも出ていなかった。`local` で入る変数は入口で上書きされる
 ＝初期値は意味を持たないので、**報告されていたのは唯一意味を持たない部分だけ**
 だったことになる。
@@ -427,10 +427,10 @@ examples の決着は 19本 → 24本に増える。
 ### 5.4 何が効いたか — 符号化であって道具ではなかった
 
 最初の符号化は**文ごとに1位置**を作る素朴なもので、`--init zero` で 2/8、`--init any` で
-6/8 しか決着しなかった。`fall.ja`（モデル78行）ですら IC3 も BMC も結論を出せない。
+6/8 しか決着しなかった。`fall_c.ja`（モデル78行）ですら IC3 も BMC も結論を出せない。
 そこで2つの改良を**別々に**測った。
 
-| 変更 | `fall.ja` のモデル | `--init zero` | `--init any` |
+| 変更 | `fall_c.ja` のモデル | `--init zero` | `--init any` |
 |---|---|---|---|
 | 素朴（文ごとに1位置、TRANS 形式） | 36辺 / 36位置 / `next` 等式 432個 | 2/8 proved | 6/8 決着 |
 | ＋ ASSIGN 形式（変数ごとの次状態関数） | case 枝 62個（約1/7） | **2/8（変化なし）** | **6/8（変化なし）** |
@@ -439,7 +439,7 @@ examples の決着は 19本 → 24本に増える。
 - **ASSIGN 形式は判定を1つも変えなかった**——**当時は**。モデルは約7分の1になり、
   決定性が構文的になるので効くはずだと考えたが、`--init zero` / `--init any` の全16通り
   （8本×2）で TRANS 形式と完全に同じ判定だった。
-  **2026-08-05 追記: 配列が断片に入ってこれは成り立たなくなった。** `base_convert.ja` は
+  **2026-08-05 追記: 配列が断片に入ってこれは成り立たなくなった。** `base_convert_c.ja` は
   `trans` で unknown、`assign` で **proved** である（120秒・`--init zero`）。断片が広がると
   形式の差が効き始めた、ということになる。§5 の表は `tools/verify_corpus.py` の既定
   （`trans`）で測っているので、**そこに出ている `proved` の数は下限**である。
@@ -464,26 +464,26 @@ examples の決着は 19本 → 24本に増える。
 
 | プログラム | 配列 | bytes | locs | vars | 判定 |
 |---|---|---:|---:|---:|---|
-| `edit_distance.ja` | Y | 1,998,234 | 32 | 86 | unknown |
-| `lcs.ja` | Y | 591,297 | 19 | 66 | unknown |
-| `injective_bwt_inverse.ja` | Y | 321,348 | 64 | 53 | unknown |
-| `knapsack.ja` | Y | 250,543 | 19 | 36 | unknown |
-| `injective_gcd.ja` | Y | 123,892 | 60 | 41 | unknown |
-| `bwt_plain.ja` | Y | 84,041 | 115 | 44 | unknown |
-| `run_length_enc.ja` | Y | 38,661 | 15 | 23 | unknown |
-| `fib_variants.ja` | – | 29,020 | 151 | 12 | unknown |
-| `glaisher.ja` | Y | 19,912 | 29 | 23 | unknown |
-| `fib.ja` | – | 17,856 | 101 | 3 | **proved** |
-| `injective_basics.ja` | – | 10,673 | 4 | 15 | **proved** |
-| `base_convert.ja` | Y | 4,996 | 4 | 6 | unknown |
+| `edit_distance_c.ja` | Y | 1,998,234 | 32 | 86 | unknown |
+| `lcs_c.ja` | Y | 591,297 | 19 | 66 | unknown |
+| `injective_bwt_inverse_c.ja` | Y | 321,348 | 64 | 53 | unknown |
+| `knapsack_c.ja` | Y | 250,543 | 19 | 36 | unknown |
+| `injective_gcd_c.ja` | Y | 123,892 | 60 | 41 | unknown |
+| `bwt_plain_c.ja` | Y | 84,041 | 115 | 44 | unknown |
+| `run_length_enc_c.ja` | Y | 38,661 | 15 | 23 | unknown |
+| `fib_variants_c.ja` | – | 29,020 | 151 | 12 | unknown |
+| `glaisher_c.ja` | Y | 19,912 | 29 | 23 | unknown |
+| `fib_c.ja` | – | 17,856 | 101 | 3 | **proved** |
+| `injective_basics_c.ja` | – | 10,673 | 4 | 15 | **proved** |
+| `base_convert_c.ja` | Y | 4,996 | 4 | 6 | unknown |
 | `sqrt_g.ja` | – | 4,294 | 13 | 5 | gave up |
-| `injective_bennett.ja` | – | 4,244 | 22 | 13 | unknown |
-| `fall.ja` | – | 4,130 | 10 | 11 | **proved** |
-| `zagier.ja` | – | 2,370 | 9 | 3 | **proved** |
-| `cantor_pair.ja` | – | 995 | 4 | 3 | **proved** |
+| `injective_bennett_c.ja` | – | 4,244 | 22 | 13 | unknown |
+| `fall_c.ja` | – | 4,130 | 10 | 11 | **proved** |
+| `zagier_c.ja` | – | 2,370 | 9 | 3 | **proved** |
+| `cantor_pair_c.ja` | – | 995 | 4 | 3 | **proved** |
 
 証明できた5本はすべて **18KB 未満**、配列プログラムは最大で **2.0MB**——2桁違う。
-**位置数では説明がつかない**（`fib.ja` は 101 位置で証明でき、`edit_distance.ja` は
+**位置数では説明がつかない**（`fib_c.ja` は 101 位置で証明でき、`edit_distance_c.ja` は
 32 位置で決着しない）ので、効いているのは §5.4 の位置数ではなく**項の大きさ**である。
 
 大きさの出どころは変数添字の書きで、`a[i] op= e` は要素ごとの条件付き更新になる。
@@ -514,8 +514,8 @@ large-block は決定率を上げる方向にも下げる方向にも効く: 直
 | 4000（既定） | 3424 KB | 671 |
 | 8000 | 3772 KB | 665 |
 
-合計では 14% ほど動くが、**未決の大物はまったく動かない**——`edit_distance.ja` は
-全設定で 1951 KB・32 位置、`lcs.ja` は 577 KB・19 位置、`knapsack.ja` は 244 KB・19 位置。
+合計では 14% ほど動くが、**未決の大物はまったく動かない**——`edit_distance_c.ja` は
+全設定で 1951 KB・32 位置、`lcs_c.ja` は 577 KB・19 位置、`knapsack_c.ja` は 244 KB・19 位置。
 **位置数が変わらないので `_maybe_seal` が発火していない。** モデルが実際に変わる5本
 （`bwt_plain` / `glaisher` / `injective_basics` / `injective_bwt_inverse` /
 `run_length_enc`）を両端 500 と 8000 で nuXmv にかけても、**判定は5本とも同一**
@@ -546,10 +546,10 @@ subscripts on left hand side of assignments"）ので、書きは要素ごとの
 
 | プログラム | expand | native | 比 |
 |---|---:|---:|---:|
-| `edit_distance.ja` | 1951 KB | 173 KB | **11.2×** |
-| `lcs.ja` | 577 KB | 71 KB | 8.1× |
-| `knapsack.ja` | 244 KB | 51 KB | 4.7× |
-| `injective_gcd.ja` | 121 KB | 34 KB | 3.5× |
+| `edit_distance_c.ja` | 1951 KB | 173 KB | **11.2×** |
+| `lcs_c.ja` | 577 KB | 71 KB | 8.1× |
+| `knapsack_c.ja` | 244 KB | 51 KB | 4.7× |
+| `injective_gcd_c.ja` | 121 KB | 34 KB | 3.5× |
 | **合計** | **3424 KB** | **584 KB** | **5.9×** |
 
 位置数はほぼ不変（`edit_distance` は 32 のまま、`lcs` は 19 のまま）。配列長に対する
@@ -604,7 +604,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
 値は**死んでいる**。死んだ成分だけが違う状態を消しているので、失敗を隠すことはない。
 
 修正して149本を測り直すと **proved 11 → 12 / unknown 11 → 10**。転じたのは
-`injective_bennett.ja`（自由変数6個）である。`--init any` では従来どおり自由のまま
+`injective_bennett_c.ja`（自由変数6個）である。`--init any` では従来どおり自由のまま
 （`knapsack` で36個）で、そちらは「全入力で全域か」という別の問いだから正しい。
 
 > **効いたのは符号化ではなく、問いを意図に合わせたことだった。** 4案（位置数・block 閾値・
@@ -659,7 +659,7 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
   `INVARSPEC pc != ERR` が証明できても、それは**上限に到達しない実行についてのみ**の
   主張である。「深さ16まで正しい」ではなく「深さ16を超えない実行については正しい」。
   ただし `INVARSPEC pc != BOUND` も併せて証明できれば上限に到達する実行が存在しない
-  ことになり、ERR の証明は無条件になる（§5.2 の `fib.ja` がこの形）。
+  ことになり、ERR の証明は無条件になる（§5.2 の `fib_c.ja` がこの形）。
   なお `jana_py/nuxmv.py` の判定は全性質の**最弱**を取る（refuted > unknown > proved）ので、
   BOUND が反証されているのに全体が `proved` と報告されることはない。
 - ~~**printf の引数エラーは対象外。**~~ → **2026-08-05 に対応**（§3.4）。「ストア意味論
@@ -690,10 +690,41 @@ large-block が読みを最初の遷移に押し込めていた）。`next(v) :=
    `N` を与えるまでもなく、インライン展開が実引数を持っているので解決した。続く3案
    （`_BLOCK_CHARS` §5.6 / 更新の書き方・モデルサイズ §5.7 / nuXmv の配列型 §5.7）は
    **すべて測って、すべて判定を変えなかった**。決定率の話は 5. に移る。
-2. **等価性検証へ拡張**（本命）。可逆性により `P ≡ Q ⟺ P;Q† ⊑ id ∧ dom P = dom Q` で、
-   `Q†` は `invert.py` で構文的に得られる。自己合成／積プログラムが要らないので状態空間が
-   半分で済む。`dom P = dom Q` の部分が本文書の全域性検査そのものであり、両者は
-   ひとつの体系をなす。対象は `PyJanus2PISA` の peephole と regalloc の translation validation。
+2. ~~**等価性検証へ拡張**（本命）~~ → **2026-08-06 に実装**（`jana_py/equiv_smv.py`、
+   `tests/verify/test_equiv_smv.py` 16件、CLI は `--equiv-smv OTHER.ja [--equiv-check]`）。
+   可逆性により `P ≡ Q ⟺ P;Q† ⊑ id ∧ dom P = dom Q` で、`Q†` は `invert.py` で構文的に
+   得られる。自己合成／積プログラムが要らないので状態空間が半分で済む。実装は
+   `P;Q†` を1本の Janus プログラムとして組み、本文書の符号化にそのまま流し、
+   入口の値の凍結コピー（`FROZENVAR x__at_entry`）に対する
+   `INVARSPEC pc != FINAL | (interface = frozen)` を足すだけ。
+
+   **判定を2つに分けて報告する**のが要点。`identity`（`P;Q† ⊑ id`）と
+   `totality`（`pc != ERR`、必要なら `pc != BOUND`）を潰し合わせない:
+
+   | identity | totality | 判定 | 意味 |
+   |---|---|---|---|
+   | proved | proved | `equivalent` | 両者は全域で同じ関数 |
+   | refuted | — | `different` | 食い違う具体的な入力つき |
+   | proved | refuted | **`partial`** | **完了する実行では一致するが定義域が違う** |
+
+   `partial` を `different` に潰すと、定義域を狭めるコンパイラパスを「誤り」と
+   報告してしまう。実測でも `from y = 0 do x += 1; y += 1 until y = 3` と
+   `x += 3; y += 3` は無条件では `partial`（入口表明が任意入力では破れる）、
+   `--smv-assume 'y = 0'` を与えると `equivalent` になる——**無限領域の整数上で、
+   ループを閉形式に畳んだ変換が IC3 で証明される**。
+
+   全部 proved のときに言えること: 任意のストア σ で `P;Q†` は停止して σ を返す。
+   よって `P` は全域、`P(σ) ∈ dom(Q†)`、`Q†(P(σ)) = σ`。両辺に `Q` を当てると
+   （`Q` は `dom(Q†)` 上で `Q†` の逆）`Q(σ) = P(σ)`。すなわち
+   **3つとも proved ⟹ `P` と `Q` は全域で同じ関数**。
+
+   近似せず拒否するもの3つ: 予約語で改名された界面変数（改名を追跡しないので、
+   黙って何も拘束しない仕様を出すより拒否する）、界面が違う2本、同名で本体の違う
+   手続き。またアンシラ（`local`/`delocal`）は比較しない——`delocal` が 0 を課すので
+   あって入口の値に戻るわけではなく、比較すれば正しいプログラムが全部反証される。
+
+   残作業: 対象を `PyJanus2PISA` の peephole と regalloc の translation validation に
+   広げること（本文書のコーパスではまだ回していない）。
 3. **BMC への退避**。IC3 がタイムアウトした場合に `check_invar_bmc` で「深さ k までは
    破れない」を得る。SAT 側の証明ログ（DRAT）まで取れば下界側の主張が認証つきになる。
 4. ~~`verify_corpus.py` の既定を揃える~~ → **2026-08-05 に実施**（proved 10 → 11）。
@@ -1060,7 +1091,7 @@ call f(n-1, r)  は  local t = n-1; call f(t, r); delocal t = n-1  に脱糖さ�
 - これは `local`/`delocal` とまったく同じ形なので、**読み取り専用という概念を新設せずに
   その経路を使い回す**。`uncall` でも束縛は本体の前、検査は後で、対称である。
 
-定数だけでなく**式の引数**も同じ経路で通る（`matrix_apsp.ja` の
+定数だけでなく**式の引数**も同じ経路で通る（`matrix_apsp_c.ja` の
 `base + v_n*v_n`）。配列の仮引数と `const` 仮引数への値引数は、この脱糖ではないので拒否する。
 
 ## 14. 構造体の `local`（2026-08-05）
@@ -1121,7 +1152,7 @@ s += 1; n += 1 }` は3周。実測）。後退辺で式を読み直す実装は*
 
 ### 15.2 予約識別子はここでも出た
 
-`injective_arithmetic.ja` が断片に入った瞬間、それが `exp` という変数を持つことが
+`injective_arithmetic_c.ja` が断片に入った瞬間、それが `exp` という変数を持つことが
 問題になった（nuXmv の予約語）。**気づけたのは §3.5 で入れた「コーパス全体のモデルが
 nuXmv に読めるか」というテストが落ちたから**である。予約語の一覧は安全網ではない
 ——プログラムは何とでも名付けられる——**読めるかどうかを毎回確かめる方が安全網**である。

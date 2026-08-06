@@ -1,7 +1,7 @@
 """Structs, expanded to scalars — one variable per field.
 
 Of the 97 example programs, 13 are blocked by structs alone. No field has a
-struct type (the "nested" in `structs_nested.ja` is nested *call sites*, not
+struct type (the "nested" in `structs_nested_c.ja` is nested *call sites*, not
 nested types), so this is the array story again: a struct variable becomes one
 SMV variable per field, `p.x` names that variable, and a struct parameter binds
 the caller's fields by reference exactly as an array does.
@@ -35,7 +35,7 @@ SCALAR = DEF + "procedure main()\n    Point p\n    p.x += 1\n    p.y += 2\n"
 FIELD_SWAP = DEF + "procedure main()\n    Point p\n    p.x += 1\n    p.x <=> p.y\n"
 BY_REF = (DEF + "procedure bump(Point q)\n    q.x += 1\n\n"
           "procedure main()\n    Point p\n    call bump(p)\n")
-#: `structs_nested.ja`'s shape: a procedure passes its own struct formals onward.
+#: `structs_nested_c.ja`'s shape: a procedure passes its own struct formals onward.
 ONWARD = (DEF + "procedure addv(Point a, Point b)\n    a.x += b.x\n    a.y += b.y\n\n"
           "procedure acc(Point s, Point d)\n    call addv(s, d)\n\n"
           "procedure main()\n    Point p\n    Point q\n    q.x += 1\n    call acc(p, q)\n")
@@ -96,7 +96,7 @@ class ExpansionTests(unittest.TestCase):
     self.assertEqual(next_branches(model, "p_x"), ["(p_x + 1)"])
 
   def test_formals_passed_onward_still_resolve(self):
-    # `structs_nested.ja`'s shape: the callee hands its own formals to a third
+    # `structs_nested_c.ja`'s shape: the callee hands its own formals to a third
     # procedure, so the binding has to survive a second resolution.
     model = model_of(ONWARD, init="zero")
     self.assertEqual(next_branches(model, "p_x"), ["(p_x + (q_x + 1))"])
