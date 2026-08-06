@@ -1,6 +1,6 @@
 // @summary:   lomuto partition recording each comparison in a flag bit
 // @technique: ancilla-flag
-// @source:    Lomuto partition, cf. Cormen et al., Introduction to Algorithms, 3rd ed.
+// @source:    Lomuto partition, cf. Cormen, Leiserson, Rivest and Stein, Introduction to Algorithms, 4th ed., MIT Press, 2022, Section 7.1 (PARTITION), p. 184
 // @confirmed: reproduced by tests/jana2014/reference/lomuto_partition_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, flags, flags_b, p, q
 // @keep:      a, b, q
 // @expect: part a:    3 2 5 1 4 6 7 8  (pivot@5)

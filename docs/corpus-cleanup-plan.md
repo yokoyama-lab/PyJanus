@@ -17,9 +17,14 @@ glob で全数を拾っている:
 | `test_format_roundtrip.py` | AST→ソース→AST が一致 |
 | `test_codegen_corpus.py` | C++ 生成物とインタプリタが一致 |
 | `test_verified_corpus.py` / `test_verified_cores_corpus.py` / `test_vjanus_corpus.py` | Coq 抽出コアと一致 |
-| `test_step1_golden.py` | 1ステップ意味論のゴールデン |
+| `test_step1_golden.py` | 1ステップ意味論のゴールデン。**ただし一度も走っていない**（下記） |
 
-**8本すべてが自己整合性の検査**である。「間違った計算を、可逆に、C++ とも Coq コアとも
+**しかも `test_step1_golden.py` は Haskell 参照実装（`src/Main.hs`）を要求し、それは
+この repo に存在せず git 履歴にも一度もない**。同じ理由で `test_control_flow_parity.py`
+と `test_local_parity.py` も常時 skip される。**実際に corpus を見ているのは7本**である
+（`docs/corpus-coverage.md` §5）。
+
+**残る7本すべてが自己整合性の検査**である。「間違った計算を、可逆に、C++ とも Coq コアとも
 一致して行うプログラム」は全部通る。**どのファイルにも「何を計算するはずか」が
 機械可読な形で書かれていない**。
 
@@ -94,22 +99,23 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 - 二形態（I/O なし／あり）の対応が不揃い: 97本のうち **89本に I/O 版が無い**。
   意図的なのか未整備なのか区別できない
 
-### 1.4 検証コアの被覆が不可視
+### 1.4 検証コアの被覆が不可視 → **解消済み**
 
-`pytest tests/jana2014` は **1170 passed / 248 skipped**（7分9秒）。skip の内訳は
-構造化された理由文字列で出ているが、集計表がどこにも無い:
+skip は理由つきで数えられているが、pytest の要約は総数しか出さないので、
+**どのプログラムがどのコアで検証されていないか**はどこにも書かれていなかった。
+§1.1 と同じ穴の別の顔である。
 
-| skip 理由（`test_verified_cores_corpus.py`） | 本数 |
+2026-08-07 に `tools/corpus_coverage.py` を作り、`pytest --junitxml` の記録から
+`docs/corpus-coverage.md` を生成するようにした。判明したこと:
+
+| 検査 | 被覆率 |
 |---|---|
-| uses procedures (verified Call needs parameters) | 95 |
-| array parameter | 60 |
-| uses structs | 22 |
-| stmt `['body','enter_decl','exit_decl','pos']`（local/delocal） | 15 |
-| array declaration | 12 |
-| その他（`*=`, `/`, `%`, `&`, `>=` 等） | 14 |
+| 可逆性・逆写像・整形往復・C++ codegen・vjanus・vjanus 逆・参照実装・メタデータ | **97/97** |
+| 抽出 flat コア | 77/97（`*=` `/=` 4+1本、自己再帰＋局所変数 12本 ほか） |
+| **2コア一致** | **1/97**（配列引数 57・未対応文 14・構造体 13 で落ちる） |
+| **1ステップ意味論のゴールデン** | **0/97**（Haskell 参照実装が存在しない） |
 
-「どのプログラムがどのコアで検証されているか」の表が無いため、**検証されていない
-ことに気づけない**。§1.1 と同じ穴の別の顔である。
+**生きている10列すべてで検査されているのは `fib_c.ja` 1本だけ**である。
 
 ### 1.5 エラー fixture の期待値が散在 → **解消済み**
 
@@ -194,7 +200,7 @@ selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 | **A** | 環境構築・見本の読解・復元練習 | 3h | 手順書に残置（新規参加者向け） |
 | **B** | 97本に `@` ヘッダを付与 | 35–45h | **完了**（LLM が全数生成、`check` 緑） |
 | **C** | 命名・重複の棚卸し | 6h | **完了**（`_g`/`_c`・接頭辞撤去・`array_element_arg_c`） |
-| **D** | 検証被覆マトリクス `docs/corpus-coverage.md` の生成 | 6h | 未着手 |
+| **D** | 検証被覆マトリクス `docs/corpus-coverage.md` の生成 | 6h | **完了**（`tools/corpus_coverage.py`） |
 | **E** | エラー fixture 52本に期待メッセージ付与 | 8h | **完了**（`tools/check_error_fixtures.py`＋52本注釈） |
 
 ### 3.2 残った人手の仕事（B の完了後）

@@ -1,6 +1,6 @@
 // @summary:   heapsort, in place over a[1..sz]
 // @technique: history-stack
-// @source:    Cormen et al., Introduction to Algorithms, 3rd ed., MIT Press, p. 154
+// @source:    Cormen, Leiserson, Rivest and Stein, Introduction to Algorithms, 4th ed., MIT Press, 2022, Section 6.4 (heapsort), p. 170
 // @confirmed: reproduced by tests/jana2014/reference/heap_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, sz
 // @keep:      a, sz
 // @expect: a[17] = {0, 1, 2, 3, 4, 7, 8, 9, 10, 14, 16, 0, 0, 0, 0, 0, 0}

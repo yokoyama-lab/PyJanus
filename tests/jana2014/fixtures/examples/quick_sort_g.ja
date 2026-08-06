@@ -1,6 +1,6 @@
 // @summary:   quicksort with the sorting permutation carried alongside
 // @technique: history-stack
-// @source:    Cormen et al., Introduction to Algorithms, 3rd ed., MIT Press, p. 171
+// @source:    Cormen, Leiserson, Rivest and Stein, Introduction to Algorithms, 4th ed., MIT Press, 2022, Section 7.1 (quicksort), p. 183
 // @confirmed: reproduced by tests/jana2014/reference/quick_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, ord
 // @keep:      a
 // @expect: a[8] = {1, 2, 3, 4, 5, 6, 7, 8}
