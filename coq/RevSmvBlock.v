@@ -5,7 +5,7 @@
     its own program location; straight-line code is executed *symbolically* into
     a pending map (variable -> an expression over the values at the block's
     entry) plus a path condition, and a location is cut only where control
-    actually branches.  Cutting the location count from 36 to 8 on `fall.ja`
+    actually branches.  Cutting the location count from 36 to 8 on `fall_c.ja`
     turned 2/8 proved into 5/8, with the same solver and the same time limit.
 
     That made it the largest unverified part of the encoding, and §8.4 said why
