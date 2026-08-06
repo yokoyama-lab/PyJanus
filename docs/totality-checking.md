@@ -342,8 +342,8 @@ examples 32本だけなので、以下はそれを列挙する。
 | `glaisher.ja` | unknown | **refuted** | 出力 `dist[]` が 0 でない |
 | `injective_gcd.ja` | unknown | **refuted** | 履歴 `log[]` が空でない |
 | `run_length_enc.ja` | unknown | **refuted** | 入力が 0 終端でない |
-| `sqrt.ja` | unknown | **refuted** | `num < 0` |
-| `injective_partition.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
+| `sqrt_g.ja` | unknown | **refuted** | `num < 0` |
+| `injective_partition_g.ja` | unknown | **refuted** | 旗 `flags[]` が 0 でない |
 | `bwt_plain.ja` | unknown | unknown | — |
 | `edit_distance.ja` | unknown | unknown | — |
 | `injective_bwt_inverse.ja` | unknown | unknown | — |
@@ -382,7 +382,7 @@ examples の決着は 19本 → 24本に増える。
 | `fall.ja` | `t = 0 & v = 0 & t_r = t_end_r` | 順行は静止・時刻0から、逆行は終端時刻から | **proved** |
 | `fib.ja` | `x1 = 0 & x2 = 0 & n >= -5` | 蓄積先が空、段数が非負 | 表明側は証明。残るのは `[bound]` |
 | `run_length_enc.ja` | `arc[…] = 0`（全セル） | 出力が空 | **refuted**（`text[0] = 0`） |
-| `sqrt.ja` | `num >= 0 & root = 0` | 非負の被平方数 | unknown |
+| `sqrt_g.ja` | `num >= 0 & root = 0` | 非負の被平方数 | unknown |
 | `glaisher.ja` | `dist[…] = 0 & odd[…] >= 0` | 出力が空、入力が非負 | unknown |
 | `injective_gcd.ja` | `log[…] = 0` | 履歴スタックが空 | unknown |
 
@@ -476,7 +476,7 @@ examples の決着は 19本 → 24本に増える。
 | `fib.ja` | – | 17,856 | 101 | 3 | **proved** |
 | `injective_basics.ja` | – | 10,673 | 4 | 15 | **proved** |
 | `base_convert.ja` | Y | 4,996 | 4 | 6 | unknown |
-| `sqrt.ja` | – | 4,294 | 13 | 5 | gave up |
+| `sqrt_g.ja` | – | 4,294 | 13 | 5 | gave up |
 | `injective_bennett.ja` | – | 4,244 | 22 | 13 | unknown |
 | `fall.ja` | – | 4,130 | 10 | 11 | **proved** |
 | `zagier.ja` | – | 2,370 | 9 | 3 | **proved** |

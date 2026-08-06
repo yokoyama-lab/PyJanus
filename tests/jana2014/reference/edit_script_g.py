@@ -5,6 +5,8 @@ embedding invented to make the computation injective, so it is garbage, and its
 layout is a property of this encoding rather than of the distance.
 """
 
+GARBAGE = ["tr"]
+
 S = [1, 2, 1]
 T = [2, 1]
 

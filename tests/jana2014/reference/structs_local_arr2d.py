@@ -1,5 +1,7 @@
 """`local struct` over a struct with a 2-D array field."""
 
+GARBAGE = []
+
 A = {"grid": [[1, 2], [3, 4]], "n": 10}
 
 

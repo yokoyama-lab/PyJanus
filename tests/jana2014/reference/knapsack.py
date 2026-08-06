@@ -1,5 +1,7 @@
 """0/1 knapsack, leaving the whole DP table, row-major with stride cap+1."""
 
+GARBAGE = []
+
 WEIGHTS = [2, 3, 4]
 VALUES = [3, 4, 5]
 CAP = 5

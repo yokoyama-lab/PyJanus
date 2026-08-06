@@ -1,5 +1,7 @@
 """Inversion code of a permutation: how many earlier entries are smaller."""
 
+GARBAGE = []
+
 X = [2, 0, 3, 1, 5, 4]
 
 

@@ -1,6 +1,8 @@
 """Kosaraju's strongly connected components: finish order, then components on
 the transpose. The recursion log is garbage."""
 
+GARBAGE = ["blog"]
+
 V = 5
 EDGES = [(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 3)]
 

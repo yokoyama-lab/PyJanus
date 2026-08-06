@@ -1,5 +1,7 @@
 """Fredkin (controlled swap) applied elementwise, then one Toffoli."""
 
+GARBAGE = []
+
 CTRL = [1, 0, 1, 0]
 P = [5, 6, 7, 8]
 Q = [50, 60, 70, 80]

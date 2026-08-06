@@ -1,5 +1,7 @@
 """An array of structs that themselves have array fields, read across elements."""
 
+GARBAGE = []
+
 
 def expected():
   g = [{"v": [1, 2, 3], "sum": 0}, {"v": [4, 0, 0], "sum": 0}]

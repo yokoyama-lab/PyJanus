@@ -1,6 +1,8 @@
 """Rank a balanced bit string, then unrank it: the round trip restores it and
 clears the index."""
 
+GARBAGE = []
+
 B = [1, 0, 1, 1, 1, 0, 0, 0]
 N = 4
 

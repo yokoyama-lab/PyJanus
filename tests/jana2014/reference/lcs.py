@@ -1,6 +1,8 @@
 """Longest common subsequence, leaving the whole DP table.
 "ABCBDAB" and "BDCAB" over A=1 B=2 C=3 D=4, row-major with stride n+1."""
 
+GARBAGE = []
+
 X = [1, 2, 3, 2, 4, 1, 2]
 Y = [2, 4, 3, 1, 2]
 

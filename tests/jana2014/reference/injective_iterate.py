@@ -1,6 +1,8 @@
 """Four uses of `iterate`: a prefix sum (undone), an xor chain, an odd-even
 swap, and a Feistel block (undone)."""
 
+GARBAGE = []
+
 A = [1, 2, 3, 4, 5]
 B = [5, 3, 6, 2, 7]
 C = [10, 20, 30, 40, 50, 60]

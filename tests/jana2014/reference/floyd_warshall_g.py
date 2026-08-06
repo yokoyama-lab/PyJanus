@@ -1,5 +1,7 @@
 """Floyd-Warshall all-pairs shortest paths, in place on the distance matrix."""
 
+GARBAGE = ["blog", "dlog"]
+
 V = 4
 INF = 10000
 WEIGHTS = {(0, 1): 5, (0, 3): 10, (1, 2): 3, (2, 3): 1}

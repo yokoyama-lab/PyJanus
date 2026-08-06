@@ -1,6 +1,8 @@
 """Bellman-Ford with negative weights: distances and the predecessor tree.
 The overwritten-value and decision logs are garbage."""
 
+GARBAGE = ["dlog", "plog", "rlog"]
+
 V = 5
 INF = 10000
 EDGES = [(0, 1, 6), (0, 3, 7), (1, 2, 5), (1, 3, 8), (1, 4, -4),

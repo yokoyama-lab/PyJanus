@@ -1,6 +1,8 @@
 """Dijkstra's shortest paths from vertex 0 on a weighted digraph.
 The overwritten-distance and decision logs are garbage."""
 
+GARBAGE = ["blog", "dlog"]
+
 V = 5
 INF = 100000
 WEIGHTS = {(0, 1): 10, (0, 3): 5, (1, 2): 1, (3, 1): 3,

@@ -1,6 +1,8 @@
 """Depth-first search on a directed graph: preorder visit sequence.
 The recursion-decision log `blog` is garbage."""
 
+GARBAGE = ["blog"]
+
 V = 5
 EDGES = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4)]
 

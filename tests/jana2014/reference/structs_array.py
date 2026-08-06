@@ -1,5 +1,7 @@
 """An array of structs: cross-element field reads, then a swap between them."""
 
+GARBAGE = []
+
 
 def expected():
   v = [{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 5, "b": 0}]

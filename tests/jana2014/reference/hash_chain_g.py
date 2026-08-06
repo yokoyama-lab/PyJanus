@@ -4,6 +4,8 @@ Only the result is asserted: the preimage indices banked in `tr` are the history
 that makes the iteration reversible, i.e. garbage.
 """
 
+GARBAGE = ["tr"]
+
 X, STEPS, MODULUS = 5, 4, 16
 
 

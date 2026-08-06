@@ -1,5 +1,7 @@
 """Permutation -> Lehmer code -> integer, then both steps undone."""
 
+GARBAGE = []
+
 PERM = [2, 0, 3, 1]
 
 

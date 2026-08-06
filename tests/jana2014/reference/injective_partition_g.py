@@ -4,6 +4,8 @@ The first call is undone. The second runs on an already-sorted array, where the
 pivot is the last element and every comparison succeeds.
 """
 
+GARBAGE = ["flags", "flags_b"]
+
 A = [3, 8, 2, 5, 1, 4, 7, 6]
 B = [1, 2, 3, 4]
 

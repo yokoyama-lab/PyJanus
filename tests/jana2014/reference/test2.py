@@ -1,5 +1,7 @@
 """Passing a scalar and an array element to the same incrementing procedure."""
 
+GARBAGE = []
+
 INT, ARRAY = 4, [42, 17]
 
 

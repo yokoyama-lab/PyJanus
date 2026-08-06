@@ -1,6 +1,8 @@
 """Burrows-Wheeler transform: last column of the sorted rotations, plus the
 index the original string landed at. The input is consumed."""
 
+GARBAGE = []
+
 S = [1, 2, 1, 2, 1, 2]
 
 

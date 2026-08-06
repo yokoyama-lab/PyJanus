@@ -5,6 +5,25 @@ layout depends on this encoding's sift order, and the per-operation garbage
 arrays are garbage by construction, so neither belongs to the algorithm.
 """
 
+GARBAGE = [
+  "heapgarbage",
+  "heapgarbage1",
+  "heapgarbage2",
+  "heapgarbage3",
+  "heapgarbage4",
+  "heapgarbage5",
+  "insertgarbage",
+  "insertgarbage1",
+  "insertgarbage2",
+  "insertgarbage3",
+  "insertgarbage4",
+  "insertcounter",
+  "insertcounter1",
+  "insertcounter2",
+  "insertcounter3",
+  "insertcounter4",
+]
+
 PARTIAL = "the final array layout, which depends on this encoding's sift order"
 
 KEYS = [1, 2, 3, 7, 4, 8, 9]

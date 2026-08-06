@@ -1,6 +1,8 @@
 """Breadth-first search on an undirected graph: layer distances and visit order.
 The discovery-decision log `blog` is garbage."""
 
+GARBAGE = ["blog"]
+
 V = 6
 EDGES = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4), (4, 5)]
 SRC = 0

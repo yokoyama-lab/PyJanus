@@ -4,6 +4,8 @@ Encoding a symbol is x := (x div f)*M + c + (x mod f), preceded by shifting low
 bits out of the state until it is small enough for the step to stay in range.
 """
 
+GARBAGE = []
+
 S = [2, 2, 1, 2, 2, 2]
 FREQ = {1: 1, 2: 3}
 CUM = {1: 0, 2: 1}

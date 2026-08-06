@@ -1,5 +1,7 @@
 """Run-length encoding between two stacks, reading the text from the top."""
 
+GARBAGE = []
+
 from itertools import groupby
 
 PUSHED = [12, 53, 53, 53, 32, 32]

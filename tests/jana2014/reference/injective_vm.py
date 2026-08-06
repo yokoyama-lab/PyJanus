@@ -1,6 +1,8 @@
 """A stack machine (push / add / halt) run forwards and then uncalled, which
 empties the stack and clears everything it produced."""
 
+GARBAGE = []
+
 OPS = [0, 0, 1, 0, 2]
 ARGS = [5, 3, 0, 10, 0]
 

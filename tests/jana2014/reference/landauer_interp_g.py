@@ -6,6 +6,8 @@
   _  swap a, b            reversible, traces 0
 """
 
+GARBAGE = ["tr"]
+
 PROGRAM = [1, 3, 2]
 A0, B0 = 2, 1
 

@@ -5,6 +5,8 @@ in its slot; the displaced key is re-homed in the other table, and so on until
 an empty slot absorbs the chain. `tr` records the evicted keys, `m` their count.
 """
 
+GARBAGE = ["tr", "m"]
+
 T1 = [0, 0, 2, 3]
 T2 = [0, 0, 5, 0]
 KEY = 6

@@ -1,5 +1,7 @@
 """Counting sort. `c` ends as the exclusive prefix sums of the key counts."""
 
+GARBAGE = ["c"]
+
 A = [2, 5, 3, 0, 2, 3, 0, 3]
 K = 6
 

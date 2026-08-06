@@ -1,6 +1,8 @@
 """An array of structs passed to a procedure that bumps each value and copies
 the new value into the tag field."""
 
+GARBAGE = []
+
 VALUES = [10, 20, 30]
 
 

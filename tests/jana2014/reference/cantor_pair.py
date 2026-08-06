@@ -1,5 +1,7 @@
 """Cantor's pairing bijection N x N -> N."""
 
+GARBAGE = []
+
 X, Y = 3, 5
 
 

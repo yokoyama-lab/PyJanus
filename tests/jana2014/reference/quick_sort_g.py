@@ -1,5 +1,7 @@
 """Quicksort with the sorting permutation carried alongside."""
 
+GARBAGE = ["ord"]
+
 A = [2, 8, 7, 1, 3, 5, 6, 4]
 
 

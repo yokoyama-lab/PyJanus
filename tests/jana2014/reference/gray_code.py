@@ -1,5 +1,7 @@
 """Binary -> reflected Gray code, bit 0 least significant."""
 
+GARBAGE = []
+
 BITS = [0, 1, 0, 1]
 
 

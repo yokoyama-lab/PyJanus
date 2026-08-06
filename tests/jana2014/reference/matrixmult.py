@@ -6,6 +6,8 @@ multLD and multU split the decomposition between them, which is a property of
 this factorisation-based encoding rather than of the product.
 """
 
+GARBAGE = []
+
 PARTIAL = "the product accumulated into A, which depends on how multLD and multU split the factorisation"
 
 B = [[2, 4, 4], [4, 1, 1], [2, 3, 4]]

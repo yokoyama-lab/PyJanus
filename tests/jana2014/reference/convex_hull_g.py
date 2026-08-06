@@ -1,6 +1,8 @@
 """Jarvis march: which points lie on the convex hull. `hseq` is the traversal
 history the reversible version keeps, so it is not asserted."""
 
+GARBAGE = ["hseq"]
+
 POINTS = [(1, 1), (9, 2), (5, 4), (8, 9), (2, 7), (4, 2)]
 
 

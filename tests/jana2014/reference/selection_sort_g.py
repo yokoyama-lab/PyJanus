@@ -4,6 +4,8 @@ That offset sequence is a factorial-base numeral (offset i is a digit in
 0..n-1-i), which is what makes the sort reversible.
 """
 
+GARBAGE = ["ftab"]
+
 A = [50, 20, 40, 60, 10, 30]
 
 

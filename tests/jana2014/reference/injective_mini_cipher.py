@@ -1,5 +1,7 @@
 """A three-round modular cipher, encrypted then decrypted."""
 
+GARBAGE = ["logs"]
+
 L, R, K0, K1, K2, M = 100, 42, 200, 150, 91, 256
 
 

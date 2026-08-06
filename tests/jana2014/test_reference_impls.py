@@ -28,7 +28,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from check_corpus_meta import observe, parse_store  # noqa: E402
+from check_corpus_meta import is_trivial, observe, parse_store  # noqa: E402
 
 EXAMPLES = sorted(glob.glob(str(ROOT / "tests" / "jana2014" / "fixtures" / "examples" / "*.ja")))
 REFERENCE = Path(__file__).resolve().parent / "reference"
@@ -52,6 +52,53 @@ def load_reference(stem: str):
 def describe(value: Any) -> str:
   text = repr(value)
   return text if len(text) <= 300 else text[:300] + " ..."
+
+
+@pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
+def test_every_surviving_value_is_accounted_for(ja: str) -> None:
+  """Nothing may be left in the store that is neither answer nor declared garbage.
+
+  `expected()` says what the algorithm determines; `GARBAGE` names the history
+  the reversible encoding has to keep. Between them they must cover everything
+  the run leaves behind, so a value nobody claims becomes a question rather than
+  a detail. A `PARTIAL` module is excused: by construction it does not predict
+  part of its own answer.
+  """
+  path = Path(ja)
+  module = load_reference(path.stem)
+  if getattr(module, "PARTIAL", None):
+    pytest.skip(f"partial reference: {module.PARTIAL}")
+  _, store_lines = observe(path)
+  store = parse_store(store_lines)
+  claimed = set(module.expected()) | set(module.GARBAGE)
+  orphans = sorted(name for name, value in store.items()
+                   if not is_trivial(value) and name not in claimed)
+  assert not orphans, (
+    f"{path.name} leaves {', '.join(orphans)}, which the reference neither "
+    f"predicts nor declares garbage")
+
+
+@pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
+def test_garbage_decides_the_filename(ja: str) -> None:
+  """A program that leaves garbage is named `..._g.ja`; one that does not is not.
+
+  The verdict comes from the reference rather than from the program's own
+  header: `GARBAGE` is decided from the algorithm, and whether any of it
+  actually survives is decided by running the program.
+  """
+  path = Path(ja)
+  module = load_reference(path.stem)
+  _, store_lines = observe(path)
+  store = parse_store(store_lines)
+  left = sorted(name for name in module.GARBAGE
+                if name in store and not is_trivial(store[name]))
+  named_g = path.stem.endswith("_g")
+  if left and not named_g:
+    raise AssertionError(
+      f"{path.name} leaves garbage ({', '.join(left)}): rename to {path.stem}_g.ja")
+  if not left and named_g:
+    raise AssertionError(
+      f"{path.name} leaves no garbage: rename to {path.stem[:-2]}.ja")
 
 
 @pytest.mark.parametrize("ja", EXAMPLES, ids=lambda p: Path(p).name)
@@ -120,7 +167,7 @@ class ReferenceHygieneTests(unittest.TestCase):
                for path in self._modules()}
     self.assertEqual(
       sorted(stem for stem, reason in partial.items() if reason),
-      ["adaptive_huffman", "binary_heap", "matrixmult", "matrixmult_v1", "ppm_lite"])
+      ["adaptive_huffman", "binary_heap_g", "matrixmult", "matrixmult_v1", "ppm_lite"])
 
 
 if __name__ == "__main__":

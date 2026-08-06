@@ -4,6 +4,8 @@ inc, neg, add (into the second argument), dbl, mul_const, mul, square, and the
 Cantor pairing in the file's own convention pi(a,b) = (a+b)(a+b+1)/2 + a.
 """
 
+GARBAGE = []
+
 X0, Y0, N, A, B, CA, CB = 5, 10, 3, 4, 7, 3, 4
 
 

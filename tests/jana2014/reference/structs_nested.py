@@ -1,6 +1,8 @@
 """accumulate(p, q) does p += 2q + something; called, uncalled, called again,
 so the net effect is one application."""
 
+GARBAGE = []
+
 
 def expected():
   p, q = {"x": 1, "y": 2}, {"x": 10, "y": 20}

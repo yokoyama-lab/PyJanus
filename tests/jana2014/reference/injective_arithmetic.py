@@ -1,5 +1,7 @@
 """Factorial, integer power and Horner evaluation, each uncalled away again."""
 
+GARBAGE = []
+
 N, BASE, EXPONENT, X, COEFFS = 5, 2, 10, 4, [1, 2, 3]
 
 
