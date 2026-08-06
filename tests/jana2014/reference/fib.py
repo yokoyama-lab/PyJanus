@@ -1,5 +1,7 @@
 """fib leaves (F(n+1), F(n+2)) and is then uncalled away, so only n survives."""
 
+GARBAGE = []
+
 N = 5
 
 

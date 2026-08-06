@@ -269,6 +269,12 @@ git mv tests/jana2014/fixtures/examples/gcd.ja tests/jana2014/fixtures/examples/
 検査は**両方向**です。ゴミがあるのに `_g` が無ければエラー、`_g` があるのにゴミが
 無くてもエラーになります。どちらのメッセージも「どう直せばよいか」を書いてあります。
 
+> **この判定は97本すべて済んでいます**（`tests/jana2014/reference/<名前>.py` の
+> `GARBAGE` 宣言。ゴミありは32本）。ですから `_g` の付け外しをする場面は普通は
+> ありません。**あなたの `@keep` が参照実装の `GARBAGE` と食い違うと検査が落ちます**。
+> 落ちたら、どちらが正しいかを考えて §6 で報告してください——**参照実装のほうが
+> 間違っている可能性もあります**。
+
 判断のこつ:
 
 - **入力がそのまま残っている**のはゴミではありません（`fib.ja` の `n = 5` は入力）
@@ -334,7 +340,7 @@ python3 tools/check_corpus_meta.py check tests/jana2014/fixtures/examples/X.ja
 1行足します:
 
 ```
-2026-08-06  10:00-12:30  2.5h  gcd.ja, gray_code.ja, heap_sort.ja の3本  / heap_sort は UNVERIFIED
+2026-08-06  10:00-12:30  2.5h  gcd.ja, gray_code.ja, heap_sort_g.ja の3本  / heap_sort は UNVERIFIED
 ```
 
 **この記録が謝金の根拠になります。**日付・開始終了時刻・実働時間・
@@ -372,7 +378,7 @@ PR の説明欄には次を書いてください:
 
 ```
 対象: gcd.ja, gray_code.ja, ... （10本）
-UNVERIFIED: heap_sort.ja（理由: 入力が大きく手計算で追えなかった）
+UNVERIFIED: heap_sort_g.ja（理由: 入力が大きく手計算で追えなかった）
 質問: injective_bits.ja の technique が ancilla-flag か plain か判断できませんでした
 ```
 
@@ -385,8 +391,8 @@ UNVERIFIED: heap_sort.ja（理由: 入力が大きく手計算で追えなかっ
 
 ### 4.1 プログラムが長すぎて読めない
 
-280行を超えるファイルが数本あります（`avl_delete.ja`, `permutation_rank.ja`,
-`tree_sort.ja`）。**全部を理解する必要はありません。** `main` だけを読んで
+280行を超えるファイルが数本あります（`avl_delete_g.ja`, `permutation_rank.ja`,
+`tree_sort_g.ja`）。**全部を理解する必要はありません。** `main` だけを読んで
 「何を入力に何が出るか」がわかれば `@summary` は書けます。
 `@confirmed` が書けなければ `UNVERIFIED` にして先に進んでください。
 **1本に1時間以上かけないこと。**

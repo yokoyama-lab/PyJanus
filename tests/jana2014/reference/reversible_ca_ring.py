@@ -1,5 +1,7 @@
 """Second-order Rule 90 on a ring: same half-step, with the neighbours wrapping."""
 
+GARBAGE = []
+
 A = [0, 0, 0, 0, 0]
 B = [2, 0, 0, 0, 3]
 

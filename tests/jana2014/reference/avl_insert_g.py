@@ -1,5 +1,7 @@
 """AVL insertion of 1..7 in order. The rotation and overwrite logs are garbage."""
 
+GARBAGE = ["alog", "hlog", "rlog"]
+
 from _avl import Avl
 
 KEYS = [1, 2, 3, 4, 5, 6, 7]

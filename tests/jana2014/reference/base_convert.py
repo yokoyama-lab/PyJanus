@@ -1,5 +1,7 @@
 """Positional digits of N in base B, least significant first."""
 
+GARBAGE = []
+
 N, B, WIDTH = 2026, 10, 4
 
 

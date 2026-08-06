@@ -3,6 +3,8 @@
 (x0, y0) is the pair with A*x0 + B*y0 = gcd; (x1, y1) spans the kernel.
 """
 
+GARBAGE = ["qlog"]
+
 A, B = 240, 46
 
 

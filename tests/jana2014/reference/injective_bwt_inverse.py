@@ -1,6 +1,8 @@
 """Inverse Burrows-Wheeler by LF-mapping, then uncalled: every workspace array
 returns to zero and the input is restored."""
 
+GARBAGE = []
+
 L = [1, 2, 3, 1, 0]
 I, N, ALPHABET = 4, 5, 4
 

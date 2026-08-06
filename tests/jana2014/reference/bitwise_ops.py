@@ -1,5 +1,7 @@
 """The three bitwise operators, on one pair of operands."""
 
+GARBAGE = []
+
 X, Y = 12, 10
 
 

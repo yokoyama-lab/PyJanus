@@ -1,6 +1,8 @@
 """Knuth-Morris-Pratt: the failure function and the number of occurrences.
 The prefix-length and branch logs are garbage."""
 
+GARBAGE = ["gb", "gq"]
+
 P = [1, 2, 1]
 T = [1, 2, 1, 2, 1, 2, 1, 1, 2, 1]
 

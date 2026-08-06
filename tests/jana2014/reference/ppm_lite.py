@@ -6,6 +6,8 @@ among equally-frequent symbols is this encoder's convention, so the emitted
 bits are not predicted here.
 """
 
+GARBAGE = []
+
 PARTIAL = "the emitted bits, for the same reason as adaptive_huffman"
 
 S = [1, 2, 1, 2, 1]

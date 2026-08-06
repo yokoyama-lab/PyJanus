@@ -1,5 +1,7 @@
 """Run-length encoding into (value, count) pairs; the input is consumed."""
 
+GARBAGE = []
+
 from itertools import groupby
 
 TEXT = [1, 1, 2, 2, 2, 1]

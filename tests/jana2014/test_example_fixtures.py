@@ -118,7 +118,7 @@ class AdaptedExampleTests(unittest.TestCase):
     self.assertIn("restored: 2 0 3 1 (int=0)", result.stdout)
 
   def test_injective_partition_reversible_lomuto(self) -> None:
-    result = run_program(EXAMPLE_DIR / "injective_partition.ja")
+    result = run_program(EXAMPLE_DIR / "injective_partition_g.ja")
     self.assertEqual(result.returncode, 0, result.stderr)
     # pivot = a[7] = 6; five elements are smaller, so the pivot lands at index 5.
     self.assertIn("part a:    3 2 5 1 4 6 7 8  (pivot@5)", result.stdout)

@@ -1,6 +1,8 @@
 """Clean gcd (input preserved, quotients logged) at three inputs, the first of
 which is uncalled away. gcd(0, n) = n."""
 
+GARBAGE = ["log"]
+
 from math import gcd
 
 PAIRS = [(12, 18), (21, 14), (0, 9)]

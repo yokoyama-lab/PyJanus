@@ -4,6 +4,8 @@ A sequence of +/-1 summing to 1 has exactly one cyclic rotation all of whose
 prefix sums are positive; the program rotates to it and reports the shift.
 """
 
+GARBAGE = []
+
 A = [-1, 1, 1, -1, 1]
 
 

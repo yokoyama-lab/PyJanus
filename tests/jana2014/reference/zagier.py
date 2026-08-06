@@ -1,6 +1,8 @@
 """Zagier's involution on triples with x^2 + 4yz fixed -- the one-sentence proof
 that a prime 1 mod 4 is a sum of two squares."""
 
+GARBAGE = []
+
 X, Y, Z = 3, 1, 7
 
 

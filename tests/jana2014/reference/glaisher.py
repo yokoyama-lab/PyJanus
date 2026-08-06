@@ -2,6 +2,8 @@
 parts. A part 2i+1 with multiplicity m contributes (2i+1)*2^k for each bit k
 set in m. odd[i] counts part 2i+1; dist[j] flags part j+1."""
 
+GARBAGE = []
+
 ODD = [3, 0, 1, 0, 0, 0]
 DIST_WIDTH = 12
 

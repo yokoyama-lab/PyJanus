@@ -1,5 +1,7 @@
 """Next permutation in lexicographic order. The overwrite log is garbage."""
 
+GARBAGE = ["glog"]
+
 D = [6, 7, 3, 5, 4, 2, 1, 0]
 
 

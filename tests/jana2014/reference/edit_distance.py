@@ -4,6 +4,8 @@
 is (m+1) x (n+1) laid out row-major with stride n+1 inside a 64-cell array.
 """
 
+GARBAGE = []
+
 X = [1, 2, 3, 3, 4, 5]
 Y = [6, 2, 3, 3, 2, 5, 7]
 CELLS = 64

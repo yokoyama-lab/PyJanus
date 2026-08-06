@@ -9,8 +9,24 @@ def expected() -> dict[str, object]:
 ```
 
 returning the values the Janus program's final store must hold, keyed by
-variable name. `tests/jana2014/test_reference_impls.py` runs the program, parses
-its store, and compares every key the module names.
+variable name, and
+
+```python
+GARBAGE = ["log", "blog"]
+```
+
+naming the variables that are history rather than answer.
+`tests/jana2014/test_reference_impls.py` runs the program, parses its store, and
+
+1. compares every key `expected()` names,
+2. checks that nothing non-trivial survives that is in *neither* list -- a value
+   nobody claims is a question, not a detail,
+3. requires the filename to end in `_g` exactly when some declared garbage
+   actually survives the run.
+
+(3) is why the split matters: **32 of the 97 leave garbage** and say so in their
+names. Whether a variable is garbage is decided from the algorithm; whether any
+of it survives is decided by running the program.
 
 ## Why these exist
 

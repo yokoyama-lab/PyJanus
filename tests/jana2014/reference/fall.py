@@ -2,6 +2,8 @@
 average of its speed before and after (g*t + g/2). Run forwards for t_end
 ticks, then run backwards from a different state."""
 
+GARBAGE = []
+
 G, H0, T_END = 10, 176, 3
 T_BACK, V_BACK, T_END_BACK = 4, 40, 4
 

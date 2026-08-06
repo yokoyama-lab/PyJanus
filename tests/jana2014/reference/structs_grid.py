@@ -1,5 +1,7 @@
 """A 2-D array of structs, read across cells."""
 
+GARBAGE = []
+
 
 def expected():
   grid = [[{"x": 0, "y": 0} for _ in range(2)] for _ in range(2)]

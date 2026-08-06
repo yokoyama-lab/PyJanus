@@ -1,5 +1,7 @@
 """Heapsort, in place over a[1..sz]. The decision stack `gb` is garbage."""
 
+GARBAGE = ["gb"]
+
 KEYS = [4, 1, 3, 2, 16, 9, 10, 14, 8, 7]
 CELLS = 17
 

@@ -1,5 +1,7 @@
 """Prime factorisation in ascending order; the input is consumed to zero."""
 
+GARBAGE = []
+
 NUM, WIDTH = 840, 20
 
 

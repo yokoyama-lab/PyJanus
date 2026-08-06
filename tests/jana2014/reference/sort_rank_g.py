@@ -4,6 +4,8 @@ The offsets fit in fewer cells than a permutation would, which is the point of
 the encoding; they are also exactly what `uncall` needs to undo the swaps.
 """
 
+GARBAGE = ["tr"]
+
 A = [3, 1, 2, 1, 2]
 
 

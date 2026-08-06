@@ -1,5 +1,7 @@
 """Closest pair of points, reported as a squared distance."""
 
+GARBAGE = []
+
 POINTS = [(2, 3), (12, 30), (40, 50), (5, 1), (12, 10)]
 BIG = 1000000
 

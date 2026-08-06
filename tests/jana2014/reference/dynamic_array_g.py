@@ -1,6 +1,8 @@
 """Growable array: append five, read one, pop two. Capacity doubles, never shrinks
 back below what the deletions leave. The resize log `dbit` is garbage."""
 
+GARBAGE = ["dbit"]
+
 ADDED = [10, 20, 30, 40, 50]
 QUERY_AT = 2
 DELETES = 2

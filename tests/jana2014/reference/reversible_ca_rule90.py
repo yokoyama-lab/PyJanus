@@ -1,6 +1,8 @@
 """Second-order Rule 90 on a line: each half-step xors the other row's
 neighbours into this one. Cells outside the line are zero."""
 
+GARBAGE = []
+
 A = [0, 4, 5, 6, 0]
 B = [0, 1, 2, 3, 0]
 

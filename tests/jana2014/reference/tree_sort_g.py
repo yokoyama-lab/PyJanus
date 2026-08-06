@@ -1,6 +1,8 @@
 """Tree sort: insert into an AVL that counts multiplicities, then read it out
 in order. Nodes are allocated on first occurrence of a key."""
 
+GARBAGE = ["alog", "hlog", "rlog"]
+
 from _avl import Avl
 
 A = [3, 1, 2, 3, 1, 3]

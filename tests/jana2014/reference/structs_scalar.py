@@ -1,5 +1,7 @@
 """Struct fields as lvalues: field-to-field addition, then a swap across structs."""
 
+GARBAGE = []
+
 
 def expected():
   p = {"x": 3, "y": 4}

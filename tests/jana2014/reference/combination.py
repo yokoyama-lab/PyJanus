@@ -1,5 +1,7 @@
 """Binomial coefficient."""
 
+GARBAGE = []
+
 from math import comb
 
 N, R = 5, 2

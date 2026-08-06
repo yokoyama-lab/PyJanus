@@ -1,6 +1,8 @@
 """Clean divmod by compute-use-uncompute: divmod(17,5) is undone, divmod(3,5)
 is kept."""
 
+GARBAGE = []
+
 X, D, X2 = 17, 5, 3
 
 

@@ -1,5 +1,7 @@
 """A struct with an array field and a 2-D array field, read across elements."""
 
+GARBAGE = []
+
 
 def expected():
   a = {"v": [5, 7, 0], "grid": [[2, 0], [0, 4]], "w": 0}

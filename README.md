@@ -151,7 +151,7 @@ Example programs live under dialect-specific test fixtures:
 | `sort-network.ja` | Reversible sorting network on struct arrays |
 | `build-dict.ja` | Dictionary construction with macros and structs |
 | `factor.ja` | Integer factorization |
-| `sqrt.ja` | Integer square root |
+| `sqrt_g.ja` | Integer square root |
 | `run_length_enc.ja` | Run-length encoding |
 | `stack_operations.ja` | Stack push/pop operations |
 | `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |

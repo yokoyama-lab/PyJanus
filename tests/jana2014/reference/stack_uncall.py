@@ -1,5 +1,7 @@
 """Two `build`s and one `uncall build`: the second run is popped back off."""
 
+GARBAGE = []
+
 FIRST = [100, 101, 102]
 
 

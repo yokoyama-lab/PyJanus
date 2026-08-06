@@ -7,6 +7,8 @@ demonstrate. The bit stream itself is not: which of the two losing symbols gets
 Huffman determines, so an independent implementation cannot predict it.
 """
 
+GARBAGE = []
+
 PARTIAL = "the emitted bits: which losing symbol gets `10` and which `11` is this encoder's convention"
 
 S = [1, 2, 1, 2, 1]

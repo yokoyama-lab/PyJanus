@@ -1,6 +1,8 @@
 """All-pairs shortest paths by repeated min-plus squaring of the weight matrix.
 The three 4x4 blocks are W, W^2 and W^4."""
 
+GARBAGE = []
+
 V = 4
 INF = 10000
 WEIGHTS = {(0, 1): 5, (0, 3): 10, (1, 2): 3, (2, 3): 1}

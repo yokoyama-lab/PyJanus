@@ -4,6 +4,8 @@
 single result; `fibb` consumes n and leaves F(n+1). Convention: F(1)=F(2)=1.
 """
 
+GARBAGE = []
+
 N = 4
 
 

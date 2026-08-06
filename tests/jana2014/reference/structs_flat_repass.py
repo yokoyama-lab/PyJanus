@@ -1,6 +1,8 @@
 """A struct passed through one procedure into another: the inner call adds
 v[0] + w, the outer then adds v[1]."""
 
+GARBAGE = []
+
 
 def expected():
   a = {"v": [10, 20, 30], "w": 5}

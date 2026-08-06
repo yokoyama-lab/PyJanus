@@ -1,5 +1,7 @@
 """Merge sort with the stable sorting permutation left in `ord`."""
 
+GARBAGE = ["ord"]
+
 A = [5, 2, 4, 7, 1, 3, 2, 6]
 
 

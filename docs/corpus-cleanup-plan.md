@@ -55,9 +55,20 @@ glob で全数を拾っている:
 | `matrixmult_v1.0.ja` | `matrixmult_v1.ja`（`.` が識別子として使えないため） |
 
 規約 `^[a-z][a-z0-9_]*\.ja$` は `test_filename_is_lowercase_with_underscores` が
-全数で強制する。加えて **`_g` 接尾辞＝ゴミを残すプログラム**（§2 の `@keep`）:
-`gcd.ja` → `gcd_g.ja`、`bubble_sort.ja` → `bubble_sort_g.ja`。注釈が済んだ本から
-順に判定されるので、残りは B フェーズの中で確定する。残る論点:
+全数で強制する。加えて **`_g` 接尾辞＝ゴミを残すプログラム**。2026-08-06 に
+参照実装（§5.2）の `GARBAGE` 宣言から **97本を全数判定し、32本を改名**した:
+
+```
+avl_delete_g  avl_insert_g  bellman_ford_g  bfs_g  binary_heap_g  bubble_sort_g
+convex_hull_g  counting_sort_g  cuckoo_insert_g  depth_first_search_g  dijkstra_g
+dynamic_array_g  edit_script_g  ext_gcd_g  floyd_warshall_g  gcd_g  hash_chain_g
+heap_sort_g  injective_partition_g  kmp_g  kosaraju_scc_g  landauer_interp_g
+merge_sort_g  modexp_g  next_permutation_g  prim_mst_g  quick_sort_g
+selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
+```
+
+**何がゴミかはアルゴリズムから決まり、実際に残るかは実行が決める**。両方向で強制
+されるので、`_g` が付いているのにゴミが残らない本も落ちる。残る論点:
 
 - **`test2.ja` は「サンプル」ではなく機能テスト**だった。中身は
   `call test_rev(test_array[0]) // doesn't work` の8行で、**配列要素を実引数に渡せるか**
@@ -204,8 +215,11 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 の import・`.ja` の読み込み・subprocess は衛生テストが禁止）、アルゴリズムの定義から
 書いてある。入力だけは Janus の `main` が持つ定数なので転記する。
 
-- **ゴミは主張しない**。決定ログ・商スタック・ソートの順列は「この可逆符号化の産物」で
-  あって関数の値ではない。`@keep` に載るものがここに載るもの
+- **ゴミは主張せず、代わりに `GARBAGE` で名指しする**。決定ログ・商スタック・ソートの
+  順列は「この可逆符号化の産物」であって関数の値ではない
+- **非自明な残余は `expected()` か `GARBAGE` のどちらかに必ず入る**（
+  `test_every_surviving_value_is_accounted_for`）。どちらにも入らない値は
+  「誰も説明できていない残余」なので、テストが質問として突きつける
 - **答えを予測しきれない5本**（`adaptive_huffman` / `ppm_lite` / `matrixmult` /
   `matrixmult_v1` / `binary_heap`）は `PARTIAL` に理由を書き、テストがその一覧を固定する。
   勝手に増えない

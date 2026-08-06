@@ -1,5 +1,7 @@
 """`local struct` over a struct with an array field."""
 
+GARBAGE = []
+
 A = {"v": [10, 20, 30], "w": 5}
 
 
