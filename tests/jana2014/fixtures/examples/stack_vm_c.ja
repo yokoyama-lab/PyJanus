@@ -1,3 +1,18 @@
+// @summary:   a stack machine (push / add / halt) run forwards and then uncalled, which empties the stack and clears everything it produced
+// @technique: plain
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/stack_vm_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on args, below, empty_check, n, ops, s, top_val
+// @keep:      args, n, ops
+// @expect: after run:    top=2 below=8
+// @expect: after uncall: size=0
+// @expect: args[5] = {5, 3, 0, 10, 0}
+// @expect: below = 0
+// @expect: empty_check = 0
+// @expect: n = 5
+// @expect: ops[5] = {0, 0, 1, 0, 2}
+// @expect: s = nil
+// @expect: top_val = 0
+//
 // Level 10: a reversible stack-machine VM.
 //
 // Each instruction is a (opcode, arg) pair, stored in two parallel arrays.

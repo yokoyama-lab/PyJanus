@@ -1,3 +1,12 @@
+// @summary:   positional digits of N in base B, least significant first
+// @technique: clean-accumulation
+// @source:    Horner's rule / mixed-radix numerals; cf. docs/reversible-pearls.md
+// @confirmed: reproduced by tests/jana2014/reference/base_convert_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on b, d, n
+// @keep:      b, d, n
+// @expect: b = 10
+// @expect: d[4] = {6, 2, 0, 2}
+// @expect: n = 2026
+//
 // Base conversion (Horner digit extraction) — a clean reversible injective map.
 //
 // From Bird's calculational tradition (Horner's rule / mixed-radix numbers,

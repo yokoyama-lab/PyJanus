@@ -1,3 +1,11 @@
+// @summary:   `local struct` over a struct with a 2-D array field
+// @technique: clean-accumulation
+// @source:    original (a fixture for a local struct with a 2-D array field)
+// @confirmed: reproduced by tests/jana2014/reference/structs_local_arr2d_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, s
+// @keep:      a, s
+// @expect: a = {grid = {{1, 2}, {3, 4}}, n = 10}
+// @expect: s = 20
+//
 // Local struct with 2-D array field: Box.grid[2][2] is accessed in the body.
 // Exercises cantor_val for multi-dim static indices in lstructs_flat.
 

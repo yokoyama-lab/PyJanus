@@ -1,3 +1,13 @@
+// @summary:   integer square root: the root, with the remainder left in place of the input
+// @technique: plain
+// @source:    C. Lutz and H. Derby, Janus: a time-reversible language
+// @confirmed: reproduced by tests/jana2014/reference/sqrt_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on num, root
+// @keep:      root
+// @expect: 66 0
+// @expect: 2 8
+// @expect: num = 2
+// @expect: root = 8
+//
 // Calculating the square root of an integer.
 // Adapted version of example from "Janus: a time-reversible language" by
 // C. Lutz and H. Derby.

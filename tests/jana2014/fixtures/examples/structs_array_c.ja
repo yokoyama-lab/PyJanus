@@ -1,3 +1,10 @@
+// @summary:   an array of structs: cross-element field reads, then a swap between them
+// @technique: clean-accumulation
+// @source:    original (a fixture for vjanus's struct-array lowering)
+// @confirmed: reproduced by tests/jana2014/reference/structs_array_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on v
+// @keep:      v
+// @expect: v[3] = {{a = 4, b = 2}, {a = 3, b = 1}, {a = 5, b = 5}}
+//
 // Arrays of structs: element field access `v[i].f`, cross-element field
 // arithmetic, and a field swap across elements.  Exercises vjanus's
 // struct-array lowering (cell index = element*nfields + field offset).

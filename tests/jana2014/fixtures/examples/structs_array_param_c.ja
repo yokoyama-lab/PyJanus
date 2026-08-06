@@ -1,3 +1,11 @@
+// @summary:   an array of structs passed to a procedure that bumps each value and copies the new value into the tag field
+// @technique: clean-accumulation
+// @source:    original (a fixture for passing an array of structs by reference)
+// @confirmed: reproduced by tests/jana2014/reference/structs_array_param_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on data, n
+// @keep:      data, n
+// @expect: data[3] = {{v = 11, tag = 11}, {v = 21, tag = 21}, {v = 31, tag = 31}}
+// @expect: n = 3
+//
 // Passing an array of structs by reference: a struct-array parameter is one
 // positional ref (the array base), like a plain array; element fields index it
 // as elem*nfields + offset.  Exercises vjanus against PyJanus.

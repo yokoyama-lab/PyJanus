@@ -1,3 +1,12 @@
+// @summary:   fredkin (controlled swap) applied elementwise, then one Toffoli
+// @technique: plain
+// @source:    Toffoli (CCNOT) and Fredkin (CSWAP) gates
+// @confirmed: reproduced by tests/jana2014/reference/reversible_gates_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on ctrl, p, q
+// @keep:      ctrl, p, q
+// @expect: ctrl[4] = {1, 0, 1, 1}
+// @expect: p[4] = {50, 6, 70, 8}
+// @expect: q[4] = {5, 60, 7, 80}
+//
 // Universal reversible logic gates — Toffoli (CCNOT) and Fredkin (CSWAP).
 //
 // No-I/O verified-oracle twin: input baked into main, result left in the store,

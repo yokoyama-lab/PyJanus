@@ -1,3 +1,14 @@
+// @summary:   the three bitwise operators, on one pair of operands
+// @technique: clean-accumulation
+// @source:    original (a fixture for the verified cores' BAnd/BOr/BXor)
+// @confirmed: reproduced by tests/jana2014/reference/bitwise_ops_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, e, o, x, y
+// @keep:      a, e, o, x, y
+// @expect: a = 8
+// @expect: e = 6
+// @expect: o = 14
+// @expect: x = 12
+// @expect: y = 10
+//
 // Bitwise operators in expressions: &, |, ^ (AND, OR, XOR).
 //
 // The verified cores (RevFrame.v's BAnd/BOr/BXor and RevArr.v's OAnd/OOr/OXor,

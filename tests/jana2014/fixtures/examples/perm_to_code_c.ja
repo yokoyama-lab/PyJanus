@@ -1,3 +1,11 @@
+// @summary:   inversion code of a permutation: how many earlier entries are smaller
+// @technique: plain
+// @source:    David Gries, The Science of Programming, 1987, p. 270
+// @confirmed: reproduced by tests/jana2014/reference/perm_to_code_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on x
+// @keep:      x
+// @expect: x[6] = {2, 0, 3, 1, 5, 4}
+// @expect: x[6] = {0, 0, 2, 1, 4, 4}
+//
 // Based on David Gries: The science of programming, 1987. pp.270
 // Permutation to code
 // Given an array X that contains a permutation of the integers 0, 1, ...,

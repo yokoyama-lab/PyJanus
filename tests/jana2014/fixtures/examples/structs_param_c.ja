@@ -1,3 +1,11 @@
+// @summary:   a struct passed with a value argument: shift adds d to x and d-..
+// @technique: clean-accumulation
+// @source:    original (a fixture for struct parameters with a value argument)
+// @confirmed: reproduced by tests/jana2014/reference/structs_param_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b
+// @keep:      a, b
+// @expect: a = {x = 7, y = 6}
+// @expect: b = {x = 10, y = 0}
+//
 // Passing a struct by reference: a struct actual expands to one ref per field
 // at the call site, and a struct formal occupies one positional ref per field.
 // Exercises vjanus's struct-parameter lowering against PyJanus.

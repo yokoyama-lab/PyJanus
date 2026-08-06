@@ -1,3 +1,11 @@
+// @summary:   factorial, input preserved
+// @technique: clean-accumulation
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/factorial_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on n, res
+// @keep:      n, res
+// @expect: n = 5
+// @expect: res = 120
+//
 // recursive factorial: factR is called exponential times
 
 procedure factR(int n, int res)

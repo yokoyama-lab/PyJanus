@@ -443,5 +443,51 @@ class AgreementTests(unittest.TestCase):
                          result.output[-2000:])
 
 
+class UniqueNameTests(unittest.TestCase):
+  """A native array base must not be handed out twice.
+
+  `_uniq` looked only at `varnames`, and the native path never puts the *base*
+  there — only its cells (`a[0]`, `a[1]`, …).  So a second array asking for the
+  same base got it, and the `VAR` block declared the name twice; nuXmv then
+  refused the whole model with "multiple declaration of identifier".
+
+  One model really can declare the same array name twice: a `local` inside a
+  block that appears twice, which is what composing a program with its own
+  inverse produces (`tools/verify_inverse_corpus.py` hit it on
+  `structs_local_arr_c.ja`).  The scalar path was never affected, because
+  `_declare` appends the name itself — which is why `e_w` / `e_w__1` came out
+  right in the same model where `e_v` came out twice.
+  """
+
+  SRC = """struct Box {
+    int v[2];
+};
+
+procedure main()
+    Box a
+    int s
+
+    local struct Box e = a
+        s += e.v[0]
+    delocal struct Box e = a
+
+    local struct Box e = a
+        s -= e.v[1]
+    delocal struct Box e = a
+"""
+
+  def test_a_repeated_array_local_is_declared_once_per_instance(self):
+    model = model_of(self.SRC, init="any", arrays="native")
+    declared = re.findall(r"^  (\S+) : array ", model, re.M)
+    self.assertEqual(len(declared), len(set(declared)),
+                     f"duplicate array declaration in:\n{model}")
+
+  @unittest.skipIf(BINARY is None, "nuXmv not installed")
+  def test_nuxmv_can_read_that_model(self):
+    result = nuxmv.check(model_of(self.SRC, init="any", arrays="native"),
+                         binary=BINARY)
+    self.assertFalse(result.malformed, result.output[-2000:])
+
+
 if __name__ == "__main__":
   unittest.main()

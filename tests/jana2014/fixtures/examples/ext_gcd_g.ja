@@ -1,3 +1,16 @@
+// @summary:   extended Euclid: the two Bezout columns, carried to the end of the recursion
+// @technique: history-stack
+// @source:    classical extended Euclid; the quotient log is original
+// @confirmed: reproduced by tests/jana2014/reference/ext_gcd_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, b, x0, x1, y0, y1
+// @keep:      a, x0, x1, y0, y1
+// @expect: a = 2
+// @expect: b = 0
+// @expect: qlog = <2, 1, 1, 4, 5]
+// @expect: x0 = -9
+// @expect: x1 = 23
+// @expect: y0 = 47
+// @expect: y1 = -120
+//
 // Reversible Extended Euclidean Algorithm
 //
 // Computes g = gcd(a,b) together with Bezout coefficients x0, y0 such

@@ -1,3 +1,12 @@
+// @summary:   run-length encoding between two stacks, reading the text from the top
+// @technique: plain
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/run_length_enc_stack_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on arc, text
+// @keep:      arc
+// @expect: text = <32, 32, 53, 53, 53, 12]
+// @expect: arc = <1, 12, 3, 53, 2, 32]
+// @expect: text = nil
+//
 // Run-length encoding using stacks
 
 procedure encode(stack text, stack arc)

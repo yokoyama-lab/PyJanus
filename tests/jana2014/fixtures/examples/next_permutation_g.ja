@@ -1,3 +1,12 @@
+// @summary:   next permutation in lexicographic order
+// @technique: history-stack
+// @source:    classical lexicographic next permutation; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/next_permutation_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on d, n
+// @keep:      d, n
+// @expect: d[8] = {6, 7, 4, 0, 1, 2, 3, 5}
+// @expect: glog = <2, 4]
+// @expect: n = 8
+//
 // Reversible Next Permutation (lexicographic successor)
 //
 // Rewrite of the historical known-broken version, which tried to

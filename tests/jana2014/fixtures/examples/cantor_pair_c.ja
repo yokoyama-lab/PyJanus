@@ -1,3 +1,12 @@
+// @summary:   cantor's pairing bijection N x N -> N
+// @technique: clean-accumulation
+// @source:    Cantor pairing; cf. docs/reversible-pearls.md
+// @confirmed: reproduced by tests/jana2014/reference/cantor_pair_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on x, y, z
+// @keep:      x, y, z
+// @expect: x = 3
+// @expect: y = 5
+// @expect: z = 41
+//
 // Cantor pairing — a clean reversible simulation of the bijection N x N -> N.
 //
 //   pair(x,y) = (x+y)(x+y+1)/2 + y

@@ -1,3 +1,33 @@
+// @summary:   reversible binary min-heap: six extract-mins, then five re-inserts
+// @technique: history-stack
+// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Theorems 6.7/6.8; adapted from S. V. Nohr, Reversible Graph Algorithms, BSc thesis, Copenhagen University (2015)
+// @confirmed: UNVERIFIED -- the reference does not predict the final array layout, which depends on this encoding's sift order. The rest is reproduced by tests/jana2014/reference/binary_heap_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on heapsize, min1, min2, min3, min4, min5, min6
+// @keep:      A, heapsize, min1, min2, min3, min4, min5, min6
+// @expect: A[8] = {0, 1, 4, 2, 9, 7, 3, 1000000}
+// @expect: heapgarbage[4] = {2, 5, 5, 0}
+// @expect: heapgarbage1[3] = {3, 3, 0}
+// @expect: heapgarbage2[3] = {2, 4, 4}
+// @expect: heapgarbage3[2] = {2, 2}
+// @expect: heapgarbage4[2] = {1, 0}
+// @expect: heapgarbage5[1] = {1}
+// @expect: heapsize = 6
+// @expect: insertcounter = 2
+// @expect: insertcounter1 = 2
+// @expect: insertcounter2 = 2
+// @expect: insertcounter3 = 2
+// @expect: insertcounter4 = 3
+// @expect: insertgarbage[4] = {999997, 2, 1, 0}
+// @expect: insertgarbage1[4] = {999998, 3, 1, 0}
+// @expect: insertgarbage2[4] = {999993, 4, 2, 0}
+// @expect: insertgarbage3[4] = {999996, 5, 2, 0}
+// @expect: insertgarbage4[4] = {999999, 6, 3, 1}
+// @expect: min1 = 1
+// @expect: min2 = 2
+// @expect: min3 = 3
+// @expect: min4 = 4
+// @expect: min5 = 7
+// @expect: min6 = 8
+//
 // Reversible binary (min-)heap -- verified-subset-compliant version.
 // Realizes the reversible binary heap of "Energy-Efficient Algorithms"
 // (arXiv:1605.08448), Theorems 6.7/6.8 (insert / extract-min reversibly,

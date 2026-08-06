@@ -1,3 +1,22 @@
+// @summary:   inverse Burrows-Wheeler by LF-mapping, then uncalled: every workspace array returns to zero and the input is restored
+// @technique: bennett-uncompute
+// @source:    Bird and Mu, Inverting the Burrows-Wheeler transform (Functional Pearl), JFP 14(6), 2004
+// @confirmed: reproduced by tests/jana2014/reference/bwt_inverse_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on A, C, I, L, T, cnt, n, occ, path, s
+// @keep:      A, I, L, n
+// @expect: L:         1 2 3 1 0   I=4
+// @expect: decoded s: 3 1 2 1 0
+// @expect: restored:  L=12310 I=4 s=00000
+// @expect: A = 4
+// @expect: C[4] = {0, 0, 0, 0}
+// @expect: I = 4
+// @expect: L[5] = {1, 2, 3, 1, 0}
+// @expect: T[5] = {0, 0, 0, 0, 0}
+// @expect: cnt[4] = {0, 0, 0, 0}
+// @expect: n = 5
+// @expect: occ[4] = {0, 0, 0, 0}
+// @expect: path[5] = {0, 0, 0, 0, 0}
+// @expect: s[5] = {0, 0, 0, 0, 0}
+//
 // Level 10 (flagship): the inverse Burrows-Wheeler transform via the LF-mapping,
 // as a reversible Janus procedure -- so its `uncall` is the forward BWT.
 //

@@ -1,3 +1,10 @@
+// @summary:   a 2-D array of structs, read across cells
+// @technique: clean-accumulation
+// @source:    original (a fixture for a multi-dimensional array of structs)
+// @confirmed: reproduced by tests/jana2014/reference/structs_grid_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on grid
+// @keep:      grid
+// @expect: grid[2][2] = {{{x = 1, y = 4}, {x = 0, y = 2}}, {{x = 3, y = 0}, {x = 0, y = 4}}}
+//
 // Multi-dimensional array of structs: grid[i][j].field.  Exercises vjanus's
 // struct-array lowering through the injective Cantor fold for the 2-D index
 // (cell = cantor(i, j) * nfields + field offset), against PyJanus.

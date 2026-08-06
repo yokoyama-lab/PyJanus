@@ -1,3 +1,23 @@
+// @summary:   clean gcd (input preserved, quotients logged) at three inputs, the first of which is uncalled away
+// @technique: bennett-uncompute
+// @source:    original (subtractive Euclid with a logged inner procedure and a Bennett wrapper)
+// @confirmed: reproduced by tests/jana2014/reference/gcd_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, a2, a3, b, b2, b3, g, g2, g3, log
+// @keep:      a, a2, b, b2, b3, g2, g3
+// @expect: gcd(12,18): a=12 b=18 g=6
+// @expect: uncalled:   a=12 b=18 g=0
+// @expect: gcd(21,14): a=21 b=14 g=7
+// @expect: gcd(0,9):   a=0 b=9 g=9
+// @expect: a = 12
+// @expect: a2 = 21
+// @expect: a3 = 0
+// @expect: b = 18
+// @expect: b2 = 14
+// @expect: b3 = 9
+// @expect: g = 0
+// @expect: g2 = 7
+// @expect: g3 = 9
+// @expect: log[20] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+//
 // Level 6: reversible subtractive Euclidean GCD using a logged inner
 // procedure plus a Bennett wrapper.
 //

@@ -1,3 +1,13 @@
+// @summary:   selection sort recording, for each pass, how far ahead the minimum was
+// @technique: history-stack
+// @source:    Cormen et al., Introduction to Algorithms, 3rd ed., MIT Press, p. 29, Exercise 2.2-2
+// @confirmed: reproduced by tests/jana2014/reference/selection_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, ftab, n, p
+// @keep:      a, n
+// @expect: a[6] = {10, 20, 30, 40, 50, 60}
+// @expect: ftab[6] = {4, 0, 3, 2, 0, 0}
+// @expect: n = 6
+// @expect: p[6] = {0, 0, 0, 0, 0, 0}
+//
 // selection sort with optimal garbage (linear size)
 // Cormen, T. H., et al. (2009). Introduction to Algorithms third edition, The MIT Press. p.29 Exercise 2.2-2
 // set the maximum of a[j..n-1] to p

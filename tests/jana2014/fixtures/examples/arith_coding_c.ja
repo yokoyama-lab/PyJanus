@@ -1,3 +1,16 @@
+// @summary:   arithmetic coding of a bit string, then decoded again
+// @technique: plain
+// @source:    J. Duda, asymmetric numeral systems; cf. docs/reversible-pearls.md Tier 2
+// @confirmed: reproduced by tests/jana2014/reference/arith_coding_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on m, n, q, r, x
+// @keep:      m, n
+// @expect: encoded:   x=25   msg=0000  (q=0 r=0)
+// @expect: decoded:   msg=1010   x=0  (q=0 r=0)
+// @expect: m[4] = {1, 0, 1, 0}
+// @expect: n = 4
+// @expect: q = 0
+// @expect: r = 0
+// @expect: x = 0
+//
 // Level 9: integer arithmetic coding, done as a bijective range-ANS (rANS) coder.
 //
 // Arithmetic coding folds a message over a probability model into a single

@@ -1,3 +1,13 @@
+// @summary:   all-pairs shortest paths by repeated min-plus squaring of the weight matrix
+// @technique: clean-accumulation
+// @source:    Nunez de Villavicencio, Demaine et al. (arXiv:1605.08448), Section 6.5, Theorem 6.22
+// @confirmed: reproduced by tests/jana2014/reference/matrix_apsp_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on inf, m_arr, t_n, v_n
+// @keep:      inf, m_arr, t_n, v_n
+// @expect: inf = 10000
+// @expect: m_arr[48] = {0, 5, 10000, 10, 10000, 0, 3, 10000, 10000, 10000, 0, 1, 10000, 10000, 10000, 0, 0, 5, 8, 10, 10000, 0, 3, 4, 10000, 10000, 0, 1, 10000, 10000, 10000, 0, 0, 5, 8, 9, 10000, 0, 3, 4, 10000, 10000, 0, 1, 10000, 10000, 10000, 0}
+// @expect: t_n = 2
+// @expect: v_n = 4
+//
 // Reversible All-Pairs Shortest Paths via (min,+) matrix multiplication
 // Nunez de Villavicencio, Emil, and Erik D. Demaine et al.,
 //   "Energy-Efficient Algorithms" (arXiv:1605.08448), Section 6.5,

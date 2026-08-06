@@ -1,3 +1,10 @@
+// @summary:   gray-encode then decode: the input comes back
+// @technique: plain
+// @source:    reflected binary Gray code
+// @confirmed: reproduced by tests/jana2014/reference/gray_code_roundtrip_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on bits
+// @keep:      bits
+// @expect: bits[4] = {0, 1, 0, 1}
+//
 // Gray code is its own inverse pair: `call gray` encodes, `uncall gray` decodes,
 // and the composition is the identity. This fixture bakes a binary vector into
 // main, encodes it to Gray, then decodes it back — the final store must equal

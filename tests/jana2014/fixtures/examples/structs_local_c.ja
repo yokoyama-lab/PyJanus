@@ -1,3 +1,11 @@
+// @summary:   `local struct` copies a struct in and checks it back out unchanged, so the loop can read fields without disturbing the array
+// @technique: clean-accumulation
+// @source:    original (a fixture for struct-valued locals)
+// @confirmed: reproduced by tests/jana2014/reference/structs_local_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on out, s
+// @keep:      out, s
+// @expect: out[2] = {{dist = 3, len = 2, next = 9}, {dist = 7, len = 5, next = 7}}
+// @expect: s = 33
+//
 // Struct-valued local: `local struct Ref e = out[j]` copies all fields of the
 // array element into a fresh local struct, used read-only in the body; the
 // delocal asserts e == out[j] and frees.  Exercises vjanus's struct-local

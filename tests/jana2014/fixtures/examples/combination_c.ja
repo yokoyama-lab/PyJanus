@@ -1,3 +1,12 @@
+// @summary:   binomial coefficient
+// @technique: clean-accumulation
+// @source:    original
+// @confirmed: reproduced by tests/jana2014/reference/combination_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on n, r, res
+// @keep:      n, r, res
+// @expect: n = 5
+// @expect: r = 2
+// @expect: res = 10
+//
 // iterative factorial: linear time
 
 procedure factI(int n, int res)

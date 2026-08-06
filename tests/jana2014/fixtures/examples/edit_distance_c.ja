@@ -1,3 +1,14 @@
+// @summary:   levenshtein distance, leaving the whole DP table
+// @technique: clean-accumulation
+// @source:    classical Levenshtein DP; the reversible formulation is original
+// @confirmed: reproduced by tests/jana2014/reference/edit_distance_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on D, m, n, x, y
+// @keep:      D, m, n, x, y
+// @expect: D[64] = {0, 1, 2, 3, 4, 5, 6, 7, 1, 1, 2, 3, 4, 5, 6, 7, 2, 2, 1, 2, 3, 4, 5, 6, 3, 3, 2, 1, 2, 3, 4, 5, 4, 4, 3, 2, 1, 2, 3, 4, 5, 5, 4, 3, 2, 2, 3, 4, 6, 6, 5, 4, 3, 3, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0}
+// @expect: m = 6
+// @expect: n = 7
+// @expect: x[8] = {0, 1, 2, 3, 3, 4, 5, 0}
+// @expect: y[8] = {0, 6, 2, 3, 3, 2, 5, 7}
+//
 // Reversible Edit Distance (Levenshtein, dynamic programming)
 //
 // D[i][j] = minimum insert/delete/substitute operations to turn x[1..i]

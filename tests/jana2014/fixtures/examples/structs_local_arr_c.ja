@@ -1,3 +1,11 @@
+// @summary:   `local struct` over a struct with an array field
+// @technique: clean-accumulation
+// @source:    original (a fixture for a local struct with an array field)
+// @confirmed: reproduced by tests/jana2014/reference/structs_local_arr_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, s
+// @keep:      a, s
+// @expect: a = {v = {10, 20, 30}, w = 5}
+// @expect: s = 65
+//
 // Local struct with array fields: `local struct Box e = a` where Box has a
 // 1-D array field v[3] and a scalar field w.  vjanus uses a flat RL slot with
 // AAsn(OAdd)/AAsn(OSub) instead of Enter/Exit.  Exercises the new lstructs_flat

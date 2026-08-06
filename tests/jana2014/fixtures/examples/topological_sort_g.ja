@@ -1,3 +1,14 @@
+// @summary:   topological sort of a DAG, left as the DFS post-order (reverse it to read the topological order)
+// @technique: history-stack
+// @source:    classical DFS post-order topological sort; the decision log is original
+// @confirmed: reproduced by tests/jana2014/reference/topological_sort_g.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on adj, order, v_n, visited
+// @keep:      adj, order, v_n, visited
+// @expect: adj[25] = {0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0}
+// @expect: blog = <0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+// @expect: order[5] = {4, 3, 1, 2, 0}
+// @expect: v_n = 5
+// @expect: visited[5] = {1, 1, 1, 1, 1}
+//
 // Reversible Topological Sort (DFS post-order)
 //
 // DAG as adjacency matrix adj[u*V+v].  A reversible DFS records each
