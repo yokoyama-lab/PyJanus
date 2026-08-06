@@ -1,5 +1,5 @@
 // @summary:   dvoretzky and Motzkin's cycle lemma
-// @technique: plain
+// @technique: ancilla-flag
 // @source:    Dvoretzky and Motzkin cycle lemma; gen_janus hard13-15 experiments (2026-07)
 // @confirmed: reproduced by tests/jana2014/reference/cycle_lemma_c.py, an independent Python implementation written from the algorithm (only the inputs are transcribed from main); it agrees on a, n, r
 // @keep:      a, n, r
