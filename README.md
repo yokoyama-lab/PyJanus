@@ -12,16 +12,16 @@ reversible-computing research.
 
 ```bash
 # Run a program
-python3 -m jana_py.cli --std jana2014 tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 tests/jana2014/fixtures/examples/fib_c.ja
 
 # Invert a program (swap call/uncall, reverse statements)
-python3 -m jana_py.cli --std jana2014 -i tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -i tests/jana2014/fixtures/examples/fib_c.ja
 
 # Step-by-step debugger
-python3 -m jana_py.cli --std jana2014 -d tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -d tests/jana2014/fixtures/examples/fib_c.ja
 
 # Generate C++ code
-python3 -m jana_py.cli --std jana2014 -c tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 -c tests/jana2014/fixtures/examples/fib_c.ja
 ```
 
 No external dependencies are required — only Python 3.10+.
@@ -116,10 +116,10 @@ PyJanus includes five research modules for studying reversible computation:
 
 ```bash
 # Synthesize a reversible gate network (CNOT, Toffoli, SWAP)
-python3 -m jana_py.cli --std jana2014 --circuit tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 --circuit tests/jana2014/fixtures/examples/fib_c.ja
 
 # Profile space usage (pebble game analysis)
-python3 -m jana_py.cli --std jana2014 --profile tests/jana2014/fixtures/examples/fib.ja
+python3 -m jana_py.cli --std jana2014 --profile tests/jana2014/fixtures/examples/fib_c.ja
 
 # Inverse interpreter: given output, find the input
 python3 -m jana_py.cli --inverse '{"x": 10}' program.ja
@@ -145,22 +145,22 @@ Example programs live under dialect-specific test fixtures:
 
 | File | Description |
 |------|-------------|
-| `fib.ja` | Recursive Fibonacci |
+| `fib_c.ja` | Recursive Fibonacci |
 | `caesar.ja` | Reversible Caesar cipher (encrypt with `call`, decrypt with `uncall`) |
 | `linked-list.ja` | Reversible linked list with struct array node pool |
 | `sort-network.ja` | Reversible sorting network on struct arrays |
 | `build-dict.ja` | Dictionary construction with macros and structs |
-| `factor.ja` | Integer factorization |
+| `factor_c.ja` | Integer factorization |
 | `sqrt_g.ja` | Integer square root |
-| `run_length_enc.ja` | Run-length encoding |
-| `stack_operations.ja` | Stack push/pop operations |
-| `reversible_ca_rule90.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
-| `reversible_ca_ring.ja` | Rule 90R on a cyclic ring (periodic boundary) |
-| `gray_code.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
-| `gray_code_roundtrip.ja` | `call gray; uncall gray` = identity (encode/decode reversibility) |
-| `reversible_gates.ja` | Universal reversible logic gates: Toffoli (CCNOT) and Fredkin (CSWAP) |
-| `base_convert.ja` | Base conversion (Horner digit extraction), injective `(n,b) -> digits` |
-| `cantor_pair.ja` | Cantor pairing N x N -> N, injective `(x,y) -> z` |
+| `run_length_enc_c.ja` | Run-length encoding |
+| `stack_operations_c.ja` | Stack push/pop operations |
+| `reversible_ca_rule90_c.ja` | Second-order reversible cellular automaton (Rule 90R), zero boundary |
+| `reversible_ca_ring_c.ja` | Rule 90R on a cyclic ring (periodic boundary) |
+| `gray_code_c.ja` | Reflected binary Gray-code bijection (`uncall` decodes) |
+| `gray_code_roundtrip_c.ja` | `call gray; uncall gray` = identity (encode/decode reversibility) |
+| `reversible_gates_c.ja` | Universal reversible logic gates: Toffoli (CCNOT) and Fredkin (CSWAP) |
+| `base_convert_c.ja` | Base conversion (Horner digit extraction), injective `(n,b) -> digits` |
+| `cantor_pair_c.ja` | Cantor pairing N x N -> N, injective `(x,y) -> z` |
 
 These are clean reversible simulations of injective maps built from the
 XOR-update operator `^=`, controlled swaps, and pure-expression digit extraction

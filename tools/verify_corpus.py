@@ -79,7 +79,7 @@ def main() -> int:
   ap.add_argument("--timeout", type=float, default=60.0)
   # Match `compile_to_smv`'s own default.  The two disagreed, and the
   # functional form is not merely smaller: with arrays in the fragment it
-  # decides at least one more program (`base_convert.ja`), so measuring at
+  # decides at least one more program (`base_convert_c.ja`), so measuring at
   # `trans` reported a lower bound.  See `docs/totality-checking.md` §5.4.
   ap.add_argument("--style", choices=["trans", "assign"], default="assign")
   ap.add_argument("globs", nargs="*", default=None)

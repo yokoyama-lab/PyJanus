@@ -169,7 +169,7 @@ class StillRefusedTests(unittest.TestCase):
 class CorpusTests(unittest.TestCase):
   """The programs this unblocks, by name, so a regression is visible."""
 
-  NOW_IN = ("structs_array_field.ja", "structs_array_field_arr.ja", "structs_grid.ja")
+  NOW_IN = ("structs_array_field_c.ja", "structs_array_field_arr_c.ja", "structs_grid_c.ja")
 
   def test_they_compile(self):
     for name in self.NOW_IN:

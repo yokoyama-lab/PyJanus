@@ -2,7 +2,7 @@
 
 Asserted: A survives the round trip through `crout` and its `uncall`, and the
 LDU workspace is left entirely zero -- the compute-use-uncompute property the
-program exists to show. As in matrixmult.ja, the accumulated product is left to
+program exists to show. As in matrixmult_c.ja, the accumulated product is left to
 that program's own convention.
 """
 

@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from check_corpus_meta import (  # noqa: E402
   FILENAME_RE,
+  CLEAN_SUFFIX,
   GARBAGE_SUFFIX,
   TECHNIQUES,
   check_file,
@@ -261,31 +262,35 @@ class GarbageTests(unittest.TestCase):
     return check_garbage(Path(f"/tmp/{name}"), store, keep)
 
   def test_garbage_demands_the_suffix(self) -> None:
-    problems = self._garbage_problems("gcd.ja", {"a": 12, "log": [1]}, "a")
+    problems = self._garbage_problems("gcd_c.ja", {"a": 12, "log": [1]}, "a")
     self.assertTrue(any("gcd_g.ja" in p for p in problems))
 
   def test_suffix_demands_garbage(self) -> None:
     problems = self._garbage_problems("fib_g.ja", {"n": 5}, "n")
-    self.assertTrue(any("fib.ja" in p for p in problems))
+    self.assertTrue(any("fib_c.ja" in p for p in problems))
 
   def test_agreement_is_silent_both_ways(self) -> None:
     self.assertEqual(self._garbage_problems("gcd_g.ja", {"a": 12, "log": [1]}, "a"), [])
-    self.assertEqual(self._garbage_problems("fib.ja", {"n": 5, "x": 0}, "n"), [])
+    self.assertEqual(self._garbage_problems("fib_c.ja", {"n": 5, "x": 0}, "n"), [])
 
   def test_keep_naming_a_variable_that_is_not_there(self) -> None:
-    problems = self._garbage_problems("x.ja", {"a": 1}, "a, typo")
+    problems = self._garbage_problems("x_c.ja", {"a": 1}, "a, typo")
     self.assertTrue(any("typo" in p for p in problems))
 
   def test_keep_naming_a_variable_the_run_zeroes(self) -> None:
-    problems = self._garbage_problems("x.ja", {"a": 1, "b": 0}, "a, b")
+    problems = self._garbage_problems("x_g.ja", {"a": 1, "b": 0}, "a, b")
     self.assertTrue(any("all-zero" in p for p in problems))
 
   def test_none_means_the_store_should_be_empty(self) -> None:
-    self.assertEqual(self._garbage_problems("x.ja", {"a": 0}, "none"), [])
-    self.assertTrue(self._garbage_problems("x.ja", {"a": 1}, "none"))
+    self.assertEqual(self._garbage_problems("x_c.ja", {"a": 0}, "none"), [])
+    self.assertTrue(self._garbage_problems("x_c.ja", {"a": 1}, "none"))
 
-  def test_suffix_constant_is_what_the_messages_use(self) -> None:
-    self.assertEqual(GARBAGE_SUFFIX, "_g")
+  def test_a_name_with_neither_suffix_is_an_error(self) -> None:
+    problems = self._garbage_problems("gcd.ja", {"a": 1}, "a")
+    self.assertTrue(any("must end in" in p for p in problems))
+
+  def test_suffix_constants_are_what_the_messages_use(self) -> None:
+    self.assertEqual((GARBAGE_SUFFIX, CLEAN_SUFFIX), ("_g", "_c"))
 
 
 class NormalizeTests(unittest.TestCase):

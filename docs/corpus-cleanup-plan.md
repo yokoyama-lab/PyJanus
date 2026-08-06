@@ -48,11 +48,11 @@ glob で全数を拾っている:
 
 | 旧 | 新 |
 |---|---|
-| `perm-to-code.ja` | `perm_to_code.ja` |
-| `run-length-enc.ja` | `run_length_enc.ja` |
-| `run-length-enc-stack.ja` | `run_length_enc_stack.ja` |
-| `stack-operations.ja` | `stack_operations.ja` |
-| `matrixmult_v1.0.ja` | `matrixmult_v1.ja`（`.` が識別子として使えないため） |
+| `perm-to-code.ja` | `perm_to_code_c.ja` |
+| `run-length-enc.ja` | `run_length_enc_c.ja` |
+| `run-length-enc-stack.ja` | `run_length_enc_stack_c.ja` |
+| `stack-operations.ja` | `stack_operations_c.ja` |
+| `matrixmult_v1.0.ja` | `matrixmult_v1_c.ja`（`.` が識別子として使えないため） |
 
 規約 `^[a-z][a-z0-9_]*\.ja$` は `test_filename_is_lowercase_with_underscores` が
 全数で強制する。加えて **`_g` 接尾辞＝ゴミを残すプログラム**。2026-08-06 に
@@ -67,15 +67,24 @@ merge_sort_g  modexp_g  next_permutation_g  prim_mst_g  quick_sort_g
 selection_sort_g  sort_rank_g  sqrt_g  topological_sort_g  tree_sort_g
 ```
 
-**何がゴミかはアルゴリズムから決まり、実際に残るかは実行が決める**。両方向で強制
-されるので、`_g` が付いているのにゴミが残らない本も落ちる。残る論点:
+残る65本は **`_c`（clean）** を付けた。**97本すべてが `_g` か `_c` のどちらかで終わる**ので、
+「まだ分類していない本」が clean に紛れ込めない。**何がゴミかはアルゴリズムから決まり、
+実際に残るかは実行が決める**。残る論点:
 
-- **`test2.ja` は「サンプル」ではなく機能テスト**だった。中身は
+- **`array_element_arg_c.ja` は「サンプル」ではなく機能テスト**だった。中身は
   `call test_rev(test_array[0]) // doesn't work` の8行で、**配列要素を実引数に渡せるか**
-  の回帰用。`array_element_arg.ja` などへの改名が妥当（規約自体は満たすので強制ではない）
-- **`matrixmult.ja` と `matrixmult_v1.ja` は別物**（226行差）。前者は `iterate`、
+  の回帰用。`array_element_arg_c.ja` などへの改名が妥当（規約自体は満たすので強制ではない）
+- **`matrixmult_c.ja` と `matrixmult_v1_c.ja` は別物**（226行差）。前者は `iterate`、
   後者は `from...loop...until` の明示ループで引数構成も違う。**統合すべきでない**
-- `injective_*` 接頭辞が15本あるが、**接頭辞の意味がどこにも定義されていない**
+- `injective_*` 接頭辞の15本は **2026-06-03/04 に11本、06-30 に4本**が追加された一群。
+  コミットメッセージが意図を述べている（"a staircase of eight reversible procedures
+  computing **injective integer functions**" / "Each procedure is a **bijection** on its
+  array or pair, **with uncall as the inverse**"）。**実演**——計算して印字し、`uncall` で
+  入力が戻ることを見せる——であって、結果を残す計算ではない。実測: `printf` を含むのが
+  15/15（他は 17/82）、ゴミを残すのが 1/15（他は 31/82）。ただし
+  **同じ形の本が接頭辞なしにも12本ある**（`fall` / `fib` / `bwt_plain` / `glaisher` 等）
+  ので、**接頭辞は性質ではなく追加された時期の記録**。`_g` / `_c` と違い機械検査できない。
+  §4 の #4 で扱う
 - 二形態（I/O なし／あり）の対応が不揃い: 97本のうち **89本に I/O 版が無い**。
   意図的なのか未整備なのか区別できない
 
@@ -190,9 +199,9 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 | # | 論点 | 状態 |
 |---|---|---|
 | 1 | ハイフン等の改名 | **決裁済・実施済**（§1.3） |
-| 2 | `test2.ja` の扱い | 保留。**機能テストであってサンプルではない**ことが判明（§1.3） |
-| 3 | `matrixmult_v1.ja` を残すか | **残す**。別実装であることを確認済（§1.3） |
-| 4 | `injective_*` 接頭辞の定義（15本） | 保留。`docs/` に定義を書いて残すのが既定案 |
+| 2 | `array_element_arg_c.ja` の扱い | 保留。**機能テストであってサンプルではない**ことが判明（§1.3） |
+| 3 | `matrixmult_v1_c.ja` を残すか | **残す**。別実装であることを確認済（§1.3） |
+| 4 | `injective_*` 接頭辞の定義（15本） | **由来は判明**（§1.3）。機械検査できない以上、(a) 定義して12本を追加改名 (b) 接頭辞を外し `@technique`/`@summary` に寄せる、のどちらか。**(b) を推奨** |
 | 5 | `@source` が突き止められない場合 | `original`、疑わしければ `UNKNOWN` で先生へ |
 | 6 | `@confirmed: UNVERIFIED` / `@oracle` 不一致の処理 | 先生が引き取る。**バグの可能性がある本命** |
 | 7 | 二形態の対応（I/O 版が無い89本） | 当面揃えない。§1.3 を記録するに留める |
@@ -204,8 +213,8 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 - `tests/jana2014/test_corpus_metadata.py` — CI 連結（97本×3種の parametrize）＋
   パーサ・ストア解釈・oracle 評価・正規化の単体テスト
 - 命名規約と体裁は**全数で強制済み**（未注釈の本も対象。ここは incremental ではない）
-- 見本 4本注釈済み（いずれも `@oracle` つき）: `fib.ja`（clean-accumulation・ゴミ無し）/
-  `run_length_enc.ja`（plain・ゴミ無し）/ `bubble_sort_g.ja`（history-stack・順列がゴミ）/
+- 見本 4本注釈済み（いずれも `@oracle` つき）: `fib_c.ja`（clean-accumulation・ゴミ無し）/
+  `run_length_enc_c.ja`（plain・ゴミ無し）/ `bubble_sort_g.ja`（history-stack・順列がゴミ）/
   `gcd_g.ja`（history-stack・決定ログがゴミ）
 - 進捗: **4/97**
 
@@ -228,7 +237,7 @@ C は学生に改名させない——`git mv` と参照の追随は先生か Cl
 
 ### 5.1 見本3本を入れた時点で見つかった罠（対処済み）
 
-`test_debugger_cli.py` が `fib.ja` を読み、`Break at line 19` のように**行番号を
+`test_debugger_cli.py` が `fib_c.ja` を読み、`Break at line 19` のように**行番号を
 直書き**していた。ヘッダを9行足しただけで5本が落ちた。**94本ぶんの注釈作業に対する
 恒久的な地雷**なので、`tests/jana2014/fixtures/fib_debug.ja` に専用コピーを置いて
 切り離した（同ディレクトリの `from_debug_simple.ja` 等と同じ流儀）。

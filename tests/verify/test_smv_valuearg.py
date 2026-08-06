@@ -117,7 +117,7 @@ class EncodingTests(unittest.TestCase):
 
 
 class CorpusTests(unittest.TestCase):
-  NOW_IN = ("structs_param.ja", "structs_flat_param.ja")
+  NOW_IN = ("structs_param_c.ja", "structs_flat_param_c.ja")
 
   def test_they_compile(self):
     for name in self.NOW_IN:

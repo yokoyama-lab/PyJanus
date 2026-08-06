@@ -48,8 +48,9 @@ the program preserves, plus the answer.  Everything else still holding a value
 is **garbage** -- the history a reversible program must retain to stay
 injective (a quotient stack, a decision log, a sorting permutation).  Which of
 the survivors is the answer cannot be read off a run, so that one line is
-declared and the rest is derived; a program with garbage must be named `..._g.ja`
-and the check is two-sided, so a `_g` name with no garbage fails too.
+declared and the rest is derived.  A program with garbage is named `..._g.ja` and
+one without is named `..._c.ja`; the check is total, so an unclassified name and
+a `_g` name with no garbage both fail.
 
 Annotating is incremental.  A file with no `@` fields at all is reported as
 unannotated, not as a failure, so the corpus can be annotated a few files at a
@@ -91,8 +92,9 @@ REPEATABLE = ("expect",)
 #: `@keep: none` means the final store is expected to be entirely trivial.
 KEEP_NONE = "none"
 
-#: A program that leaves garbage says so in its name.  See `garbage_of`.
+#: Every example says in its name whether it leaves garbage.  See `garbage_of`.
 GARBAGE_SUFFIX = "_g"
+CLEAN_SUFFIX = "_c"
 
 #: The four ways to make an irreversible computation reversible, from
 #: `docs/textbook-programs-plan.md` §3, plus `plain` for programs that are
@@ -425,15 +427,18 @@ def check_garbage(path: Path, store: dict[str, Any], keep_field: str) -> list[st
       "keep lists what actually survives, so drop them or use `none`")
 
   garbage = garbage_of(store, keep)
-  named_g = path.stem.endswith(GARBAGE_SUFFIX)
-  if garbage and not named_g:
+  stem, suffix = path.stem[:-2], path.stem[-2:]
+  if suffix not in (GARBAGE_SUFFIX, CLEAN_SUFFIX):
     problems.append(
-      f"the run leaves garbage ({', '.join(garbage)}) but the name does not end in "
-      f"`{GARBAGE_SUFFIX}`: rename to {path.stem}{GARBAGE_SUFFIX}.ja, or add those to `@keep:`")
-  if not garbage and named_g:
+      f"the name must end in `{GARBAGE_SUFFIX}` (leaves garbage) or `{CLEAN_SUFFIX}` (clean)")
+  elif garbage and suffix != GARBAGE_SUFFIX:
+    problems.append(
+      f"the run leaves garbage ({', '.join(garbage)}) but the name ends in "
+      f"`{CLEAN_SUFFIX}`: rename to {stem}{GARBAGE_SUFFIX}.ja, or add those to `@keep:`")
+  elif not garbage and suffix != CLEAN_SUFFIX:
     problems.append(
       f"the name ends in `{GARBAGE_SUFFIX}` but the run leaves no garbage: "
-      f"rename to {path.stem[:-len(GARBAGE_SUFFIX)]}.ja, or narrow `@keep:`")
+      f"rename to {stem}{CLEAN_SUFFIX}.ja, or narrow `@keep:`")
   return problems
 
 
@@ -553,11 +558,9 @@ def cmd_report(args: argparse.Namespace) -> int:
     for path in unverified:
       print(f"  {path.name}: {metas[path].one('confirmed')}")
 
-  leaves_garbage = [path for path in annotated if path.stem.endswith(GARBAGE_SUFFIX)]
-  if annotated:
-    print(f"\nleaves garbage (named `{GARBAGE_SUFFIX}`) {len(leaves_garbage)}/{len(annotated)}:")
-    for path in leaves_garbage:
-      print(f"  {path.name}")
+  leaves_garbage = [path for path in files if path.stem.endswith(GARBAGE_SUFFIX)]
+  print(f"\nleaves garbage `{GARBAGE_SUFFIX}` {len(leaves_garbage)}/{len(files)}, "
+        f"clean `{CLEAN_SUFFIX}` {len(files) - len(leaves_garbage)}/{len(files)}")
 
   badly_named = [path for path in files if not FILENAME_RE.match(path.name)]
   if badly_named:
