@@ -65,6 +65,11 @@ Boyer–Moore / KMP（ch.16–17），maximum segment sum 系。
   swap 決定を `flags[]` に記録し `uncall` が逆スキャッタ）・✅ ④ 整数算術符号化＝双射 rANS
   （`arith_coding_c` 両コア ＋ `arith_coding` I/O；状態 divmod を値保存分解で `+=/-=` 化，
   `uncall` が復号器）
+- ✅ **ハノイの塔**（`hanoi_c` 両コア対象外・ゴミ無し）— 分岐が n にしか依らないので
+  記録が要らない。可逆性が「情報を捨てていない」ことから直に出る最短の例
+- ✅ **二分探索**（`binary_search_g`）— 答えを上位ビットから1本ずつ立てる形。
+  各プローブの判定を1ビットに記録するが、**その列は答えの2進表現そのもの**なので
+  uncompute できる（＝避けられるゴミ）。`ancilla-flag` の教材例
 - **Tier 3（目玉）**: ✅ ⑤ **逆BWT＝LF-mapping**（`bwt_inverse_c` 両コア ＋ `bwt_inverse`
   I/O；固定長 n=5・sentinel 付きで `uncall` が前方BWT，ancilla は Bennett 流に uncompute）。
   残課題: L を消費する**インプレース版**（s が L の置換である点を使う）と可変長・⑥ 双射BWT への発展
