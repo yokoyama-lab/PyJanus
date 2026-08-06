@@ -1,2 +1,6 @@
+// @summary:    an empty index in a swap
+// @error-kind: parsing
+// @error:      Unexpected "]"
+
 procedure main()
     x[] <=> x

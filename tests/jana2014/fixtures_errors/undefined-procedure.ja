@@ -1,6 +1,11 @@
+// @summary:    a call to a missing procedure inside a procedure that never runs, which only validation can catch
+// @error-kind: validation
+// @error:      Procedure `missing' is not defined
+//
 // A call to a procedure that is never defined.  The interpreter would only
 // notice if the caller ran, and here it never does -- but the C++ back-end has
 // to resolve every name, so validation rejects it up front.
+
 procedure helper(int x)
     call missing(x)
 

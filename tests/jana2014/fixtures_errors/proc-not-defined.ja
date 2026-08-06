@@ -1,2 +1,6 @@
+// @summary:    main calling a procedure that does not exist
+// @error-kind: validation
+// @error:      Procedure `undef' is not defined
+
 procedure main()
     call undef()

@@ -1,2 +1,6 @@
+// @summary:    using a variable that was never declared
+// @error-kind: execution
+// @error:      Variable `x' has not been declared
+
 procedure main()
     x += 1

@@ -1,3 +1,7 @@
+// @summary:    two `main` procedures in one file
+// @error-kind: parsing
+// @error:      Unexpected end of input
+
 procedure main()
     skip
 

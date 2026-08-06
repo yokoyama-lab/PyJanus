@@ -1,3 +1,7 @@
+// @summary:    `show` on a variable that was never declared
+// @error-kind: execution
+// @error:      Variable `a' has not been declared
+
 procedure main()
   int x
   int y

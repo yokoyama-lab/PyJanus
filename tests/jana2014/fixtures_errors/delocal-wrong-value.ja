@@ -1,3 +1,7 @@
+// @summary:    a delocal asserting a value the variable does not hold
+// @error-kind: execution
+// @error:      Expected value to be `1' for local variable `x'
+
 procedure main()
     local   int x = 0
     skip

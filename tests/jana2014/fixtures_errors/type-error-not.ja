@@ -1,3 +1,7 @@
+// @summary:    `!` applied to something that is not a boolean
+// @error-kind: execution
+// @error:      Couldn't match expected type `bool'
+
 procedure main()
     if !5 then
         skip

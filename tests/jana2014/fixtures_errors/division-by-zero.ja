@@ -1,3 +1,7 @@
+// @summary:    dividing by zero
+// @error-kind: execution
+// @error:      Division by zero
+
 procedure main()
     int x
     x += 5 / 0

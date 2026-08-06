@@ -1,3 +1,7 @@
+// @summary:    popping from an empty stack
+// @error-kind: execution
+// @error:      Can't pop from empty stack
+
 procedure main()
     int x
     stack s

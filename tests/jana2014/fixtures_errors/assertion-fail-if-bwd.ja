@@ -1,3 +1,7 @@
+// @summary:    an if exit assertion failing on the backward run
+// @error-kind: execution
+// @error:      Assertion failed: should be true
+
 procedure foo(int x)
     if x = 1 then
         skip

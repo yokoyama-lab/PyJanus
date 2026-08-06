@@ -1,7 +1,12 @@
-/* Self-referential delocal that is NOT the counter idiom.
-   PyJanus accepts it (runs forward only); vjanus must reject it
-   statically (exit 1) because a sound reversible lowering is impossible
-   without history or non-local uncomputation. */
+// @summary:    a delocal whose asserted value refers to the variable being freed
+// @error-kind: execution
+// @error:      Expected value to be `10' for local variable `t'
+//
+// Self-referential delocal that is NOT the counter idiom.
+// PyJanus accepts it (runs forward only); vjanus must reject it
+// statically (exit 1) because a sound reversible lowering is impossible
+// without history or non-local uncomputation.
+
 procedure main()
     int x
     x += 5

@@ -1,3 +1,7 @@
+// @summary:    an array variable declared without a size
+// @error-kind: execution
+// @error:      Array size missing for variable `x'
+
 procedure main()
     int x[]
     skip

@@ -1,3 +1,7 @@
+// @summary:    adding one array into another of a different size
+// @error-kind: execution
+// @error:      Couldn't match expected type `array[5]'
+
 procedure main()
     int x[5]
     int y[3]

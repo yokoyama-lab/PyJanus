@@ -1,3 +1,7 @@
+// @summary:    an unknown format specifier
+// @error-kind: execution
+// @error:      Unrecognized format specifier: `%q'
+
 procedure main()
   int x
   int y

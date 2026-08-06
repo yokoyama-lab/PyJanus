@@ -1,5 +1,8 @@
+// @summary:    swapping an array cell with itself
+// @error-kind: execution
+// @error:      Identifiers `a' and `a' are aliases
+
 procedure main()
   int a[2] = {1,2}
 
   a[0] <=> a[0]  // a[0] on the both hand sides.
-

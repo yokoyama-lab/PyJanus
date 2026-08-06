@@ -1,3 +1,7 @@
+// @summary:    an expression adding a stack to an int
+// @error-kind: execution
+// @error:      Couldn't match expected type `int'
+
 procedure main()
     int x
     int y

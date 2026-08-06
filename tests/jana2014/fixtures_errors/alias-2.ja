@@ -1,3 +1,7 @@
+// @summary:    two array formals of the same procedure bound to the same array
+// @error-kind: execution
+// @error:      Identifiers `a' and `b' are aliases
+
 procedure foo(int x[], int y[])
     call bar(x, y)
 

@@ -1,3 +1,7 @@
+// @summary:    popping into a variable that is not zero
+// @error-kind: execution
+// @error:      Can't pop to non-zero variable `x'
+
 procedure main()
     int x
     stack s

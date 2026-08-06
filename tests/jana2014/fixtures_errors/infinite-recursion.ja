@@ -1,3 +1,7 @@
+// @summary:    unbounded recursion; note that this one escapes the diagnostic machinery as a Python RecursionError
+// @error-kind: uncaught
+// @error:      maximum recursion depth exceeded
+
 procedure test()
     call test()
 

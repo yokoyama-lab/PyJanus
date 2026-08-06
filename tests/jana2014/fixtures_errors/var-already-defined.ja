@@ -1,3 +1,7 @@
+// @summary:    declaring the same variable name twice
+// @error-kind: validation
+// @error:      Variable name `x' is already bound
+
 procedure main()
     int x
     int x

@@ -1,2 +1,6 @@
+// @summary:    calling `main` explicitly
+// @error-kind: validation
+// @error:      It is not allowed to call the `main' procedure
+
 procedure main()
     call main()
