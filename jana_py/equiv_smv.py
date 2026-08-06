@@ -57,7 +57,7 @@ import re
 from dataclasses import dataclass, field, replace
 
 from .ast import Program
-from .format import format_proc, format_vdecl
+from .format import format_proc, format_struct_def, format_vdecl
 from .invert import invert_stmts
 from .nuxmv import Result, check
 from .smv import SmvUnsupported, compile_to_smv
@@ -173,11 +173,52 @@ def compose_with_inverse(prog_a: Program, prog_b: Program) -> Program:
     raise SmvUnsupported(
         "the two programs declare different main variables:\n"
         f"  P: {'; '.join(iface_a)}\n  Q: {'; '.join(iface_b)}")
+  # The composed program carries `P`'s struct definitions, so a type name that
+  # means something else in `Q` would have `Q†`'s field accesses resolved
+  # against the wrong layout — silently, since the interface still matches on
+  # the type *name*.
+  defs_a = {sd.ident.name: format_struct_def(sd) for sd in (prog_a.struct_defs or [])}
+  defs_b = {sd.ident.name: format_struct_def(sd) for sd in (prog_b.struct_defs or [])}
+  for name in defs_a.keys() & defs_b.keys():
+    if defs_a[name] != defs_b[name]:
+      raise SmvUnsupported(
+          f"both programs define struct {name!r} with different fields; "
+          "the composition would resolve one program's fields against the "
+          "other's layout")
   assert prog_a.main is not None and prog_b.main is not None
   body = list(prog_a.main.stmts) + invert_stmts(prog_b.main.stmts, global_mode=False)
   vdecls = [replace(v, init_expr=None) for v in prog_a.main.vdecls]
   main = replace(prog_a.main, vdecls=vdecls, stmts=body)
   return Program(main, _merged_procs(prog_a, prog_b), prog_a.struct_defs)
+
+
+def _interface_smv_names(program: Program) -> list[str]:
+  """The SMV base names `main`'s declarations turn into, in order.
+
+  A struct does not survive as one variable: `smv.py` gives every field its own
+  SMV name, `{var}_{field}` (`_declare_struct`), and an array — whether the
+  declaration is an array of structs or the field itself is an array — becomes
+  one native array hanging off that same name.  So the interface of a program
+  declaring `point p` with fields `x`, `y` is `p_x`, `p_y`.
+
+  Only the *names* are derived here.  Whether each one really exists is checked
+  against the emitted model, so a name `smv.py` renamed is refused rather than
+  silently dropped from the identity property.
+  """
+  if program.main is None:
+    raise SmvUnsupported("the program has no main procedure")
+  structs = {sd.ident.name: sd for sd in (program.struct_defs or [])}
+  out: list[str] = []
+  for vdecl in program.main.vdecls:
+    if vdecl.typ.kind != "struct":
+      out.append(vdecl.ident.name)
+      continue
+    sdef = structs.get(vdecl.typ.name)
+    if sdef is None:
+      raise SmvUnsupported(f"unknown struct type: {vdecl.typ.name}")
+    for field_ in sdef.fields:
+      out.append(f"{vdecl.ident.name}_{field_.ident.name}")
+  return out
 
 
 def _model_variables(model: str) -> tuple[dict[str, int | None], set[str]]:
@@ -250,9 +291,7 @@ def compile_equivalence_to_smv(prog_a: Program, prog_b: Program, **kw) -> EquivM
   composed = compose_with_inverse(prog_a, prog_b)
   model = compile_to_smv(composed, init="any", **kw)
 
-  assert prog_a.main is not None
-  names = [v.ident.name for v in prog_a.main.vdecls]
-  block, spec, compared = _identity_spec(model, names)
+  block, spec, compared = _identity_spec(model, _interface_smv_names(prog_a))
 
   # The declarations have to precede the specs: nuXmv reads the file in order
   # and a FROZENVAR introduced after an INVARSPEC is a parse error.
