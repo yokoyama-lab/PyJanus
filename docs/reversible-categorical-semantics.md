@@ -36,7 +36,8 @@ structured reversible flowchart languages の圏論的意味論**を確立して
 | `RevSMC`（余積・積の対称モノイダル＋分配） | Kaarsgaard–Rennela 2021 の **rig 構造** | rig ＝ 2つのモノイダル構造＋分配。我々が証明したのはこれに相当 |
 | `RevTraced`（trace 公理） | join inverse category が **dagger trace** を持つことは既知（Kaarsgaard 2019 が一般化） | 既知。しかも我々の「plain traced」より強い |
 | `RevFix.Dfix`（環境汎関数の Kleene 鎖の合併＝最小不動点） | Axelsen–Kaarsgaard 2016 / Kaarsgaard–Axelsen–Glück 2017（**join から不動点**） | **同じ構成**。我々が「完備束だから領域理論不要」と説明したものは、join inverse category の join 構造そのもの |
-| `RevSmallStep`（小ステップ ↔ 大ステップ同値） | Lanese–Vidal 2026（原文確認済み） | **彼らの指摘は我々にも当てはまる**。§3-A 参照 |
+| `RevSmallStep`（小ステップ ↔ 大ステップ同値） | Lanese–Vidal 2026（原文確認済み） | **彼らの指摘は我々にも当てはまった**。§3-A 参照 |
+| `RevLoopLemma`（PC 付き設定・Loop Lemma・両方向決定性） | Lanese–Vidal 2026 | **指摘に応えたもの**。`RevSmallStep` が反証した後退決定性を、制御スタックと履歴を持つ設定で成立させる（2026-08-08、公理ゼロ） |
 | `RevJoin`（両立族の join、`pinj_join`） | join inverse category の join そのもの（Axelsen–Kaarsgaard 2016 ほか） | 既知の構造を我々のモデルに入れて機械検証しただけ。§3-B 参照 |
 
 ## 2. 語彙 — 標準名は「join inverse rig category」

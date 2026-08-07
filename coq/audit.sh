@@ -44,7 +44,7 @@ cleanup() { rm -f "$AUDIT" "$BASE.vo" "$BASE.glob" ".$BASE.aux"; }
 trap cleanup EXIT
 
 cat > "$AUDIT" <<'EOF'
-Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep
+Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep RevLoopLemma
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevSteps RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
@@ -54,6 +54,7 @@ Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
 Module ExtSModFacts8 := RevExtSMod.ExtSModFacts RevExtSMod.B8.
 Module SsS := RevSmallStep.SmallStep RevStack.StackPrim.
+Module LlS := RevLoopLemma.LoopLemma RevStack.StackPrim.
 Module DnS := RevDenote.Denote RevStack.StackPrim.
 Module FxS := RevFix.DenoteFix RevStack.StackPrim.
 Module StS := RevCtrl.Struct RevStack.StackPrim.
@@ -90,6 +91,15 @@ Print Assumptions RevFrame.aok_ainv.
 Print Assumptions DnS.adequacy.
 Print Assumptions DnS.full_abstraction.
 Print Assumptions DnS.denote_invert.
+(* the PC-equipped semantics IS step-reversible: the Loop Lemma and what follows *)
+Print Assumptions LlS.loop_lemma.
+Print Assumptions LlS.loop_lemma_multi.
+Print Assumptions LlS.bstep_det.
+Print Assumptions LlS.fstep_det.
+Print Assumptions LlS.fstep_backward_det.
+Print Assumptions LlS.complete_pc.
+Print Assumptions LlS.run_is_reversible.
+
 (* the small-step semantics is not step-reversible (Lanese-Vidal) *)
 Print Assumptions SsS.step_not_backward_deterministic.
 Print Assumptions SsS.exit_assertion_collapses.
