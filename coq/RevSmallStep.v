@@ -366,6 +366,11 @@ Proof. intros Γ g h a Hg Hh; split; apply S_Assert; assumption. Qed.
     claims, nor needs, that [step] itself is invertible.  Getting the Loop Lemma
     would mean adopting a configuration that retains the discarded control
     information -- Lanese and Vidal's program counter, or equivalent -- which is
-    a different semantics, not a lemma about this one. *)
+    a different semantics, not a lemma about this one.
+
+    That semantics is now [RevLoopLemma.v], which takes this file's [rs] and
+    [embed] and adds the control stack and history; [RevLoopLemma.loop_lemma]
+    and [RevLoopLemma.fstep_backward_det] are what the two negative results
+    above say cannot hold here. *)
 
 End SmallStep.

@@ -964,6 +964,30 @@ against both:
   `step_not_backward_deterministic` and `exit_assertion_collapses` pin that down
   here. `equiv` is about whole runs and is unaffected.
 
+- **A second semantics that *is* step-reversible, and the Loop Lemma.**
+  `RevLoopLemma.v` answers the objection above rather than restating it. A
+  configuration carries a **control stack** in place of the `RSeq` congruence
+  (Lanese & Vidal's program counter: the two configurations that collapse in
+  `RevSmallStep` decompose onto it differently) and a **history**, one event per
+  step, holding what that step discarded. The backward relation `bstep` is
+  defined on its own terms — every rule reads the head of the history and the
+  store moves back through `pinv`; nothing in it mentions `fstep`.
+
+  | theorem | statement |
+  |---|---|
+  | `loop_lemma` | `fstep G c c' <-> bstep G c' c` — the two are exact inverses |
+  | `loop_lemma_multi` | the same for whole runs |
+  | `fstep_det` / `bstep_det` | deterministic in both directions |
+  | `fstep_backward_det` | **backward determinism**, i.e. what `step_not_backward_deterministic` refutes for the semantics without a PC |
+  | `seq_collapse_separated`, `exit_assertion_separated` | the two witnesses of that refutation, now separated |
+  | `complete_pc` | every big-step run is realised by the PC machine |
+  | `run_is_reversible` | and the history it builds takes the final configuration home |
+
+  All of these are **closed under the global context** — not even
+  `functional_extensionality`. The instance is taken from `RevSmallStep`
+  (`Module SSx := SmallStep P`), so the runtime statements are literally the
+  same type and the two semantics are comparable.
+
 ## Scope and next steps
 
 This covers **core Janus** (integer variables, reversible updates

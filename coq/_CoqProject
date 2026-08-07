@@ -10,6 +10,7 @@ RevCA.v
 RevExt.v
 RevNecessity.v
 RevSmallStep.v
+RevLoopLemma.v
 RevAlgebra.v
 RevDenote.v
 RevFix.v
