@@ -7,6 +7,7 @@ record one of
     proved       no runtime assertion is reachable
     refuted      one is, with the initial store that gets there
     unknown      IC3 gave up or timed out
+    compile-timeout  the compiler itself did not finish (see below)
     unsupported  the program is outside the scalar fragment (with the reason)
     parse-error  it does not parse at all (expected for some error fixtures)
 
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import signal
 import sys
 from collections import Counter
 from pathlib import Path
@@ -37,7 +39,16 @@ DEFAULT_GLOBS = [
 ]
 
 
-def classify(path: Path, init: str, timeout: float, binary, style: str = "assign") -> tuple[str, str]:
+class _CompileTimeout(Exception):
+  pass
+
+
+def _alarm(_sig, _frm):
+  raise _CompileTimeout
+
+
+def classify(path: Path, init: str, timeout: float, binary, style: str = "assign",
+             compile_limit: float = 60.0) -> tuple[str, str]:
   try:
     text = path.read_text(encoding="utf-8")
     pt = preprocess.preprocess_text(str(path), text, None, "jana2014")
@@ -50,12 +61,22 @@ def classify(path: Path, init: str, timeout: float, binary, style: str = "assign
     # The static checks are PyJanus's job, not the model checker's; a program
     # that does not validate is out of scope rather than "safe".
     return "static-error", type(exc).__name__
+  # The timeout below is nuXmv's; compilation had none, so a program the
+  # compiler cannot finish (ackermann_c, factorial_c, quick_sort_g) hung the
+  # whole scan in Python with no output. A run that never returns is not a
+  # verdict, and it is indistinguishable from a scan nobody started.
+  signal.signal(signal.SIGALRM, _alarm)
+  signal.setitimer(signal.ITIMER_REAL, compile_limit)
   try:
     model = compile_to_smv(program, init=init, style=style)
   except SmvUnsupported as exc:
     return "unsupported", str(exc)
+  except _CompileTimeout:
+    return "compile-timeout", f"compilation exceeded {compile_limit:g}s"
   except Exception as exc:
     return "compile-error", f"{type(exc).__name__}: {exc}"
+  finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
   result = nuxmv.check(model, timeout=timeout, binary=binary)
   if result.status == "model-error":
     # nuXmv could not read the model, so nothing was decided.  This has to be
@@ -77,6 +98,8 @@ def main() -> int:
   ap = argparse.ArgumentParser()
   ap.add_argument("--init", choices=["any", "zero"], default="zero")
   ap.add_argument("--timeout", type=float, default=60.0)
+  ap.add_argument("--compile-limit", type=float, default=60.0,
+                  help="1本のコンパイルの上限秒（超えたら compile-timeout）")
   # Match `compile_to_smv`'s own default.  The two disagreed, and the
   # functional form is not merely smaller: with arrays in the fragment it
   # decides at least one more program (`base_convert_c.ja`), so measuring at
@@ -96,7 +119,8 @@ def main() -> int:
   reasons: Counter[str] = Counter()
   print(f"init={args.init}  style={args.style}  timeout={args.timeout}s  files={len(paths)}\n")
   for path in paths:
-    status, detail = classify(path, args.init, args.timeout, binary, args.style)
+    status, detail = classify(path, args.init, args.timeout, binary, args.style,
+                              args.compile_limit)
     tally[status] += 1
     if status in ("unsupported", "compile-error"):
       reasons[detail.split(":")[0]] += 1
