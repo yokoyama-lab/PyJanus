@@ -1151,10 +1151,21 @@ class _Compiler:
         value_args.append((param, arg))
         continue
       if arg.lval.selectors:
-        # A cell or a field passed by reference.  The binding would have to name
-        # one element, which a variable index does not; refused rather than
-        # guessed.
-        raise SmvUnsupported("argument is not a plain variable")
+        # A cell or a field passed by reference.  Janus passes the CELL, so
+        # binding the formal to that element's variable makes a write inside the
+        # callee update the caller's array — the same "one entity, two names"
+        # the plain-variable case relies on, and the same aliasing checks apply
+        # to it (two formals may still land on one element; the per-statement
+        # checks below decide that, not this binding).
+        #
+        # Only a constant index names one element. A variable index picks its
+        # cell at run time, so there is no single variable to bind and it stays
+        # refused rather than guessed.
+        try:
+          inner[param.ident.name] = self._lval_name(arg.lval, env)
+        except SmvUnsupported:
+          raise SmvUnsupported("argument is not a plain variable") from None
+        continue
       # Two formals may resolve to one variable.  That is not itself an error:
       # PyJanus checks each statement as it reaches it, so a body that never
       # brings them together runs fine, and rejecting the call outright would

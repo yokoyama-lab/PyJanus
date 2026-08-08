@@ -109,9 +109,24 @@ class EncodingTests(unittest.TestCase):
     model = model_of(EXPRESSION, init="zero")
     self.assertIn("((n + 3) + 1)", model)
 
-  def test_a_cell_argument_is_still_refused(self):
+  def test_a_cell_argument_with_a_constant_index_is_accepted(self):
+    """This pinned refusal until 2026-08-09 (queue item 34 implemented it).
+
+    Replaced rather than deleted, and it pins MORE than it used to: the
+    constant index is accepted *and* the variable index is still refused, so
+    the boundary is fixed from both sides. The behaviour of the accepted case —
+    that the callee's write reaches the caller's array, and that two formals on
+    one cell still fail exactly when the interpreter fails — is in
+    `test_smv_cellarg.py`.
+    """
     src = ("procedure f(int x)\n    x += 1\n    x -= 1\n\n"
            "procedure main()\n    int a[2]\n    call f(a[0])\n")
+    self.assertIn("pc", model_of(src, init="zero"))
+
+  def test_a_cell_argument_with_a_variable_index_is_still_refused(self):
+    src = ("procedure f(int x)\n    x += 1\n    x -= 1\n\n"
+           "procedure main()\n    int a[2]\n    int i\n    i += 1\n"
+           "    call f(a[i])\n")
     with self.assertRaises(SmvUnsupported):
       model_of(src, init="zero")
 
