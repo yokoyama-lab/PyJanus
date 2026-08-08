@@ -76,7 +76,12 @@ from .ast import DeclType
 from .ast import FromStmt
 from .ast import IfStmt
 from .ast import IterateStmt
+from .ast import EmptyExpr
 from .ast import LocalStmt
+from .ast import PopStmt
+from .ast import PushStmt
+from .ast import SizeExpr
+from .ast import TopExpr
 from .ast import ArrayExpr
 from .ast import Lval
 from .ast import LvalExpr
@@ -106,6 +111,15 @@ _BLOCK_CHARS = 4000
 #: An array becomes one SMV variable per element, so a very long one would blow
 #: the model up rather than fail; refuse instead of emitting it.
 _MAX_ARRAY = 256
+
+#: How deep a stack is modelled.  A Janus stack is unbounded, so a finite model
+#: has to stop somewhere; a run that pushes past this leaves for BOUND, exactly
+#: as a call deeper than `max_depth` does.  So a proof of `pc != ERR` is about
+#: the runs that stay within the depth, and proving `pc != BOUND` too is what
+#: makes it unconditional (§6).  Measured: only 2 of the 32 corpus programs
+#: that touch a stack have a statically justifiable depth (§17), which is why
+#: this is a bound rather than a claim.
+_STACK_DEPTH = 8
 
 #: A source name resolves to one SMV variable (a scalar), to the tuple of its
 #: elements' variables (an expanded array), or to a mapping from field name to
@@ -174,6 +188,20 @@ class SmvUnsupported(Exception):
 #: that are only fallout from the skip.  `collect_unsupported` therefore throws
 #: the model away, and nothing else may set this.
 _COLLECT: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class _Stack:
+  """A stack: `depth` cells plus the count of how many are live.
+
+  Kept distinct from an array's plain tuple of cells because the two are read
+  differently — an array cell is named by the program, a stack cell only ever
+  by the count — and because binding a formal to a stack must carry the count
+  along with the cells.
+  """
+  cells: tuple[str, ...]
+  count: str
+  depth: int
 
 
 @dataclass(frozen=True)
@@ -357,6 +385,12 @@ class _Compiler:
       return self._occurs(name, e.left, env) or self._occurs(name, e.right, env)
     if isinstance(e, UnaryExpr):
       return self._occurs(name, e.expr, env)
+    if isinstance(e, (TopExpr, SizeExpr, EmptyExpr)):
+      # The target of an assignment is a scalar l-value; a stack's cells and
+      # count are separate model variables that no scalar name can reach.  So
+      # `x += top(s)` cannot alias, and this is False rather than fail-closed.
+      # (`push`/`pop` do not come through here — they have their own encoders.)
+      return False
     raise SmvUnsupported(
         f"expression outside the fragment in an aliasing check: {type(e).__name__}")
 
@@ -523,6 +557,13 @@ class _Compiler:
     return entry, selectors
 
   def _lval_name(self, lval, env: _Env) -> str:
+    # A stack is not a scalar l-value.  Without this the `_Stack` object walked
+    # into the scalar path and its repr was emitted into the model, which nuXmv
+    # then refused to read — a `model-error`, i.e. a question never asked
+    # dressed as one that was.  `type-error-swap.ja` found it.
+    if isinstance(env.get(getattr(lval.ident, "name", None)), _Stack) \
+        and not lval.selectors:
+      raise SmvUnsupported(f"a stack used where a scalar is expected: {lval.ident.name}")
     """The SMV variable an l-value denotes.
 
     A scalar denotes its own variable; an expanded array denotes one element,
@@ -588,6 +629,11 @@ class _Compiler:
       return self._oob(e.left, env) or self._oob(e.right, env)
     if isinstance(e, UnaryExpr):
       return self._oob(e.expr, env)
+    if isinstance(e, (TopExpr, SizeExpr, EmptyExpr)):
+      # A stack expression carries no constant index to be out of range.  `top`
+      # on an empty stack IS an error, but a run-time one whose obligation
+      # `_iexpr` emits — this pre-check is only for indices decidable now.
+      return False
     raise SmvUnsupported(
         f"expression outside the fragment in a bounds check: {type(e).__name__}")
 
@@ -638,6 +684,24 @@ class _Compiler:
       return str(e.value) if e.value >= 0 else f"({e.value})"
     if isinstance(e, LvalExpr):
       return self._read_lval(e.lval, env, obl)
+    if isinstance(e, (TopExpr, SizeExpr, EmptyExpr)):
+      if not isinstance(env.get(e.ident.name), _Stack):
+        # `top(x)` on a non-stack: PyJanus raises "Couldn't match expected type
+        # `stack'" when it reaches the expression, so reaching it is the error.
+        # An always-false obligation is how an *expression* reaches ERR.
+        obl.append("FALSE")
+        return "0"
+      st = self._stack_of(e.ident.name, env)
+      count = self._val(st.count)
+      if isinstance(e, SizeExpr):
+        return f"({count})"
+      if isinstance(e, EmptyExpr):
+        # `empty(s)` is usable as an integer: measured 1 on an empty stack (§19).
+        return f"(case {count} = 0 : 1; TRUE : 0; esac)"
+      # `top` does not consume — but it fails on an empty stack with the very
+      # message `pop` gives, so it is an EXPRESSION carrying an ERR edge (§19).
+      obl.append(f"{count} > 0")
+      return self._read_at(st.cells, f"({count} - 1)")
     if isinstance(e, BinExpr):
       if e.op in _ARITH:
         left = self._iexpr(e.left, env, obl)
@@ -669,6 +733,14 @@ class _Compiler:
         return f"({self._bexpr(e.left, env, obl)} & {self._bexpr(e.right, env, obl)})"
       if e.op is BinOpKind.LOR:
         return f"({self._bexpr(e.left, env, obl)} | {self._bexpr(e.right, env, obl)})"
+    if isinstance(e, EmptyExpr):
+      # `if !empty(s)` is how the corpus branches on a stack (`reverse`).  It is
+      # boolean here and an integer in `_iexpr`; Janus lets it be both, so both
+      # sorts translate it rather than one refusing.
+      if not isinstance(env.get(e.ident.name), _Stack):
+        obl.append("FALSE")     # type error at run time; same as `_iexpr`
+        return "FALSE"
+      return f"({self._val(self._stack_of(e.ident.name, env).count)} = 0)"
     raise SmvUnsupported(f"condition outside the fragment: {type(e).__name__}")
 
   def _cond(self, e, env: dict[str, str]) -> str:
@@ -702,6 +774,11 @@ class _Compiler:
     if isinstance(s, SwapStmt):
       if self._oob_lval(s.left, env) or self._oob_lval(s.right, env):
         return self._unconditional_error()
+      if isinstance(env.get(s.left.ident.name), _Stack) \
+          or isinstance(env.get(s.right.ident.name), _Stack):
+        # `x <=> s` — PyJanus: "Can't swap variables of type `int' and `stack'".
+        # Reaching the statement is the error.
+        return self._unconditional_error()
       lentry, _ = self._base_of(s.left, env)
       rentry, _ = self._base_of(s.right, env)
       if isinstance(lentry, tuple) or isinstance(rentry, tuple):
@@ -720,6 +797,10 @@ class _Compiler:
       before_left, before_right = self._val(left), self._val(right)
       self.pending[left], self.pending[right] = before_right, before_left
       return
+    if isinstance(s, PushStmt):
+      return self._push(s, env)
+    if isinstance(s, PopStmt):
+      return self._pop(s, env)
     if isinstance(s, AssertStmt):
       if self._oob(s.expr, env):
         return self._unconditional_error()
@@ -1011,6 +1092,20 @@ class _Compiler:
       # to match, a model would be an authority on a program the implementation
       # cannot execute.
       raise SmvUnsupported("local array")
+    if enter.typ.kind == "stack":
+      # `local stack t = nil ... delocal stack t = nil`: the corpus uses this
+      # in `reverse`.  The entry creates an empty stack and the exit demands it
+      # be empty again -- a run-time obligation, like every other `delocal`,
+      # and the same one PyJanus enforces.
+      if leave.typ.kind != "stack":
+        self._unconditional_error()
+        return
+      st = self._declare_stack(enter.ident.name)
+      inner = dict(env)
+      inner[enter.ident.name] = st
+      self._stmts(s.body, inner, depth)
+      self._check([f"{self._val(st.count)} = 0"])
+      return
     if enter.typ.kind != "int":
       raise SmvUnsupported("non-scalar local")
     if leave.typ.kind != "int" or leave.dimensions:
@@ -1145,8 +1240,32 @@ class _Compiler:
         # a formal passed onward to a third procedure resolve correctly.
         inner[param.ident.name] = resolved
         continue
+      if param.typ.kind == "stack":
+        # By reference, measured (§19): `call fill(s)` leaves the pushes in the
+        # caller's `s`.  Binding the formal to the same `_Stack` -- same cells,
+        # same count -- is exactly that.  Two formals landing on one stack is
+        # allowed in Janus (also measured), so nothing is flagged here.
+        if not isinstance(arg, LvalExpr) or arg.lval.selectors:
+          raise SmvUnsupported("stack argument is not a plain variable")
+        if not isinstance(env.get(arg.lval.ident.name), _Stack):
+          # A non-stack passed to a stack formal: PyJanus raises when it reaches
+          # the call ("Couldn't match expected type"), so reaching it is the
+          # error.
+          self._unconditional_error()
+          return
+        inner[param.ident.name] = self._stack_of(arg.lval.ident.name, env)
+        continue
       if param.typ.kind != "int":
         raise SmvUnsupported("non-scalar parameter")
+      if isinstance(arg, LvalExpr) and not arg.lval.selectors \
+          and isinstance(env.get(arg.lval.ident.name), _Stack):
+        # A stack passed where an `int` is expected.  PyJanus raises on reaching
+        # the call, so this is an unconditional ERR edge -- NOT a silent bind.
+        # Found by `type-error-argument.ja`, which this encoding first *proved*
+        # safe: the shape check below compares against `tuple` and a stack is
+        # not one, so the mismatch slipped through it.
+        self._unconditional_error()
+        return
       if not isinstance(arg, LvalExpr):
         value_args.append((param, arg))
         continue
@@ -1345,6 +1464,80 @@ class _Compiler:
       out[field.ident.name] = self._expand_array(name, shape, [init] * size)
     return out
 
+  def _declare_stack(self, base_name: str) -> _Stack:
+    """`depth` cells and a count, both starting empty.
+
+    The count is the only thing that decides which cells are live, so the cells
+    themselves start at 0 in either init mode: under `--init any` an arbitrary
+    cell above the count is unobservable, and an arbitrary count would model
+    initial states the language cannot produce (a stack is created empty).
+    """
+    cells = self._expand_array(base_name, (_STACK_DEPTH,), [0] * _STACK_DEPTH)
+    count = self._declare(f"{base_name}_n", "0")
+    return _Stack(cells, count, _STACK_DEPTH)
+
+  def _stack_of(self, name: str, env: _Env) -> _Stack:
+    entry = env.get(name)
+    if not isinstance(entry, _Stack):
+      raise SmvUnsupported(f"not a stack: {name}")
+    return entry
+
+  def _push(self, s, env: _Env) -> None:
+    """`push(x, st)`: the value moves onto the stack and `x` is left 0.
+
+    Measured, not assumed (§19): the source is cleared, which is what makes the
+    statement injective and `pop` its inverse.  A push into a full model leaves
+    for BOUND rather than ERR — the program is fine, the model simply stops
+    following it.
+    """
+    if not isinstance(env.get(s.ident.name), _Stack):
+      return self._unconditional_error()   # `push(x, notastack)` is a type error
+    st = self._stack_of(s.ident.name, env)
+    if not isinstance(s.expr, LvalExpr):
+      raise SmvUnsupported("push of a non-variable")
+    src = self._lval_name(s.expr.lval, env)
+    obl: list[str] = []
+    value = self._val(src)
+    idx = self._val(st.count)
+
+    # Full: leave for BOUND and drop the path, exactly as `_call` does at
+    # max_depth.  Not ERR: overflowing the model is not the program failing.
+    self.uses_bound = True
+    self.trans.append(_Trans(self.loc, self._conj(self.path + [f"{idx} >= {st.depth}"]),
+                             (), BOUND_LOC))
+    self.path.append(f"{idx} < {st.depth}")
+
+    before = [self._val(name) for name in st.cells]
+    for k, name in enumerate(st.cells):
+      self.pending[name] = f"(case {idx} = {k} : {value}; TRUE : {before[k]}; esac)"
+    self.pending[st.count] = f"({idx} + 1)"
+    self.pending[src] = "0"
+    self._check(obl)
+    self._seal()
+
+  def _pop(self, s, env: _Env) -> None:
+    """`pop(x, st)`: two run-time obligations, both measured (§19).
+
+    `Can't pop from empty stack` and `Can't pop to non-zero variable` are
+    ordinary Janus runtime errors, so they are ERR edges — the same kind as an
+    assertion failure, and deliberately not the BOUND edge that `push` uses.
+    """
+    if not isinstance(env.get(s.ident.name), _Stack):
+      return self._unconditional_error()   # `pop(x, notastack)` is a type error
+    st = self._stack_of(s.ident.name, env)
+    if not isinstance(s.expr, LvalExpr):
+      raise SmvUnsupported("pop into a non-variable")
+    dst = self._lval_name(s.expr.lval, env)
+    idx = f"({self._val(st.count)} - 1)"
+    self._check([f"{self._val(st.count)} > 0", f"{self._val(dst)} = 0"])
+    top = self._read_at(st.cells, idx)
+    before = [self._val(name) for name in st.cells]
+    self.pending[dst] = top
+    for k, name in enumerate(st.cells):
+      self.pending[name] = f"(case {idx} = {k} : 0; TRUE : {before[k]}; esac)"
+    self.pending[st.count] = f"({self._val(st.count)} - 1)"
+    self._seal()
+
   def run(self) -> str:
     main = self.program.main
     assert main is not None
@@ -1352,6 +1545,9 @@ class _Compiler:
     for decl in main.vdecls:
       if decl.typ.kind == "struct":
         env[decl.ident.name] = self._declare_struct(decl, env)
+        continue
+      if decl.typ.kind == "stack":
+        env[decl.ident.name] = self._declare_stack(decl.ident.name)
         continue
       if decl.typ.kind != "int":
         # Name the KIND, not just the variable: a blocker census cannot tell a

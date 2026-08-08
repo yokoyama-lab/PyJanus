@@ -151,8 +151,12 @@ class FragmentTests(unittest.TestCase):
     # meaningless rather than merely unknown.
     self._refuses("procedure main()\n    int a[2][2]\n    a[0] += 1\n")
 
-  def test_stacks_are_refused(self):
-    self._refuses("procedure main()\n    int x\n    stack s\n    push(x, s)\n")
+  def test_stacks_are_in_the_fragment_now(self):
+    """Pinned "refused" until 2026-08-09 (queue item 39). Replaced rather than
+    deleted: a stack now compiles, and the semantics it must match are in
+    `test_smv_stack.py`."""
+    self.assertIn("pc", build("procedure main()\n    int x\n    stack s\n"
+                             "    push(x, s)\n"))
 
   def test_bitwise_xor_assignment_is_refused(self):
     self._refuses("procedure main()\n    int x\n    x ^= 1\n")

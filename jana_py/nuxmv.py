@@ -60,6 +60,26 @@ class Result:
   #: and nothing distinguished them from a genuine timeout.
   malformed: bool = False
 
+  def status_of(self, prop_substring: str) -> str | None:
+    """The verdict for one property, by a substring of its text.
+
+    `status` below deliberately collapses everything to the weakest, which is
+    right when every property means the same kind of thing.  The stack and
+    inlining bounds broke that: `pc != BOUND` being refuted says the model hit
+    its depth, not that the program fails, and reporting both as `refuted`
+    turns a modelling limit into an accusation.  Callers that emit a verdict to
+    a human ask for the properties separately.
+    """
+    if self.malformed or self.timed_out:
+      return None
+    hits = [v for v in self.verdicts if prop_substring in v.prop]
+    if not hits:
+      return None
+    for want in ("refuted", "unknown", "proved"):
+      if any(v.status == want for v in hits):
+        return want
+    return None
+
   @property
   def status(self) -> str:
     """The weakest status across all properties."""

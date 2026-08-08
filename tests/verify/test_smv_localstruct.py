@@ -108,10 +108,12 @@ class EncodingTests(unittest.TestCase):
     with self.assertRaises(SmvUnsupported):
       model_of(src, init="zero")
 
-  def test_a_stack_local_is_still_refused(self):
+  def test_a_stack_local_is_accepted_now(self):
+    """Pinned "refused" until 2026-08-09 (queue item 39). A local stack is what
+    the corpus's `reverse` uses; `delocal stack g = nil` becomes the obligation
+    that it is empty again, which `test_smv_stack.py` checks."""
     src = "procedure main()\n    local stack g = nil\n    skip\n    delocal stack g = nil\n"
-    with self.assertRaises(SmvUnsupported):
-      model_of(src, init="zero")
+    self.assertIn("pc", model_of(src, init="zero"))
 
 
 class CorpusTests(unittest.TestCase):
