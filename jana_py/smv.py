@@ -157,6 +157,25 @@ class SmvUnsupported(Exception):
   """A construct outside the scalar fragment; the caller must not proceed."""
 
 
+#: Diagnostic only.  When this holds a list, `_stmts` records a statement's
+#: rejection and moves on to the next statement instead of aborting the whole
+#: compilation, so one run reports EVERY reason a program is out of the
+#: fragment rather than only the first one it hits.
+#:
+#: Why that distinction matters here: the blocker tallies this project uses to
+#: size a feature ("18 programs are stopped by `^=`") count FIRST reasons, and
+#: a first-reason tally is not even an upper bound on what implementing that
+#: feature would admit — a program may hold any number of blockers.  Estimates
+#: built on those tallies missed three times out of four (docs/loop-queue.md,
+#: items 21-28).
+#:
+#: The model produced under collection is GARBAGE — a skipped statement leaves
+#: the compiler's state inconsistent, and later statements may fail for reasons
+#: that are only fallout from the skip.  `collect_unsupported` therefore throws
+#: the model away, and nothing else may set this.
+_COLLECT: list[str] | None = None
+
+
 @dataclass(frozen=True)
 class _Trans:
   src: int
@@ -663,7 +682,13 @@ class _Compiler:
 
   def _stmts(self, stmts, env: dict[str, str], depth: int) -> None:
     for stmt in stmts:
-      self._stmt(stmt, env, depth)
+      if _COLLECT is None:
+        self._stmt(stmt, env, depth)
+        continue
+      try:                                  # diagnostic mode; see _COLLECT
+        self._stmt(stmt, env, depth)
+      except SmvUnsupported as exc:
+        _COLLECT.append(str(exc))
 
   def _stmt(self, s, env: dict[str, str], depth: int) -> None:
     if isinstance(s, SkipStmt):
@@ -1474,3 +1499,31 @@ def compile_to_smv(program: Program, *, init: str = "any", assume: str | None = 
   if arrays not in ("expand", "native"):
     raise ValueError(f"arrays must be 'expand' or 'native', not {arrays!r}")
   return _Compiler(program, init, assume, max_depth, style, arrays).run()
+
+
+def collect_unsupported(program: Program, **kwargs) -> list[str]:
+  """Every reason `program` is outside the fragment, not just the first.
+
+  Diagnostic only: **the compiled model is discarded**, because skipping a
+  rejected statement leaves the compiler's state inconsistent.  Use this to
+  size a feature before implementing it — `compile_to_smv` reports the first
+  blocker, and a tally of first blockers is not an upper bound on how many
+  programs a feature would admit.
+
+  Reasons after the first can be *fallout* from a skipped statement (a variable
+  the skipped declaration never bound now reads as "out of the fragment").
+  The caller has to allow for that; `tools/blockers.py` marks such reasons.
+  """
+  global _COLLECT
+  if _COLLECT is not None:
+    raise RuntimeError("collect_unsupported is not re-entrant")
+  reasons: list[str] = []
+  _COLLECT = reasons
+  try:
+    compile_to_smv(program, **kwargs)
+  except SmvUnsupported as exc:
+    # Raised outside `_stmts` (whole-program refusals: no main, modular mode).
+    reasons.append(str(exc))
+  finally:
+    _COLLECT = None
+  return reasons

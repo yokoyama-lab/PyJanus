@@ -1203,3 +1203,70 @@ s += 1; n += 1 }` は3周。実測）。後退辺で式を読み直す実装は*
 問題になった（nuXmv の予約語）。**気づけたのは §3.5 で入れた「コーパス全体のモデルが
 nuXmv に読めるか」というテストが落ちたから**である。予約語の一覧は安全網ではない
 ——プログラムは何とでも名付けられる——**読めるかどうかを毎回確かめる方が安全網**である。
+
+## 16. `^=` は 18本ではなく 12本だった（2026-08-09・項目29）
+
+**測り方を変えた。** これまでの被覆率の見積りは `compile_to_smv` の**最初の**拒否理由の
+集計だった。1本のプログラムは阻害要因を何個でも持てるので、その集計は
+「その機能を実装したら何本入るか」の**上界ですらない**（§15.1。4回中3回外した）。
+
+`jana_py/smv.py` に**収集モード**を足した（`collect_unsupported`。診断専用で、
+`compile_to_smv` の挙動は変えていない）。文ごとに拒否を記録して次の文へ進むので、
+1回の走査でそのプログラムの阻害要因を**全部**出す。走査は `tools/blockers.py`。
+
+```bash
+python3 tools/blockers.py                 # 全体の要因別本数
+python3 tools/blockers.py --feature '^=' --md
+```
+
+### 16.1 実測
+
+| プログラム | 拒否理由の集合 | `^=` を消したときに残る要因 |
+|---|---|---|
+| `bit_bijections_c.ja` | `^=` | **なし** |
+| `ca_rule90_c.ja` | `^=` | **なし** |
+| `cipher_sbox_c.ja` | `^=`, `argument is not a plain variable` | `argument is not a plain variable` |
+| `combination_c.ja` | `^`, `^=` | `^` |
+| `counting_sort_g.ja` | `^=` | **なし** |
+| `cuckoo_insert_g.ja` | `^=`, `swap between a scalar and an array cell` | `swap between a scalar and an array cell` |
+| `dup_insertion_sort_c.ja` | `^=` | **なし** |
+| `factor_c.ja` | `^=` | **なし** |
+| `gray_code_c.ja` | `^=` | **なし** |
+| `gray_code_roundtrip_c.ja` | `^=` | **なし** |
+| `iterate_c.ja` | `^=` | **なし** |
+| `matrixmult_c.ja` | `^=`, `argument is not a plain variable` | `argument is not a plain variable` |
+| `matrixmult_v1_c.ja` | `^=` | **なし** |
+| `permutation_rank_c.ja` | `^`, `^=` | `^` |
+| `reversible_ca_ring_c.ja` | `^=` | **なし** |
+| `reversible_ca_rule90_c.ja` | `^=` | **なし** |
+| `selection_sort_g.ja` | `^`, `^=`, `non-scalar local` | `^`, `non-scalar local` |
+| `structs_array_param_c.ja` | `^=` | **なし** |
+
+**`^=` を実装して入るのは 12本**（18本ではない）。**予測は 18、実測は 12 で、
+また 1.5 倍外していた**——ただし今回は実装前に分かった。
+
+**`^` を一緒に実装すると 14本**になる（`combination_c` と `permutation_rank_c` が
+加わる。`selection_sort_g` は `non-scalar local` で止まったまま）。`^` と `^=` は
+同じビット演算の族なので、**やるなら一緒にやるのが正しい単位**である。
+
+残る4本が次に止まる要因は `argument is not a plain variable`（2）・
+`swap between a scalar and an array cell`（1）・`non-scalar local`（1）。
+
+### 16.2 テキスト検索の 45本と食い違う理由
+
+`rg -l '\^=' examples/*.ja` は **45本**を返すが、検査器が `^=` で拒否するのは 18本。
+差の 27本は、**`^=` に到達する前に別の要因で止まっている**（多くは
+`non-scalar declaration`＝stack）。収集モードは拒否した文を飛ばして次へ進むが、
+飛ばした宣言に依存する後続の文は「変数が断片の外」という**余波**を出すので、
+その先にある `^=` は記録されない。`tools/blockers.py` は余波を別枠にして
+**独立の阻害要因として数えない**。**この 27本は `^=` を実装しても入らない**
+（別の実在する要因を持っているため）ので、上の 12 という数字は変わらない。
+
+### 16.3 測れなかった 3本（コンパイル自体が終わらない）
+
+`ackermann_c.ja` / `factorial_c.ja` / `quick_sort_g.ja` は収集が 240 秒でも終わらない。
+**これは収集モードのせいではない**——`git show HEAD:jana_py/smv.py` の版でも
+`compile_to_smv` 単体が 60 秒で終わらないことを確かめた（終了コード 124）。
+`tools/verify_corpus.py` の timeout は **nuXmv にしか掛かっていない**ので、
+コンパイル側には上限が無い。`factorial_c.ja` はテキスト上 `^=` を含むため、
+**12 は 12〜13 の下限**として読むべきである。上限を掛ける話はキューへ回した。
