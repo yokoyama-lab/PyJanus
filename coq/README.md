@@ -984,6 +984,29 @@ against both:
   | `run_is_reversible` | and the history it builds takes the final configuration home |
   | `machine_agrees` | an empty control stack is stuck and `fstep` is deterministic, so the machine cannot reach a *different* answer than the big-step one |
 
+  The same file then follows the paper's own route to the **converse** of
+  `complete_pc` — the direction that needs *balanced derivations* (their
+  Definition 1) and their Lemma 2. `fbaln G k n c c'` is a run of `n` steps that
+  never steps from a configuration whose control has already shrunk to `k`: it
+  runs what was pushed on top of `k` and stops the moment `k` is uncovered. The
+  index is the step count because the decomposition cuts a run in two and
+  recurses on *both* pieces.
+
+  | theorem | statement |
+  |---|---|
+  | `fstep_suffix` | a step only rewrites the head of the control stack, so anything strictly below it survives — the invariant that makes "above `k`" meaningful |
+  | `fbaln_cut` | **their Lemma 2**: a derivation balanced at `k` that starts above an intermediate level `k0` must pass through `k0` *exactly*, and cutting there splits the step count |
+  | `sound_pc` | a balanced derivation running `s` off the top of the stack witnesses `L.exec G s a b` |
+  | `complete_pc_bal` | conversely, the run `complete_pc` builds *is* balanced, at every level of the stack |
+  | `exec_iff_fbal` | so the two agree at **every** `k`, not just at the top |
+  | `exec_iff_pc` | **their Theorem 1**: `L.exec G s a b` **iff** `fmulti G (mk [embed s] a []) (mk nil b h)`. At the top level balancedness is free — an empty control stack is stuck, so no run can drop below it and come back (`fmulti_nil_fbaln`) |
+
+  Why `fmulti` alone will not do: `fmulti G (mk (s :: k) a h) (mk k b h')` does
+  not rule out a run that drops below `k` and builds back up, since `F_Drop`
+  shrinks the stack. Without pinning every intermediate configuration above `k`
+  the decomposition has nothing to cut at — which is why the paper introduces
+  Definition 1 in the first place.
+
   All of these are **closed under the global context** — not even
   `functional_extensionality`. The instance is taken from `RevSmallStep`
   (`Module SSx := SmallStep P`), so the runtime statements are literally the

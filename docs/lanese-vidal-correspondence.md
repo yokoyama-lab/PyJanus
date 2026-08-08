@@ -37,15 +37,19 @@
 | 配置 `⟨σ, s, π⟩` | `mk (s :: k) a h`（`cctl` が `s :: π`） | **対応あり** |
 | 前進簡約 `→` | `fstep` | **対応あり**（13規則） |
 | **Lemma 1**（大ステップの証明から簡約列を作る） | `complete_pc` の相互帰納（`L.exec_mut`、`P0` が `L.lp` 側） | **形式化済み** |
-| **Definition 1**（balanced derivation） | — | **未形式化** |
-| **Definition 2**（loop derivation） | — | **未形式化** |
+| **Definition 1**（balanced derivation） | `fbaln G k n c c'`（`fbal` はその段数を隠したもの） | **形式化済み** |
+| **Definition 2**（loop derivation） | `sound_bal_n` の第2成分 | **形式化済み**（独立した定義ではなく、相互再帰の片側として。下記 §5） |
 | **Definition 3**（trace ＝ 適用した規則の列） | `chist : list ev` | **強めたもの**（下記 §4） |
-| **Lemma 2**（`⟨σ,s,π₁⟩ →* ⟨σ′,skip,π₂⟩` の分解） | — | **未形式化** |
-| **Theorem 1** `ϵ ⊢ s ⇓ σ` **iff** `⟨ϵ,s,[]⟩ →* ⟨σ,skip,[]⟩` | `complete_pc` / `complete_pc_top` | **半分**（→ のみ。§5 参照） |
+| **Lemma 2**（`⟨σ,s,π₁⟩ →* ⟨σ′,skip,π₂⟩` の分解） | `fbaln_cut` / `fbaln_cut1` | **形式化済み** |
+| **Theorem 1** `ϵ ⊢ s ⇓ σ` **iff** `⟨ϵ,s,[]⟩ →* ⟨σ,skip,[]⟩` | `exec_iff_pc` | **形式化済み・両方向** |
 
 論文の Theorem 1 の証明は「only if は Lemma 1、if は Lemma 2 と
-『この形の簡約列は balanced である』」という構成である。**こちらは Lemma 1 側だけを
-持っている**。
+『この形の簡約列は balanced である』」という構成で、**こちらも同じ道を通った**
+（2026-08-08）。最後の「この形の簡約列は balanced である」に当たるのが
+`fmulti_nil_fbaln`——**最上位ではスタックが空で行き詰まるので、balanced 性は
+無料で付いてくる**。加えて `complete_pc_bal` で「Lemma 1 が作る簡約列は
+どの段でも balanced」を示したので、同値は最上位に限らず**任意の `k` で成り立つ**
+（`exec_iff_fbal`）。
 
 ---
 
@@ -111,62 +115,99 @@ Theorem loop_lemma : forall G c c', fstep G c c' <-> bstep G c' c.
 | **機械検証** | 論文は無し。`loop_lemma` / `loop_lemma_multi` / `fstep_det` / `bstep_det` / `fstep_backward_det` / `complete_pc` / `run_is_reversible` はいずれも **`Closed under the global context`**（`functional_extensionality` すら不要）。`coq/audit.sh` が検査する |
 | **反例の分離** | 論文は `if e1 then skip else s2 fi e2` が `skip` へ潰れる例を挙げるだけ。`RevSmallStep.exit_assertion_collapses` でその潰れを**定理として**述べ、`RevLoopLemma.exit_assertion_separated` で新しい意味論では潰れないことを**定理として**述べた。差が注釈でなく命題になっている |
 
+| **同値の成立範囲** | 論文の Theorem 1 は最上位（空の継続スタック）の主張。`exec_iff_fbal` は**任意の制御スタック `k`** で同値を述べる。`k` を残したまま `s` を回し切る balanced derivation が `L.exec G s a b` と1対1に対応する |
+
 ### 弱い・未着手
 
 | | |
 |---|---|
-| **Theorem 1 の "if" 方向** | `fmulti G (mk [embed s] a []) (mk [] b h) -> L.exec G s a b` が**未証明**。論文は Lemma 2（balanced derivation）を経由する。**残る唯一の本質的な穴**。ただし下の `machine_agrees` で実用上の帰結は押さえた |
-| **Definition 1 / 2 / Lemma 2** | balanced derivation・loop derivation を形式化していない |
 | **CFG 版意味論（§5 の Fig. 7・Lemma 3・Lemma 4）** | 作っていない。§3 の設計判断による |
 | **言語の範囲** | 論文は Janus の具体構文（`x⊕= e`、`x[e]⊕= e`、`start`/`stop`）を扱う。こちらは `REV_PRIM` の抽象 `prim` なので、代入の具体形は抽象化されている。**逆に言えば `RevJanus` / `RevExt` / `RevStack` / `RevCA` / `RevToy` の5実例すべてに一度に効く** |
 | **Example 1 / 2** | 論文の具体的な簡約列を再現していない |
 
 ---
 
-## 5. 次に埋めるべき穴
+## 5. balanced derivation — 論文どおりに埋めた（2026-08-08）
 
-**Theorem 1 の "if" 方向**が唯一の本質的な欠落である。道筋は2つ。
+Theorem 1 の "if" 方向が唯一の本質的な欠落だった。**論文の道筋をそのまま通した。**
 
-1. **論文どおり** — balanced derivation（Definition 1）を形式化し、Lemma 2 を経由する。
-   **着手前の設計（2026-08-08 に確定）**:
+### 定義（論文の Definition 1）
 
-   ```coq
-   (* Definition 1: 制御スタックが k を接尾辞として保ち、最後に k ちょうどへ戻る *)
-   Definition suffix (k c : ctrl) : Prop := exists j, c = j ++ k.
+```coq
+Inductive fbaln (G : L.pname -> L.stmt) (k : ctrl) : nat -> conf -> conf -> Prop :=
+| fbn_done : forall a h, fbaln G k 0 (mk k a h) (mk k a h)
+| fbn_step : forall n c c' c'',
+    fstep G c c' -> length k < length (cctl c) ->
+    fbaln G k n c' c'' -> fbaln G k (S n) c c''.
+```
 
-   Inductive fbal (G : L.pname -> L.stmt) (k : ctrl) : conf -> conf -> Prop :=
-   | fb_refl : forall c, suffix k (cctl c) -> fbal G k c c
-   | fb_step : forall c c' c'',
-       fstep G c c' -> suffix k (cctl c') -> fbal G k c' c'' -> fbal G k c c''.
-   ```
+「制御スタックが `k` まで縮んだ配置からは**もう踏まない**」という条件で、
+`k` の上に積んだものを回し切って `k` が現れた瞬間に止まる列を切り出す。
 
-   要る補題は3つ。
-   - **`complete_pc_balanced`** — `complete_pc` の結論を `fmulti` から `fbal` へ強める。
-     証明は同じ相互帰納で、各ステップに `suffix` の証明義務が増えるだけ
-   - **`fbal_inv`（＝ 論文の Lemma 2）** — `fbal G k (mk (s :: k) a h) (mk k b h')` を
-     `s` の構造で分解する。`F_Seq` の場合に「前半が `s2 :: k` へ balanced に到達する
-     地点で切る」ための**切断補題**がここに要る。**ここが分量の山**
-   - **`sound_pc`** — `fbal_inv` から `L.exec G s a b` を組む
+**なぜ `fmulti` のままでは駄目か**: `fmulti G (mk (s :: k) a h) (mk k b h')` は
+「途中で `k` より短くなってから積み直した」実行を排除しない。`F_Drop` が
+スタックを縮めるので、各中間配置を `k` の上に留めないと分解が成立しない。
+これが論文が Definition 1 を置く理由でもある。
 
-   **なぜ `fmulti` のままでは駄目か**: `fmulti G (mk (s :: k) a h) (mk k b h')` は
-   「途中で `k` より短くなってから積み直した」実行を排除しない。`F_Drop` が
-   スタックを縮めるので、`suffix` を各中間配置に課さないと分解が成立しない。
-   これが論文が Definition 1 を置く理由でもある。
-2. ~~**決定性から**~~ — **2026-08-08 に実施済み**。`nil_stuck`（`mk nil _ _` は行き詰まり）と
-   `fmulti_det_stuck`（行き詰まりまでの実行は一意）から
-   **`machine_agrees : L.exec G s a b -> fmulti G (mk [embed s] a []) (mk nil b' h) -> b = b'`**
-   を得た。Theorem 1 そのものより弱い（機械が停止することは言わない）が、
-   **「大ステップが答えを持つとき、機械が別の答えを出すことはない」**は押さえている
+**段数を添字に持たせた**のは、分解が1本の列を2本に切って**両方**に再帰するため。
+`fbaln` の導出そのものに構造帰納法をかけても、切った断片は見えない。
 
-`RevSmallStep.v` が同じ穴を `bexec` という補助関係で埋めているので、そちらの手口も使える。
+### 骨格
 
----
+| 補題 | 役割 | 実際の分量 |
+|---|---|---|
+| `fstep_suffix` | 1ステップはスタックの先頭しか書き換えない → その下は残る | 13規則を一度に潰す1行（`repeat apply suffix_cons`） |
+| **`fbaln_cut`（＝論文の Lemma 2）** | `k` で balanced な列が中間の段 `k0` の上から始まるなら、**必ず `k0` ちょうどを通る**。そこで切ると段数が分かれる | 20行。想定した「切断補題」は `suffix` の保存＋長さの三分律に解けた |
+| `fbaln_cut1` | 使う形はいつも「1文を `k0` の上に積んだ」だけ、という特殊化 | 5行 |
+| `sound_bal_n` | 段数に関する強帰納法。文の側とループ本体（Definition 2）の**2本立て** | 60行 |
+| `complete_pc_bal` | `complete_pc` の結論を `fmulti` から `fbaln` へ強める | `fmulti_trans` を `fbaln_app` に置き換えるだけ |
+| `fmulti_nil_fbaln` | 最上位では balanced 性は無料（空スタックは行き詰まりなので下へ抜けられない） | 8行 |
+
+**見込みは外した**。着手前は `fbaln_cut` の `F_Seq` の場合に専用の切断補題が要ると
+書いていたが、実際には**文ごとの場合分けは不要**だった。「`suffix k0` はステップで
+保存される」＋「`suffix k0` で長さが等しければ `= k0`」の2つだけで、どの規則で
+切れるかを問わずに切断できる。**`F_Seq` は特別ではなかった。**
+
+### 得られたもの
+
+```coq
+Theorem exec_iff_fbal : forall G k s a b h,
+  L.exec G s a b <-> exists h', fbal G k (mk (embed s :: k) a h) (mk k b h').
+
+Theorem exec_iff_pc : forall G s a b,
+  L.exec G s a b <-> exists h, fmulti G (mk (embed s :: nil) a nil) (mk nil b h).
+```
+
+後者が**論文の Theorem 1 そのもの**（論文の `skip` ＋空スタックが、こちらの
+空の制御スタック）。前者はそれより強く、**最上位に限らず任意の `k`** で同値を言う。
+
+すべて **`Closed under the global context`**（`functional_extensionality` すら不要）。
+`coq/audit.sh` が `fbaln_cut` / `sound_pc` / `complete_pc_bal` / `exec_iff_fbal` /
+`exec_iff_pc` を検査する。
+
+### 併せて残した検算
+
+`fbal_seq_skip` は `Seq Skip Skip` の3段の balanced derivation を手で組んだもの
+（`F_Seq` → `F_Drop` → `F_Drop`、履歴は `[EDrop; EDrop; ESeq]`）。
+`sound_seq_skip` はそれを `sound_pc` に食わせて `L.exec G (Seq Skip Skip) a a` を
+取り出す。定義が空回りしていないことの計算チェックである。
+
+### 使わなかったもう1つの道
+
+決定性からの `machine_agrees`（2026-08-08 に先に実施）は
+`L.exec G s a b -> fmulti G (mk [embed s] a []) (mk nil b' h) -> b = b'` で、
+Theorem 1 より弱い（機械が停止することを言わない）。**`exec_iff_pc` はこれを含む**
+ので冗長になったが、道具立てが独立なので両方残してある。
 
 ## 6. まとめ
 
-**Loop Lemma は形式化した。しかも論文より仮定が弱い。** 大ステップとの同値は
-**半分＋α**——大ステップ → 機械（`complete_pc`）に加え、逆向きの実用的な帰結
-（`machine_agrees`：機械が別の答えを出すことはない）まで。完全な逆向き
-（balanced derivation 経由）が残っている。CFG 版の意味論は作らず、
-履歴で同じ問題を解いた——これは論文の再現ではなく**別解**であり、
-Definition 4 が不要になったのはその副産物である。
+**Loop Lemma と大ステップとの同値、どちらも形式化した。**
+
+- Loop Lemma は**論文より仮定が弱い**（到達可能性が要らない。§3）
+- 大ステップとの同値は**両方向**。論文と同じ balanced derivation を通り、
+  さらに**最上位に限らず任意の制御スタックで**成り立つ（§5）
+- CFG 版の意味論は作らず、履歴で同じ問題を解いた——これは論文の再現ではなく
+  **別解**であり、Definition 4 が不要になったのはその副産物である
+
+残っているのは §5 の CFG／ラベル意味論（Fig. 7・Lemma 3・Lemma 4）と
+Example 1 / 2 の再現で、いずれも§3の設計判断から外れる部分である。
