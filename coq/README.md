@@ -982,6 +982,7 @@ against both:
   | `seq_collapse_separated`, `exit_assertion_separated` | the two witnesses of that refutation, now separated |
   | `complete_pc` | every big-step run is realised by the PC machine |
   | `run_is_reversible` | and the history it builds takes the final configuration home |
+  | `machine_agrees` | an empty control stack is stuck and `fstep` is deterministic, so the machine cannot reach a *different* answer than the big-step one |
 
   All of these are **closed under the global context** — not even
   `functional_extensionality`. The instance is taken from `RevSmallStep`

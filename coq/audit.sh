@@ -99,6 +99,7 @@ Print Assumptions LlS.fstep_det.
 Print Assumptions LlS.fstep_backward_det.
 Print Assumptions LlS.complete_pc.
 Print Assumptions LlS.run_is_reversible.
+Print Assumptions LlS.machine_agrees.
 
 (* the small-step semantics is not step-reversible (Lanese-Vidal) *)
 Print Assumptions SsS.step_not_backward_deterministic.
