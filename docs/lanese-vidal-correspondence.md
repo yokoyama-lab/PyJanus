@@ -127,7 +127,31 @@ Theorem loop_lemma : forall G c c', fstep G c c' <-> bstep G c' c.
 
 **Theorem 1 の "if" 方向**が唯一の本質的な欠落である。道筋は2つ。
 
-1. **論文どおり** — balanced derivation（Definition 1）を形式化し、Lemma 2 を経由する
+1. **論文どおり** — balanced derivation（Definition 1）を形式化し、Lemma 2 を経由する。
+   **着手前の設計（2026-08-08 に確定）**:
+
+   ```coq
+   (* Definition 1: 制御スタックが k を接尾辞として保ち、最後に k ちょうどへ戻る *)
+   Definition suffix (k c : ctrl) : Prop := exists j, c = j ++ k.
+
+   Inductive fbal (G : L.pname -> L.stmt) (k : ctrl) : conf -> conf -> Prop :=
+   | fb_refl : forall c, suffix k (cctl c) -> fbal G k c c
+   | fb_step : forall c c' c'',
+       fstep G c c' -> suffix k (cctl c') -> fbal G k c' c'' -> fbal G k c c''.
+   ```
+
+   要る補題は3つ。
+   - **`complete_pc_balanced`** — `complete_pc` の結論を `fmulti` から `fbal` へ強める。
+     証明は同じ相互帰納で、各ステップに `suffix` の証明義務が増えるだけ
+   - **`fbal_inv`（＝ 論文の Lemma 2）** — `fbal G k (mk (s :: k) a h) (mk k b h')` を
+     `s` の構造で分解する。`F_Seq` の場合に「前半が `s2 :: k` へ balanced に到達する
+     地点で切る」ための**切断補題**がここに要る。**ここが分量の山**
+   - **`sound_pc`** — `fbal_inv` から `L.exec G s a b` を組む
+
+   **なぜ `fmulti` のままでは駄目か**: `fmulti G (mk (s :: k) a h) (mk k b h')` は
+   「途中で `k` より短くなってから積み直した」実行を排除しない。`F_Drop` が
+   スタックを縮めるので、`suffix` を各中間配置に課さないと分解が成立しない。
+   これが論文が Definition 1 を置く理由でもある。
 2. ~~**決定性から**~~ — **2026-08-08 に実施済み**。`nil_stuck`（`mk nil _ _` は行き詰まり）と
    `fmulti_det_stuck`（行き詰まりまでの実行は一意）から
    **`machine_agrees : L.exec G s a b -> fmulti G (mk [embed s] a []) (mk nil b' h) -> b = b'`**
