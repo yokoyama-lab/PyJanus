@@ -410,4 +410,44 @@ Proof.
   exists h. apply loop_lemma_multi. exact M.
 Qed.
 
+(** ** Partial soundness, from determinism
+
+    The converse of [complete_pc] -- that a completed run witnesses a big-step
+    execution -- is Lanese and Vidal's Theorem 1 read right-to-left, and their
+    proof goes through balanced derivations (their Definition 1 and Lemma 2),
+    which are not formalised here.  What *is* cheap is the consequence that
+    matters in practice: the machine cannot compute a different answer.  An
+    empty control stack is a stuck configuration, [fstep] is deterministic, so
+    the run [complete_pc] builds is the only one. *)
+
+Lemma nil_stuck : forall G a h c, ~ fstep G (mk nil a h) c.
+Proof. intros G a h c H; inversion H. Qed.
+
+Lemma fmulti_det_stuck : forall G c c1,
+  fmulti G c c1 -> (forall x, ~ fstep G c1 x) ->
+  forall c2, fmulti G c c2 -> (forall x, ~ fstep G c2 x) -> c1 = c2.
+Proof.
+  intros G c c1 H1. induction H1; intros S1 c2 H2 S2.
+  - inversion H2; subst.
+    + reflexivity.
+    + exfalso. eapply S1. eassumption.
+  - inversion H2; subst.
+    + exfalso. eapply S2. eassumption.
+    + assert (E : c' = c'0) by (eapply fstep_det; eassumption).
+      subst. apply IHfmulti; assumption.
+Qed.
+
+Theorem machine_agrees : forall G s a b b' h,
+  L.exec G s a b ->
+  fmulti G (mk (embed s :: nil) a nil) (mk nil b' h) ->
+  b = b'.
+Proof.
+  intros G s a b b' h HE HM.
+  destruct (complete_pc_top G s a b HE) as [h0 M0].
+  assert (E : mk nil b h0 = mk nil b' h).
+  { eapply fmulti_det_stuck;
+      [ exact M0 | intros x; apply nil_stuck | exact HM | intros x; apply nil_stuck ]. }
+  inversion E. reflexivity.
+Qed.
+
 End LoopLemma.
