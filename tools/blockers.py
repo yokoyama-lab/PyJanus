@@ -47,6 +47,7 @@ FEATURES = [
     (re.compile(r"assignment operator outside the fragment: (\S+)"), r"\1"),
     (re.compile(r"integer operator outside the fragment: (\S+)"), r"\1"),
     (re.compile(r"unary operator outside the fragment: (\S+)"), r"unary \1"),
+    (re.compile(r"non-scalar declaration \((\w+)\)"), r"\1 の宣言"),
     (re.compile(r"\bstack\b", re.I), "stack"),
     (re.compile(r"variable array index"), "variable array index"),
     (re.compile(r"whole-array l-value"), "whole-array l-value"),
