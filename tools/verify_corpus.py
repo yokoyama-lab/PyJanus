@@ -6,6 +6,8 @@ record one of
 
     proved       no runtime assertion is reachable
     refuted      one is, with the initial store that gets there
+    bound        no assertion is reachable within the model's depth bounds,
+                 but BOUND itself is reachable (so the claim is conditional)
     unknown      IC3 gave up or timed out
     compile-timeout  the compiler itself did not finish (see below)
     unsupported  the program is outside the scalar fragment (with the reason)
@@ -78,6 +80,14 @@ def classify(path: Path, init: str, timeout: float, binary, style: str = "assign
   finally:
     signal.setitimer(signal.ITIMER_REAL, 0)
   result = nuxmv.check(model, timeout=timeout, binary=binary)
+  # A refuted `pc != BOUND` says the model ran out of depth, not that the
+  # program fails.  `Result.status` collapses both to `refuted`, which reads as
+  # an accusation; separate them so "proved for the runs inside the bound" has
+  # its own name.  (Measured: a 9-push program at depth 8 has ERR proved and
+  # BOUND refuted.)
+  err, bound = result.status_of("pc != 0"), result.status_of("pc != 1")
+  if err == "proved" and bound == "refuted":
+    return "bound", "proved for runs within the model's bounds; BOUND is reachable"
   if result.status == "model-error":
     # nuXmv could not read the model, so nothing was decided.  This has to be
     # said explicitly: falling through to the `proved` return would report a

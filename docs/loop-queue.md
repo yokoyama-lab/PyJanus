@@ -749,7 +749,7 @@ PyJanus に実際に走らせて固定する）:
 
 ---
 
-### [ ] 39. 深さ上限つきの stack 符号化（項目38 の実測に従う）
+### [x] 39. 深さ上限つきの stack 符号化（項目38 の実測に従う）
 
 **方針**（`max_depth` の先例をそのまま踏む）: `stack s` を深さ `D` の
 `s__0 … s__{D-1}` ＋ 個数 `s__n` に展開する。`push` は `s__n < D` なら
@@ -1097,3 +1097,22 @@ unknown / BOUND 到達の内訳。(3) `D` を変えたときに決定率がど�
   stack 引数は参照渡し／`local stack t = nil` が通る。
   **ERR 辺は 3 種（非零 pop・空 pop・空 top）**で、項目39 の BOUND とは別物。
   次は項目39（深さ上限つきの符号化）。
+- 2026-08-09 項目39 完了（§20）。深さ 8 のセル＋個数への展開、押し過ぎは BOUND、
+  ERR は §19 で測った3種（空 pop・非零 pop・空 top）。参照渡し・局所 stack・
+  条件文脈の `empty` まで入れた。**差分試験は6形すべて一致**し、変異注入
+  （`s__n += 1` を落とす）で2件が不一致になることも確認した。
+  **いちばん重い出来事: 自分で不健全性を1つ入れて、error fixture が捕まえた。**
+  `type-error-argument.ja`（stack を int 仮引数へ）を **proved＝安全と証明**していた。
+  仮引数の形の検査が `tuple` と比べていて `_Stack` がすり抜けたため。同じ根で
+  `type-error-swap`（模型が壊れて `model-error`）と `type-error-{empty,size,top}`
+  （`unsupported` 扱い）も出た。**5件とも実行時の型エラーなので正しくは ERR** で、
+  式の文脈では「常に偽の義務」で落とすようにした。
+  **error fixture の検出 23 → 29 本、`proved` と `model-error` は 0 本。**
+  キューが「error fixture を毎回測れ」と決めていなければ全部見逃していた。
+  副産物: **報告が ERR と BOUND を潰していた**。9回 push は ERR proved・BOUND refuted
+  なのに、最弱を取る `Result.status` が `refuted` と言っていた（誤った告発）。
+  `status_of` を足し、走査に `bound` 分類を入れた。
+  **差分ゲートが `assert` の削除2行を検出した**が、いずれも「stack はまだ拒否される」
+  という**未実装のピン**を、実装後の両方向の固定に置き換えたもの（`test_smv.py` と
+  `test_smv_localstruct.py`）。緩めていない。
+  次は項目40（被覆率と決定率。**着手前に予測を書く**）。
