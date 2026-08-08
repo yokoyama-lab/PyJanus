@@ -33,6 +33,26 @@ if [ -n "$UNFINISHED" ]; then
   exit 1
 fi
 
+# 0b. Repo-wide: no theorem quietly outside the audit.
+#
+#     Step 0 catches an unfinished proof in a file nobody listed here; this
+#     catches a FINISHED proof nobody listed here, which `Print Assumptions`
+#     then never looks at. The rule "register a new headline theorem" was kept
+#     by discipline alone, and a rule kept that way fails silently on the day
+#     it is forgotten.
+#
+#     It is a ratchet, not a wall: the 125 theorems already outside the audit
+#     are recorded by name in `audit-coverage-baseline`, and this fails when
+#     something NEW joins them. Which of those 125 are headline results and
+#     which are scaffolding is a judgement about the development, not one this
+#     script may make.
+if command -v python3 >/dev/null 2>&1; then
+  # line 6 already `cd`s here, so the script sits in the current directory
+  python3 ./audit_coverage.py || exit 1
+else
+  echo "AUDIT: python3 が無いので登録漏れの検査を実行していません" >&2
+fi
+
 # 1. Build the whole development.
 "$ROCQ" makefile -f _CoqProject -o Makefile >/dev/null
 make -j2
