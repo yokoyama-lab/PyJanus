@@ -1343,7 +1343,11 @@ class _Compiler:
         env[decl.ident.name] = self._declare_struct(decl, env)
         continue
       if decl.typ.kind != "int":
-        raise SmvUnsupported(f"non-scalar declaration: {decl.ident.name}")
+        # Name the KIND, not just the variable: a blocker census cannot tell a
+        # stack from a bool from the variable's name, and "non-scalar" was
+        # covering both while the coverage notes read it as "stack".
+        raise SmvUnsupported(
+            f"non-scalar declaration ({decl.typ.kind}): {decl.ident.name}")
       if decl.dimensions:
         env[decl.ident.name] = self._declare_array(decl, env)
         continue
