@@ -219,8 +219,10 @@ procedure main()
 |---|---:|---|
 | `refuted` | 23 | 表明破れへ到達する初期ストアを提示 |
 | `proved` | 19 | 帰納的不変量で到達不能を証明 |
-| `unknown` | 13 | **全て120秒のタイムアウト**（IC3 が断念したものは1本も無い。§5.10） |
+| `unknown` | 13 | **全て120秒のタイムアウト**（この時点では IC3 の断念は0本。§5.10。stack が入った後は1本出た。§21） |
 | `unsupported` | 80 | 断片外（うち25本が stack、18本が `^=`） |
+
+> **⚠ この表は 2026-08-09 の stack 符号化（§20）より前の値である。** 現在の値は §21。
 | `parse-error` | 7 | 構文エラー（error fixture として想定内） |
 | `static-error` | 7 | `validate_program` が弾く（模型検査の対象外） |
 
@@ -1556,3 +1558,52 @@ nuXmv にかける（走らない変種は「小さくしたプログラム」�
 `stack_operations_c.ja` は断片に入り、判定は timeout。
 `hanoi_c.ja` は **compile-timeout**——再帰と stack が重なるとコンパイルが終わらない。
 被覆率と決定率の全体測定は項目40。
+
+
+## 21. stack を入れたあとの被覆率と決定率（2026-08-09・項目40）
+
+`tools/verify_corpus.py --init zero --timeout 120 --compile-limit 60`、examples 97本。
+
+| 判定 | §5（stack 前） | **いま** | 差 |
+|---|---:|---:|---:|
+| `unsupported` | 67 | **57** | **−10** |
+| `proved` | 20 | **26** | **+6** |
+| `unknown` | 16 の内数 13 | **16** | +3 |
+| `compile-timeout` | 1 | 2 | +1 |
+| **`refuted`** | **0** | **0** | **誤検出ゼロを維持** |
+
+### 21.1 新たに断片へ入った10本
+
+| プログラム | 判定 | 備考 |
+|---|---|---|
+| `stack_uncall_c.ja` | **proved（2 invariants＝無条件）** | stack を使う実物で最初に通ったもの |
+| `run_length_enc_stack_c.ja` | **proved（2 invariants）** | stack 版の run-length 圧縮 |
+| `gcd_g.ja` | **proved（2 invariants）** | 商を stack に積む可逆 Euclid |
+| `perm_to_code_c.ja` | proved | `size(配列)` が扱えるようになった分（§20.3 の修正） |
+| `array_element_arg_c.ja` / `sort_network_c.ja` | proved | 項目34（セル参照渡し）の分 |
+| `modexp_g.ja` / `stack_operations_c.ja` | unknown（timeout） | 断片には入った |
+| `ext_gcd_g.ja` | unknown（**IC3 が断念**） | §5.10 で「断念は0本」と書いた状況が変わった |
+| `hanoi_c.ja` | compile-timeout | 再帰と stack が重なると展開が終わらない |
+
+**深さ 8 で足りている。** `bound`（上限の内側でだけ証明できた）は **0 本**——
+proved になった stack プログラムは3本とも `pc != BOUND` まで証明できており、
+**上限つきの条件つき結果ではなく無条件**である。
+
+### 21.2 予測と実測（着手前に commit 9ade339 で凍結した）
+
+| | 予測 | 実測 | |
+|---|---:|---:|---|
+| 断片に入る | 12 | **10** | 近い |
+| compile-timeout | 5 | **1**（新規分） | 外した |
+| 決着する | 3 | **6**（全て proved） | **良い方向に外した** |
+| 無条件（`pc != BOUND` も） | 1〜2 | **3** | 良い方向に外した |
+
+**5回連続で予測を外した**（項目29・34・35・36・40）。ただし今回は**実測の方が良い**。
+外れの向きが揃っていないので、「見積りが甘い」でも「辛い」でもなく、
+**単に見積りが当たらない**というのが5回の結論である。
+
+### 21.3 深さ `D` を上げると決定率は下がる（予測どおり）
+
+`_STACK_DEPTH` は既定 8。`bound` が 0 本なので**上げる理由がない**——
+上げれば状態が増えて決定率が下がるだけである。上げるべきなのは
+`bound` が出たときで、そのときは「その1本のために全体を遅くしてよいか」を判断する。
