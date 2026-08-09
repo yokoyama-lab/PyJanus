@@ -664,8 +664,13 @@ class Runtime:
         if not stack_cell.writable:
           raise JanaError(stmt.pos, "Updating constant", contextual=True)
         stack_cell.value.insert(0, value)
-        if isinstance(stmt.expr, LvalExpr):
-          self._resolve_lval(frame, stmt.expr.lval).value = 0
+        # `push` moves the value out of its source, so the source must be a
+        # place -- the mirror of the `pop` check below.  Accepting `push(1, s)`
+        # here while rejecting its inverse `pop(1, s)` there left the language
+        # not closed under inversion, and the C++ back-end emitted `1 = 0;`.
+        if not isinstance(stmt.expr, LvalExpr):
+          raise JanaError(stmt.pos, "Only l-values are supported for push")
+        self._resolve_lval(frame, stmt.expr.lval).value = 0
         if record_stmt and self._is_recordable_stmt(stmt):
           self.executed_stmts.append((stmt.pos.line, stmt))
         return
