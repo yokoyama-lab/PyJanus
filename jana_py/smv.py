@@ -736,10 +736,24 @@ class _Compiler:
         left = self._iexpr(e.left, env, obl)
         right = self._iexpr(e.right, env, obl)
         return f"({left} {_COMPARE[e.op]} {right})"
+      # Janus short-circuits, measured: `!empty(s) && top(s) = 1` runs on an
+      # empty stack and `a = 0 || b / a > 1` runs with `a = 0`.  So the RIGHT
+      # operand's obligations hold only when it is evaluated; emitting them
+      # unconditionally reported `run_length_enc_stack_c.ja` -- which runs --
+      # as `refuted`.  The bug predates stacks: any division on the right of a
+      # short-circuit had it, with no corpus program to expose it.
       if e.op is BinOpKind.LAND:
-        return f"({self._bexpr(e.left, env, obl)} & {self._bexpr(e.right, env, obl)})"
+        left = self._bexpr(e.left, env, obl)
+        right_obl: list[str] = []
+        right = self._bexpr(e.right, env, right_obl)
+        obl.extend(f"(!({left}) | ({o}))" for o in right_obl)
+        return f"({left} & {right})"
       if e.op is BinOpKind.LOR:
-        return f"({self._bexpr(e.left, env, obl)} | {self._bexpr(e.right, env, obl)})"
+        left = self._bexpr(e.left, env, obl)
+        right_obl = []
+        right = self._bexpr(e.right, env, right_obl)
+        obl.extend(f"(({left}) | ({o}))" for o in right_obl)
+        return f"({left} | {right})"
     if isinstance(e, EmptyExpr):
       # `if !empty(s)` is how the corpus branches on a stack (`reverse`).  It is
       # boolean here and an integer in `_iexpr`; Janus lets it be both, so both

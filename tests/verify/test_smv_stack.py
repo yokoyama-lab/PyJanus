@@ -216,6 +216,30 @@ procedure main()
     n += size(a)
 """
 
+SHORT_CIRCUIT_OR = """
+procedure main()
+    stack s
+    int x
+    if empty(s) || top(s) = 1 then
+        x += 1
+    else
+        skip
+    fi x = 1
+"""
+
+SHORT_CIRCUIT_DIV = """
+procedure main()
+    int a
+    int b
+    int x
+    b += 6
+    if a = 0 || b / a > 1 then
+        x += 1
+    else
+        skip
+    fi x = 1
+"""
+
 LOCAL_STACK = """
 procedure main()
     stack s
@@ -251,6 +275,27 @@ class Encoding(unittest.TestCase):
     self.assertIn("n = 4", out)
     self.assertFalse(has_err_edge(model_of(SIZE_OF_AN_ARRAY)),
                      "an array's size is not an error")
+
+  def test_a_short_circuited_obligation_is_conditional(self):
+    """Janus short-circuits, so the right operand's obligations only hold when
+    it is evaluated.
+
+    Emitting them unconditionally called `run_length_enc_stack_c.ja` refuted —
+    a program that runs — because its loop ends with
+    `until empty(text) || top(text) != val`. The bug predates stacks: the same
+    applies to a division on the right, which no corpus program exercised.
+    """
+    for name, src in [("top", SHORT_CIRCUIT_OR), ("division", SHORT_CIRCUIT_DIV)]:
+      with self.subTest(name):
+        rc, out = run(src)
+        self.assertEqual(rc, 0, out)
+        if not nuxmv.find_nuxmv():
+          continue
+        # Reachability, not the presence of an edge: a guarded obligation still
+        # draws one. (Made this mistake twice now -- item 34 and here.)
+        res = nuxmv.check(model_of(src), timeout=120)
+        self.assertEqual(res.status_of("pc != 0"), "proved",
+                         "the interpreter never evaluates the right operand here")
 
   def test_the_three_runtime_errors_are_err_edges(self):
     """ERR means the program fails. Measured in §19: popping empty, popping
