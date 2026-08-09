@@ -209,6 +209,13 @@ procedure main()
     int x
 """ + "    x += 1\n    push(x, s)\n" * 9
 
+SIZE_OF_AN_ARRAY = """
+procedure main()
+    int a[4]
+    int n
+    n += size(a)
+"""
+
 LOCAL_STACK = """
 procedure main()
     stack s
@@ -231,6 +238,19 @@ class Encoding(unittest.TestCase):
                       ("two formals", TWO_FORMALS_ONE_STACK), ("local", LOCAL_STACK)]:
       with self.subTest(name):
         self.assertTrue(compiles(src))
+
+  def test_size_still_works_on_an_array(self):
+    """`size` is polymorphic — PyJanus takes an array as well as a stack.
+
+    Making every stack expression an error on a non-stack turned
+    `perm_to_code_c.ja`, which runs, into `refuted`. The corpus scan found it;
+    nothing smaller would have.
+    """
+    rc, out = run(SIZE_OF_AN_ARRAY)
+    self.assertEqual(rc, 0, out)
+    self.assertIn("n = 4", out)
+    self.assertFalse(has_err_edge(model_of(SIZE_OF_AN_ARRAY)),
+                     "an array's size is not an error")
 
   def test_the_three_runtime_errors_are_err_edges(self):
     """ERR means the program fails. Measured in §19: popping empty, popping
