@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 from jana_py.parser_jana2014 import parse_program        # noqa: E402
 from jana_py.validate import validate_program            # noqa: E402
 from jana_py.c_codegen import format_program             # noqa: E402
+from jana_py.errors import JanaError                     # noqa: E402
 
 
 def gen(src: str) -> str:
@@ -105,6 +106,57 @@ class CodegenNameTests(unittest.TestCase):
     ok, err = compiles(cpp)
     self.assertTrue(ok, err)
 
+  def test_primed_identifier_is_escaped(self) -> None:
+    # The lexer admits `'` in identifiers, so `inc'` is a legal Janus name; the
+    # generator used to copy it verbatim and emit `void inc'(int& x');`, where
+    # the `'` opens a C++ character literal.
+    cpp = gen("procedure inc'(int x')\n"
+              "    x' += 1\n"
+              "\n"
+              "procedure main()\n"
+              "    int a = 0\n"
+              "    call inc'(a)\n")
+    self.assertNotIn("'", cpp)
+    self.assertIn("inc_prime", cpp)
+    ok, err = compiles(cpp)
+    self.assertTrue(ok, err)
+
+  def test_escaping_two_names_apart_stays_injective(self) -> None:
+    # `x'` and `x_prime` are different Janus names and must stay different C++
+    # ones; a naive `'` -> `_prime` substitution collapses them.
+    cpp = gen("procedure main()\n"
+              "    int x'\n"
+              "    int x_prime\n"
+              "    x' += 1\n"
+              "    x_prime += 2\n")
+    ok, err = compiles(cpp)
+    self.assertTrue(ok, err)
+
+  def test_procedure_named_like_a_global_library_function(self) -> None:
+    # `<cstdlib>` declares `::div` at global scope, so an emitted global
+    # `void div(int&, int&)` made the call site ambiguous.  Which library names
+    # are visible at global scope is toolchain-dependent, so the defence is the
+    # namespace, not a list.
+    cpp = gen("procedure div(int x, int y)\n"
+              "    x += y\n"
+              "\n"
+              "procedure main()\n"
+              "    int a = 1\n"
+              "    int b = 2\n"
+              "    call div(a, b)\n")
+    self.assertIn("namespace jana_user {", cpp)
+    ok, err = compiles(cpp)
+    self.assertTrue(ok, err)
+
+  def test_every_user_name_is_emitted_inside_the_namespace(self) -> None:
+    cpp = gen("procedure main()\n"
+              "    int a\n"
+              "    a += 1\n")
+    body = cpp.split("namespace jana_user {", 1)[1]
+    tail = body.rsplit("}  // namespace jana_user", 1)[1]
+    # Nothing but the trampoline may live at global scope.
+    self.assertEqual(tail.strip(), "int main() { return jana_user::main(); }")
+
 
 class ValidatorTests(unittest.TestCase):
 
@@ -117,6 +169,54 @@ class ValidatorTests(unittest.TestCase):
           "    int a\n"
           "    a += 1\n")
     self.assertIn("missing", str(cm.exception))
+
+  # `push` moves its operand onto the stack and zeroes it, so the operand has to
+  # be a place.  The interpreter enforced this for `pop` only, which left the
+  # language not closed under inversion (`push(1, s)` ran, its inverse could
+  # not), and the back-end emitted `s.push_back(1); 1 = 0;`.  Pin all three
+  # layers: validator rejects, generator declines, and the literal form has a
+  # mechanical l-value rewrite that still works.
+
+  PUSH_LITERAL = ("procedure main()\n"
+                  "    stack s = nil\n"
+                  "    int m = 0\n"
+                  "    push(1, s)\n"
+                  "    pop(m, s)\n"
+                  "    m -= 1\n")
+
+  def test_push_of_a_non_lvalue_is_rejected(self) -> None:
+    with self.assertRaises(JanaError) as cm:
+      gen(self.PUSH_LITERAL)
+    self.assertIn("l-values are supported for push", str(cm.exception))
+
+  def test_pop_of_a_non_lvalue_is_rejected(self) -> None:
+    with self.assertRaises(JanaError) as cm:
+      gen("procedure main()\n"
+          "    stack s = nil\n"
+          "    int m = 1\n"
+          "    push(m, s)\n"
+          "    pop(0, s)\n")
+    self.assertIn("l-values are supported for pop", str(cm.exception))
+
+  def test_generator_declines_a_non_lvalue_push_without_the_validator(self) -> None:
+    # Defence in depth: a caller that skips validation must get a raise, not
+    # C++ containing `1 = 0;`.
+    program = parse_program("<test>", self.PUSH_LITERAL)
+    with self.assertRaises(ValueError) as cm:
+      format_program(None, program)
+    self.assertIn("l-values are supported for push", str(cm.exception))
+
+  def test_the_lvalue_rewrite_of_a_literal_push_is_accepted(self) -> None:
+    cpp = gen("procedure main()\n"
+              "    stack s = nil\n"
+              "    int m = 0\n"
+              "    local int t = 1\n"
+              "        push(t, s)\n"
+              "    delocal int t = 0\n"
+              "    pop(m, s)\n"
+              "    m -= 1\n")
+    ok, err = compiles(cpp)
+    self.assertTrue(ok, err)
 
 
 if __name__ == "__main__":

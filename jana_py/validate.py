@@ -6,9 +6,11 @@ from .ast import IfStmt
 from .ast import IterateStmt
 from .ast import LocalStmt
 from .ast import LvalExpr
+from .ast import PopStmt
 from .ast import Proc
 from .ast import ProcMain
 from .ast import Program
+from .ast import PushStmt
 from .ast import SourcePos
 from .ast import UncallStmt
 from .ast import ArrayExpr
@@ -99,6 +101,19 @@ def _validate_unique_bindings(bound: list[str], stmts: list, known_structs: set[
 
 def _validate_stmt_calls(stmts: list, known_procs: set[str] | None = None) -> None:
   for stmt in stmts:
+    if isinstance(stmt, (PushStmt, PopStmt)) and not isinstance(stmt.expr, LvalExpr):
+      # `push` moves the value out of its source and zeroes it; `pop` writes into
+      # it.  Both operands therefore have to be places, and jana2014 spells them
+      # as variables.  The interpreter enforces this for `pop` only, which makes
+      # the language not closed under inversion: `push(1, s)` would run, but its
+      # inverse `pop(1, s)` could not.  The C++ back-end, meanwhile, emitted
+      # `s.push_back(1); 1 = 0;`.  Reject the shape once, here, so all three
+      # layers agree.  The l-value form is a mechanical rewrite of the literal
+      # one -- `local int t = 1  push(t, s)  delocal int t = 0` -- so nothing is
+      # lost by requiring it.
+      kw = "push" if isinstance(stmt, PushStmt) else "pop"
+      raise JanaError(stmt.pos, f"Only l-values are supported for {kw}",
+                      [f"In statement:\n    {format_stmt(stmt, 0)}"], True)
     if isinstance(stmt, (CallStmt, UncallStmt)):
       if stmt.ident.name == "main":
         raise JanaError(stmt.pos, "It is not allowed to call the `main' procedure", [f"In statement:\n    {format_stmt(stmt, 0)}"], True)
