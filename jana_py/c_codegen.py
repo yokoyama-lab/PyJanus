@@ -88,6 +88,11 @@ template this thread_local throw true try typedef typeid typename union unsigned
 using virtual void volatile wchar_t while xor xor_eq
 """.split()) | {"main", "std", "NULL"}
 
+# The namespace every emitted user name lives in (see format_program).  It is a
+# reserved word for the same reason `std` is: the global trampoline names it.
+_NAMESPACE = "jana_user"
+_CPP_KEYWORDS = _CPP_KEYWORDS | {_NAMESPACE}
+
 # name -> escaped name, for the keyword collisions of the program being emitted
 _KW_RENAMES: dict[str, str] = {}
 
@@ -112,15 +117,54 @@ def _walk_names(node, out: set[str]) -> None:
     out.add(name)
 
 
+def _is_cpp_ident(name: str) -> bool:
+  """Whether `name` can be spelled verbatim as a C++ identifier."""
+  return bool(name) and not name[0].isdigit() and all(
+    c.isascii() and (c.isalnum() or c == "_") for c in name)
+
+
+def _mangle(name: str) -> str:
+  """A C++ identifier for a Janus identifier that is not one.
+
+  The lexer admits a prime (`parser_jana2014.py`: `[A-Za-z][A-Za-z0-9_']*`), so
+  `x'` is a language feature, not an accident -- but `void inc'(int& x')` is not
+  C++ at all (the `'` opens a character literal), so the diagnostic g++ gives is
+  far from the cause.  Map every character outside `[A-Za-z0-9_]` to an escape
+  and keep the mapping injective, so two distinct Janus names cannot collapse
+  onto one C++ name (`_u0027` is the generic form of `_prime`, hence the
+  doubling of a literal `_` before either -- `x_prime` and `x'` must differ).
+  """
+  out = []
+  for c in name:
+    if c.isascii() and (c.isalnum() or c == "_"):
+      out.append("__" if c == "_" else c)
+    elif c == "'":
+      out.append("_prime")
+    else:
+      out.append(f"_u{ord(c):04x}")
+  s = "".join(out)
+  if not s or s[0].isdigit():
+    s = "_" + s
+  return s
+
+
 def _resolve_keyword_renames(program: Program) -> None:
+  """Choose the C++ spelling of every Janus identifier that cannot keep its own.
+
+  Two reasons to rename: the name is a C++ keyword (`procedure delete`), or it
+  is not a C++ identifier at all (`inc'`).  Renaming is keyed on the *name*, so
+  one Janus name is one C++ symbol everywhere it appears (declaration, call,
+  inverse), and every candidate goes through the same freshness loop so a
+  rewritten name cannot collide with a name the program already uses.
+  """
   _KW_RENAMES.clear()
   used: set[str] = set()
   _walk_names(program.procs, used)
   _walk_names(program.main, used)
   _walk_names(program.struct_defs, used)
-  for name in sorted(n for n in used if n in _CPP_KEYWORDS):
-    cand = name + "_"
-    while cand in used or cand in _KW_RENAMES.values():
+  for name in sorted(n for n in used if n in _CPP_KEYWORDS or not _is_cpp_ident(n)):
+    cand = name + "_" if _is_cpp_ident(name) else _mangle(name)
+    while cand in used or cand in _KW_RENAMES.values() or cand in _CPP_KEYWORDS:
       cand += "_"
     _KW_RENAMES[name] = cand
 
@@ -195,6 +239,18 @@ def format_program(header: str | None, program: Program) -> str:
   if header:
     lines.append(f'#include "{header}"')
   lines.append("")
+  # Everything the program names lives in its own namespace.  `<cstdlib>` (pulled
+  # in transitively by `<iostream>`) declares `::div` at *global* scope, so an
+  # emitted `void div(int&, int&)` joins the same overload set and the call site
+  # becomes ambiguous.  A keyword list cannot defend against this: which library
+  # names are visible at global scope depends on the libstdc++/glibc version, so
+  # a program that compiles on one toolchain fails on the next.  Inside a
+  # namespace, unqualified lookup finds the user's name and stops -- no
+  # enumeration required, and the emitted names still read like the source.
+  # `main` is emitted inside it too, with a global trampoline: nothing else is
+  # allowed to leak out.
+  lines.append(f"namespace {_NAMESPACE} {{")
+  lines.append("")
   _resolve_keyword_renames(program)
   for sdef in program.struct_defs:
     lines.append(format_struct_def(sdef))
@@ -208,12 +264,16 @@ def format_program(header: str | None, program: Program) -> str:
   for proc in program.procs:
     varnames |= {p.ident.name for p in proc.params}
   pnames = {p.procname.name for p in program.procs}
+  # Freshness is checked against the *C++* spellings: after _resolve_keyword_
+  # renames, two Janus names may already share a prefix, and `inc'` must not
+  # yield the non-identifier `inc'_proc`.
+  taken = {_esc(n) for n in varnames | pnames}
   _PROC_RENAMES.clear()
   for proc in program.procs:
     n = proc.procname.name
     if n in varnames:
-      cand = n + "_proc"
-      while cand in varnames or cand in pnames or cand in _PROC_RENAMES.values():
+      cand = _esc(n) + "_proc"
+      while cand in taken or cand in _PROC_RENAMES.values():
         cand += "_"
       _PROC_RENAMES[n] = cand
 
@@ -243,6 +303,10 @@ def format_program(header: str | None, program: Program) -> str:
       lines.extend(format_stmt(stmt, 1, procs))
   lines.append("  return 1;")
   lines.append("}")
+  lines.append("")
+  lines.append(f"}}  // namespace {_NAMESPACE}")
+  lines.append("")
+  lines.append(f"int main() {{ return {_NAMESPACE}::main(); }}")
   return "\n".join(lines) + "\n"
 
 
@@ -345,6 +409,20 @@ def format_type(typ: Type) -> str:
   return C_TYPES[typ.int_type.value]
 
 
+def _require_lvalue(stmt, kw: str) -> None:
+  """Refuse a `push`/`pop` whose operand is not an l-value.
+
+  `push` moves the value out of its source and zeroes it, so the source must be
+  a place; `pop` writes into it.  The interpreter already rejects a non-l-value
+  `pop` ("Only l-values are supported for pop") and `validate_program` now
+  rejects both, so this is defence in depth for a caller that skipped
+  validation -- and it keeps the back-end's contract: decline loudly rather
+  than emit `1 = 0;` and let g++ report `lvalue required` somewhere else.
+  """
+  if not isinstance(stmt.expr, LvalExpr):
+    raise ValueError(f"Only l-values are supported for {kw}")
+
+
 def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list[str]:
   pad = "  " * indent
   if isinstance(stmt, AssignStmt):
@@ -436,10 +514,15 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
   if isinstance(stmt, UserErrorStmt):
     return [f'{pad}throw "{escape_cpp(stmt.message)}";']
   if isinstance(stmt, PushStmt):
-    # Janus push moves the value onto the stack and zeroes the source (reversible).
+    # Janus push moves the value onto the stack and zeroes the source (reversible),
+    # so the operand has to be an l-value: `push(1, s)` would emit `1 = 0;`.
+    # `validate_program` rejects that shape; decline here as well rather than
+    # emit C++ that does not compile (see the note on _require_lvalue).
+    _require_lvalue(stmt, "push")
     val = format_expr(stmt.expr)
     return [f"{pad}{_esc(stmt.ident.name)}.push_back({val}); {val} = 0;"]
   if isinstance(stmt, PopStmt):
+    _require_lvalue(stmt, "pop")
     val = format_expr(stmt.expr)
     return [f"{pad}{val} = {_esc(stmt.ident.name)}.back(); {_esc(stmt.ident.name)}.pop_back();"]
   raise ValueError(f"Unsupported statement {type(stmt).__name__}")
