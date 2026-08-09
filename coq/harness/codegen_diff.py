@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from jana_py.parser_jana2014 import parse_program
 from jana_py.validate import validate_program
+from jana_py.errors import JanaError
 from jana_py.runtime import Runtime
 from jana_py import c_codegen
 from jana_py.c_codegen import format_program
@@ -100,7 +101,13 @@ def _dig(value, path):
 def check(ja: str):
     src = Path(ja).read_text()
     program = parse_program(ja, src)
-    validate_program(program)
+    try:
+        validate_program(program)
+    except JanaError as e:
+        # The program is not valid Janus, so there is nothing to say about the
+        # back-end.  Report it under its own tag: letting it escape as a bare
+        # exception made `main()` print ERROR, which reads like a harness crash.
+        return ("INVALID", str(e).splitlines()[1].strip() if "\n" in str(e) else str(e))
     try:
         store = interp(program)
     except Exception as e:                       # interpreter rejects/raises

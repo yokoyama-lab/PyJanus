@@ -29,6 +29,26 @@ class Unsupported(Exception):
     pass
 
 
+def const_dims(dims, what):
+    """The declared extents of an array, or `Unsupported` if they are not all
+    literal constants.
+
+    `int A[] = {1, 2, 3}` parses with `dimensions == [None]` -- the length comes
+    from the initializer, not from a dimension expression -- and a computed
+    dimension gives a node with no `value`.  Both used to reach `int(d["value"])`
+    unguarded and escape as a raw `TypeError`, which turns "we did not check
+    this" into "this failed".  `codegen_diff.py`'s `_dims_of()` has had the right
+    shape of guard all along; this is the same test, raising the exception this
+    harness documents.
+    """
+    out = []
+    for d in dims or []:
+        if not isinstance(d, dict) or "value" not in d:
+            raise Unsupported(f"{what} with a non-constant dimension")
+        out.append(int(d["value"]))
+    return out
+
+
 def cli(args, ja):
     return subprocess.run(CLI + args + [ja], capture_output=True, text=True)
 
@@ -226,11 +246,9 @@ class T:
             if not dims:
                 cells.append(self.cantor_val([i]))
                 continue
-            if not all("value" in d for d in dims):
-                raise Unsupported("struct field with a non-constant dimension")
             tuples = [[]]
-            for d in dims:
-                tuples = [t + [k] for t in tuples for k in range(int(d["value"]))]
+            for n in const_dims(dims, "struct field"):
+                tuples = [t + [k] for t in tuples for k in range(n)]
             cells.extend(self.cantor_val([i] + t) for t in tuples)
         return cells
 
@@ -313,11 +331,9 @@ class T:
                 # multiple calls) reuse the same zeroed slots.  No enter/exit is emitted
                 # for the cells; they are internal scratch, not part of main's store.
                 dims = ed.get("dimensions") or xd.get("dimensions") or []
-                if not all("value" in d for d in dims):
-                    raise Unsupported("local array with non-constant dimension")
                 L = 1
-                for d in dims:
-                    L *= int(d["value"])
+                for n in const_dims(dims, "local array"):
+                    L *= n
                 self.arrlen[(sc, ed["ident"]["name"])] = L   # for size(A)
                 return self.seq(sc, s["body"])
             if ed["typ"].get("kind") == "struct" or xd["typ"].get("kind") == "struct":
@@ -382,6 +398,11 @@ class T:
             return f"(swap {self.target(sc, s['left'])} {self.target(sc, s['right'])})"
         if "ident" in s and "expr" in s and "args" not in s and "mod_op" not in s:   # push/pop(x, s)
             arr, top = self.stack_ids(sc, s["ident"]["name"])
+            # `push(1, s)` carries no `lval` key, and used to escape as a raw
+            # `KeyError`.  `validate_program` rejects the shape now, so this is
+            # defence in depth for an AST that reached us without validation.
+            if "lval" not in s["expr"]:
+                raise Unsupported("push/pop of a non-lvalue")
             lval = s["expr"]["lval"]
             inc = f"(asgn (ls {top}) add (c 1))"
             dec = f"(asgn (ls {top}) sub (c 1))"
@@ -416,7 +437,13 @@ class T:
 def translate(ja):
     r = cli(["-a"], ja)
     if r.returncode != 0:
-        raise Unsupported("parse failed")
+        # Parse *or* validation: keep the front end's own message, so a program
+        # rejected for, say, a non-l-value push is not reported as "parse failed".
+        # The CLI prints its diagnostic on stdout ("  message: ...").
+        why = next((ln.split("message:", 1)[1].strip()
+                    for ln in (r.stdout + r.stderr).splitlines() if "message:" in ln),
+                   "parse or validation failed")
+        raise Unsupported(f"front end rejected: {why}")
     ast = json.loads(r.stdout)
     if "main" not in ast:
         raise Unsupported("no main")
@@ -443,8 +470,8 @@ def translate(ja):
     for vd in ast["main"].get("vdecls", []):
         if vd["typ"]["kind"] != "stack" and vd.get("dimensions"):
             L = 1
-            for d in vd["dimensions"]:
-                L *= int(d["value"])
+            for n in const_dims(vd["dimensions"], "array"):
+                L *= n
             p.arrlen[("main", vd["ident"]["name"])] = L
 
     def calls_in(node):                                      # (callee, args) of every call
