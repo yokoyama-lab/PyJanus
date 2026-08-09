@@ -685,7 +685,14 @@ class _Compiler:
     if isinstance(e, LvalExpr):
       return self._read_lval(e.lval, env, obl)
     if isinstance(e, (TopExpr, SizeExpr, EmptyExpr)):
-      if not isinstance(env.get(e.ident.name), _Stack):
+      entry = env.get(e.ident.name)
+      if isinstance(e, SizeExpr) and isinstance(entry, tuple):
+        # `size` is the one that is polymorphic: PyJanus accepts an ARRAY as
+        # well as a stack ("Couldn't match expected type `array' or `stack'").
+        # Refusing it turned `perm_to_code_c.ja` — which runs — into `refuted`,
+        # a false alarm found by re-scanning the corpus.
+        return str(len(entry))
+      if not isinstance(entry, _Stack):
         # `top(x)` on a non-stack: PyJanus raises "Couldn't match expected type
         # `stack'" when it reaches the expression, so reaching it is the error.
         # An always-false obligation is how an *expression* reaches ERR.
