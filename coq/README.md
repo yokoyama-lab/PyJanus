@@ -289,6 +289,17 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   instance, funext on core Janus. Five mutants of `bex` (wrong `Seq` order,
   entry/exit guard swapped, atom direction, `Uncall` running backwards, loop
   stop test) all fail to prove.
+- `RevFrameBack.v` — the same invert-free backward semantics on the
+  **frame-stacked kernel** `RevFrame` (arrays with runtime aliasing, by-reference
+  procedures resolved at the caller's depth, frame locals, `from/loop/until`,
+  guarded `*=`/`/=`): `bex_invert : bex d s b a <-> exec d (invert s) b a`,
+  `fex_exec`, `bex_fex`, and `uncall_is_backward : exec d (Uncall p args) a b <->
+  bex (S d) (subst (rargs d args) (Γ p)) a b` — on the kernel that runs the whole
+  jana2014 corpus through `vjanus`, the syntactic inverter is exactly the
+  semantic reverse. Atoms backwards are the converse of their forward step;
+  the local reversibility of atoms enters only through `exec_rev` on atoms. Five
+  mutants (Seq order, call depth, `Uncall` direction, loop stop test, atom
+  direction) all fail to prove.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
@@ -892,6 +903,7 @@ core results) on each build.
 | Hence a refusal is informative (`None` at every fuel ⟹ no run) | `run_none_no_exec` | `RevFrame.v`, `RevExtractAr.v` | funext |
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | **The syntactic inverter is the semantic reverse** (invert-free `bex`) | `Back.bex_invert`, `Back.bex_fex`, `Back.uncall_is_backward` | `RevBack.v` | none (stack), funext (Janus) |
+| Same on the frame-stacked kernel | `RevFrameBack.bex_invert`, `RevFrameBack.uncall_is_backward` | `RevFrameBack.v` | funext |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
 | ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
 | The `&&`/`\|\|` check is syntactic, and needed | `and_needs_wf`, `bool_check_is_syntactic` | `RevLowerExpr.v` | none |
