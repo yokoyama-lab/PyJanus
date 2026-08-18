@@ -67,6 +67,8 @@ cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep RevLoopLemma
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevSteps RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
+Require Import RevBack.
+Module BkS := RevBack.Back RevStack.StackPrim.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
@@ -334,6 +336,17 @@ Print Assumptions RevExtSMod.i8_cell_swraps.
 Print Assumptions RevExtSMod.expr_wraps_mid_computation.
 Print Assumptions RevExtractSMod.Run8.run_sound.
 Print Assumptions RevExtractSMod.Run8.run_injective.
+(* invert-free backward semantics: the syntactic inverter is the semantic reverse *)
+Print Assumptions RevBack.JB.bex_invert.
+Print Assumptions RevBack.JB.fex_exec.
+Print Assumptions RevBack.JB.bex_fex.
+Print Assumptions RevBack.JB.uncall_is_backward.
+Print Assumptions RevBack.JB.bex_det.
+Print Assumptions BkS.bex_invert.
+Print Assumptions BkS.fex_exec.
+Print Assumptions BkS.bex_fex.
+Print Assumptions BkS.uncall_is_backward.
+Print Assumptions BkS.bex_det.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1 || true)"
