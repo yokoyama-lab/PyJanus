@@ -112,7 +112,7 @@ Two reversibility patterns recur in the library and are worth knowing:
 
 ## Analysis Tools
 
-PyJanus includes five research modules for studying reversible computation:
+PyJanus includes six research modules for studying reversible computation:
 
 ```bash
 # Synthesize a reversible gate network (CNOT, Toffoli, SWAP)
@@ -132,6 +132,7 @@ python3 -m jana_py.cli --inverse '{"x": 10}' program.ja
 | Equivalence check | `jana_py/equiv.py` | Verify two programs compute the same function |
 | Space profiler | `jana_py/pebble.py` | Track memory usage per step (Bennett's pebble game) |
 | Inverse interpreter | `jana_py/inverse.py` | Compute initial state from final state |
+| Partial evaluator | `jana_py/pe.py` | Specialise a procedure to static (preserved) parameters, Mogensen-style; includes the assertion-driven branch cutting (Mogensen 2011 §4) and exit-seeded loop unrolling used to study whether `spec` and `inv` commute |
 
 ## Example Fixtures
 
