@@ -67,7 +67,7 @@ cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep RevLoopLemma
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevSteps RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
-Require Import RevBack.
+Require Import RevBack RevFrameBack.
 Module BkS := RevBack.Back RevStack.StackPrim.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -347,6 +347,12 @@ Print Assumptions BkS.fex_exec.
 Print Assumptions BkS.bex_fex.
 Print Assumptions BkS.uncall_is_backward.
 Print Assumptions BkS.bex_det.
+(* the same, on the frame-stacked kernel (arrays, by-ref procedures, frame locals) *)
+Print Assumptions RevFrameBack.bex_invert.
+Print Assumptions RevFrameBack.fex_exec.
+Print Assumptions RevFrameBack.bex_fex.
+Print Assumptions RevFrameBack.uncall_is_backward.
+Print Assumptions RevFrameBack.bex_det.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1 || true)"
