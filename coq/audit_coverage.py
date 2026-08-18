@@ -59,6 +59,12 @@ def theorems() -> dict[tuple[str, str], set[str]]:
                 continue
             m = MODULE_OPEN.match(line)
             if m:
+                # `Module X := F Y.` is an alias/application closed on the same
+                # line: it opens no scope, so it must not be pushed -- otherwise
+                # every theorem after it is attributed to X and a Print
+                # Assumptions registered under the real module never matches.
+                if re.match(r"^\s*Module\s+[A-Za-z_][A-Za-z0-9_']*\s*:=", line):
+                    continue
                 stack.append(m.group(1))
                 continue
             m = re.match(r"^\s*Theorem\s+([A-Za-z_][A-Za-z0-9_']*)", line)
