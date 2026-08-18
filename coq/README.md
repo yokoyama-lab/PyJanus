@@ -270,6 +270,25 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   -inverse` additionally runs the verified `invert` (final store → initial
   store), output-compatible with PyJanus `--inverse` and differentially tested
   against it (`tests/jana2014/test_vjanus_inverse.py`). See `coq/vjanus/README.md`.
+- `RevBack.v` — an **invert-free backward semantics**. `RevLang` gives `uncall`
+  its meaning *by* the syntactic inverter (`E_Uncall : exec (invert (Γ p)) a b`),
+  so `exec_iff` relates a program to its inverse *inside one relation that
+  already mentions `invert`*. `RevBack.Back` defines, mutually, a forward
+  judgement `fex` and a backward judgement `bex` on the same syntax that never
+  mention `invert` or `pinv` (an atom backwards is the *converse* of `pstep`;
+  `Seq` undoes its second statement first; `If` reads the exit assertion first;
+  loops run their rounds in reverse; `Call` runs the body backwards and `Uncall`
+  forwards) and proves `bex_invert : bex s b a <-> exec (invert s) b a` — **the
+  syntactic inverter computes exactly the semantic reverse** (sound and
+  complete) — plus `fex_exec`, `bex_fex : bex s b a <-> fex s a b`
+  (reversibility with no syntax in the statement) and
+  `uncall_is_backward : exec (Uncall p) a b <-> bex (Γ p) a b`. This is the
+  two-interpreter formulation of Paolini–Piccolo–Roversi (TYPES 2015) and the
+  Yokoyama–Glück (PEPM 2007) reading of `uncall`, generic over every instance
+  of the framework; closed under the global context on the stack-machine
+  instance, funext on core Janus. Five mutants of `bex` (wrong `Seq` order,
+  entry/exit guard swapped, atom direction, `Uncall` running backwards, loop
+  stop test) all fail to prove.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
@@ -872,6 +891,7 @@ core results) on each build.
 | Array core: same | `RevExtractAr.run_complete` | `RevExtractAr.v` | funext |
 | Hence a refusal is informative (`None` at every fuel ⟹ no run) | `run_none_no_exec` | `RevFrame.v`, `RevExtractAr.v` | funext |
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
+| **The syntactic inverter is the semantic reverse** (invert-free `bex`) | `Back.bex_invert`, `Back.bex_fex`, `Back.uncall_is_backward` | `RevBack.v` | none (stack), funext (Janus) |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
 | ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
 | The `&&`/`\|\|` check is syntactic, and needed | `and_needs_wf`, `bool_check_is_syntactic` | `RevLowerExpr.v` | none |
