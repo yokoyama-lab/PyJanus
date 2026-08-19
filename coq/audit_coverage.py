@@ -74,7 +74,15 @@ def theorems() -> dict[tuple[str, str], set[str]]:
 
 
 def registered() -> tuple[dict[str, set[str]], set[str]]:
-    """(alias -> names printed under it, bare names printed unqualified)."""
+    """(alias -> names printed under it, names printed with no qualifier at all).
+
+    The second component must hold *only* the genuinely unqualified prints
+    (`Print Assumptions foo.`).  Putting every printed name in it makes the
+    check blind to the case it exists for: this development gives the same
+    theorem name to the same result on several kernels (`bex_invert` lives in
+    RevBack, RevFrameBack and RevArrBack), so a name-only test reports a brand
+    new file as audited the moment any other file audits that name.
+    """
     text = (HERE / "audit.sh").read_text(encoding="utf-8")
     aliases: dict[str, tuple[str, str]] = {}
     for line in text.splitlines():
@@ -97,7 +105,6 @@ def registered() -> tuple[dict[str, set[str]], set[str]]:
             # `File.name` or `File.Module.name`
             by_target.setdefault(f"{head}::{parts[1] if len(parts) > 2 else ''}",
                                  set()).add(name)
-        bare.add(name)
     return by_target, bare
 
 
@@ -133,6 +140,8 @@ def missing() -> list[tuple[str, str, str]]:
             if any(name in v for k, v in by_target.items()
                    if module and k.endswith(f"::{module}")):
                 continue
+            # only a genuinely unqualified `Print Assumptions name.` covers a
+            # top-level theorem it did not name by file (see registered())
             if not module and name in bare:
                 continue
             out.append((stem, module, name))
