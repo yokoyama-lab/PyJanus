@@ -132,7 +132,7 @@ python3 -m jana_py.cli --inverse '{"x": 10}' program.ja
 | Equivalence check | `jana_py/equiv.py` | Verify two programs compute the same function |
 | Space profiler | `jana_py/pebble.py` | Track memory usage per step (Bennett's pebble game) |
 | Inverse interpreter | `jana_py/inverse.py` | Compute initial state from final state |
-| Partial evaluator | `jana_py/pe.py` | Specialise a procedure to static (preserved) parameters, Mogensen-style; includes the assertion-driven branch cutting (Mogensen 2011 §4) and exit-seeded loop unrolling used to study whether `spec` and `inv` commute |
+| Partial evaluator | `jana_py/pe.py` | Specialise a procedure to static (preserved) parameters, Mogensen-style: assertion-driven branch cutting (local and global), polyvariant residual procedures, merging of adjacent assertions, exit-seeded loop unrolling, and feeding the discovered entry value back so the block disappears.  Divergence of an unrolling is detected by a repeated static store rather than a step budget |
 
 ## Example Fixtures
 
