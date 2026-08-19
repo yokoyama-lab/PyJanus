@@ -24,9 +24,34 @@ from .invert import invert_stmts
 POS = SourcePos("pe", 0, 0)
 class PEError(Exception): pass
 DUAL = set()
+RULE5 = False   # feed the discovered entry value back and re-specialise forwards
+EXIT_SEED_GENERAL = False
+
+class Diverges(PEError):
+    """Unrolling a static loop revisited a static store.
+
+    Sound because the exit condition of an unrolled loop reads static variables
+    only: an identical static store yields an identical exit decision, so the
+    loop can never terminate.  Complete whenever the static store takes finitely
+    many values along the unrolling; the fuel is the fallback for the rest.
+    """
+    pass
+
+
+class SeedEscaped(PEError):
+    """A seeded (dual) variable would be updated under dynamic control, so the
+    value carried in the static store would go stale."""
+    pass
+
 
 def T(v): return Boolean(True, POS)
 def num(v): return Number(int(v), POS)
+
+def _eq(a, b):
+    """`a == b` with a constant on the right, so both directions of the
+    specialiser build the same assertion text."""
+    if isinstance(a, Number) and not isinstance(b, Number): a, b = b, a
+    return BinExpr(BinOpKind.EQ, a, b, POS)
 
 def vars_of(e, acc=None):
     """Variables read by an expression."""
@@ -131,6 +156,7 @@ def pe(stmts, S, st, dctx=False, fuel=[10000]):
                 assign(st, s.lval, op)
                 if v in DUAL: out.append(replace(s, expr=num(x)))
             else:
+                if v in DUAL: raise SeedEscaped(v)
                 out.append(replace(s, lval=fold_lval(s.lval, S, st), expr=fold(s.expr, S, st)))
         elif isinstance(s, SwapStmt):
             l, r = s.left.ident.name, s.right.ident.name
@@ -138,6 +164,7 @@ def pe(stmts, S, st, dctx=False, fuel=[10000]):
                 a = evalx(LvalExpr(s.left, POS), st); b = evalx(LvalExpr(s.right, POS), st)
                 assign(st, s.left, lambda _: b); assign(st, s.right, lambda _: a)
             else:
+                if l in DUAL or r in DUAL: raise SeedEscaped(l if l in DUAL else r)
                 out.append(replace(s, left=fold_lval(s.left, S, st), right=fold_lval(s.right, S, st)))
         elif isinstance(s, IfStmt):
             if is_static_expr(s.entry_cond, S) and not dctx:
@@ -171,7 +198,11 @@ def pe(stmts, S, st, dctx=False, fuel=[10000]):
         elif isinstance(s, FromStmt):
             if is_static_expr(s.exit_cond, S) and not dctx:
                 first = True
+                seen = set()
                 while True:
+                    key = _snapshot(S, st)
+                    if key in seen: raise Diverges(f"loop@{s.pos.line}")
+                    seen.add(key)
                     out += assert_stmt(s.entry_cond, first, S, st); first = False
                     out += pe(s.do_part, S, st, dctx, fuel)
                     if bool(evalx(s.exit_cond, st)): break
@@ -187,20 +218,25 @@ def pe(stmts, S, st, dctx=False, fuel=[10000]):
                 if is_static_expr(s.exit_decl.init_expr, S):
                     if evalx(s.exit_decl.init_expr, st) != st[v]: raise PEError("static delocal mismatch")
                 else:
-                    out.append(AssertStmt(BinExpr(BinOpKind.EQ, num(st[v]), fold(s.exit_decl.init_expr, S, st), POS), POS))
+                    out.append(AssertStmt(_eq(num(st[v]), fold(s.exit_decl.init_expr, S, st)), POS))
                 del st[v]
             else:
                 ed = replace(s.enter_decl, init_expr=fold(s.enter_decl.init_expr, S, st) if s.enter_decl.init_expr is not None else None)
                 xd = replace(s.exit_decl, init_expr=fold(s.exit_decl.init_expr, S, st) if s.exit_decl.init_expr is not None else None)
-                body = exit_seeded(s, S, st, dctx, fuel) if EXIT_SEED else None
-                if body is None: body = pe(s.body, S, st, dctx, fuel)
-                out.append(LocalStmt(ed, body, xd, s.pos))
+                res = exit_seeded(s, S, st, dctx, fuel) if EXIT_SEED else None
+                if res is not None and res[0] == "replace":
+                    out += res[1]                      # rule (v): the block is gone
+                else:
+                    body = res[1] if res is not None else pe(s.body, S, st, dctx, fuel)
+                    out.append(LocalStmt(ed, body, xd, s.pos))
         elif isinstance(s, IterateStmt):
             v = s.ident.name
             bounds_static = all(is_static_expr(e, S) for e in (s.start_expr, s.step_expr, s.end_expr))
             if bounds_static and not dctx and v in S:
                 a, d, b = evalx(s.start_expr, st), evalx(s.step_expr, st), evalx(s.end_expr, st)
                 if d == 0: raise PEError("zero step")
+                if (a > b if d > 0 else a < b) if not s.exclusive else (a >= b if d > 0 else a <= b):
+                    raise PEError("static iterate range empty (PyJanus fails on it)")
                 if (a > b if d > 0 else a < b) if not s.exclusive else (a >= b if d > 0 else a <= b):
                     raise PEError("static iterate range empty (PyJanus fails on it)")
                 cur = a
@@ -355,31 +391,113 @@ def prune(stmts):
 EXIT_SEED = False
 
 def exit_seeded(s, S, st, dctx, fuel):
-    """`local v = <dyn> ; ...; from c1 do A loop B until c2 ; delocal v = <static e>`
-    where the loop is the last statement of the local body and it is not unrollable
-    forward: seed v := e at the exit, unroll the *inverse* loop from that seed
-    (it is now static), and invert the unrolled code back.  Returns the new body
-    or None when the pattern does not apply."""
-    if dctx or not s.body or not isinstance(s.body[-1], FromStmt): return None
-    loop = s.body[-1]; v = s.enter_decl.ident.name
+    """Rule (ii): the first inversion projection applied inside one block.
+
+    For `local v = <dyn> BODY delocal v = <static e>` whose BODY contains a loop
+    that cannot be unrolled forwards, seed v with the delocal value e and
+    specialise the *inverse* of the relevant code from that seed, then invert the
+    residual back.  v is dual: its value drives specialisation and its updates are
+    still emitted, so the residual moves v from its entry value to e.  An
+    assertion pins the entry value.
+
+    Two forms:
+      narrow  (default) --- the loop is the last statement of the block; the
+              prefix is specialised forwards first and only the loop is seeded;
+      general (EXIT_SEED_GENERAL) --- the whole block body is inverted and
+              specialised from the seed, so a prefix, a suffix and several loops
+              are all covered.
+
+    Soundness conditions.  The seed is the store at the exit of the seeded region,
+    so that region must not modify any *other* static variable (its entry value
+    would be used where the exit value is meant).  And a seeded variable must
+    never be updated under dynamic control (`SeedEscaped`), because a residualised
+    construct leaves the carried value stale.
+
+    Returns the new body, or None when the pattern does not apply or when the
+    backward route removes no loop (so the rule never makes a residual worse).
+    """
+    if dctx or not s.body: return None
+    v = s.enter_decl.ident.name
     if s.exit_decl.init_expr is None or not is_static_expr(s.exit_decl.init_expr, S): return None
-    if is_static_expr(loop.exit_cond, S): return None            # forward already unrolls it
+    if not _has_unrollable_gap(s.body, S): return None       # forward already does the job
     Sx = S | {v}
-    if not is_static_expr(loop.entry_cond, Sx): return None      # inverse loop must be unrollable with v static
-    stx = copy.deepcopy(st); seed = stx[v] = evalx(s.exit_decl.init_expr, st)
-    inv_loop = invert_stmts([loop], global_mode=False)
     global DUAL
-    saved = DUAL; DUAL = DUAL | {v}
+    saved = DUAL
+
+    if EXIT_SEED_GENERAL:
+        if _assigned(s.body, set()) & S: return None
+        st_seed, prefix, region = copy.deepcopy(st), [], s.body
+    else:
+        if not isinstance(s.body[-1], FromStmt): return None
+        loop = s.body[-1]
+        if not is_static_expr(loop.entry_cond, Sx): return None   # the inverse loop must unroll
+        if _assigned([loop], set()) & S: return None
+        st_work = copy.deepcopy(st)
+        try:
+            prefix = pe(s.body[:-1], S, st_work, dctx, fuel)      # prefix first: it moves the store
+        except PEError:
+            return None
+        st_seed, region = st_work, [loop]
+
     try:
-        unrolled = pe(inv_loop, Sx, stx, False, [2000])   # own fuel: a bad seed must not kill the outer PE
+        st_seed[v] = evalx(s.exit_decl.init_expr, st) if EXIT_SEED_GENERAL else evalx(s.exit_decl.init_expr, st_seed)
+    except PEError:
+        return None
+    DUAL = DUAL | {v}
+    try:
+        residual_inv = pe(invert_stmts(region, global_mode=False), Sx, st_seed, False, [4000])
     except PEError:
         return None
     finally:
         DUAL = saved
-    entry_val = stx[v]                       # value of v at the entry of the original loop
-    prefix = pe(s.body[:-1], S, st, dctx, fuel)
+    seeded = prefix + invert_stmts(residual_inv, global_mode=False)
+    try:
+        plain = pe(s.body, S, copy.deepcopy(st), dctx, [4000])
+    except PEError:
+        plain = None
+    if plain is not None and _residual_loops(seeded) >= _residual_loops(plain):
+        return None
+    entry_val = st_seed[v]
     lv = LvalExpr(Lval(Ident(v, POS), []), POS)
-    return prefix + [AssertStmt(BinExpr(BinOpKind.EQ, lv, num(entry_val), POS), POS)] + invert_stmts(unrolled, global_mode=False)
+
+    # Rule (v): the backward pass has *discovered* the entry value of v.  Feed it
+    # back as a binding time and specialise the block forwards in the ordinary
+    # way; the block then disappears, and the residual has the same shape the
+    # forward direction produces.  The guard states the discovered value in terms
+    # of the block's initialiser, so v does not occur in the result.
+    if RULE5 and not (_assigned(s.body, set()) & S) and s.enter_decl.init_expr is not None:
+        st2 = copy.deepcopy(st); st2[v] = entry_val
+        try:
+            fwd = pe(s.body, S | {v}, st2, dctx, [4000])
+            if evalx(s.exit_decl.init_expr, st2) != st2[v]:
+                raise PEError("delocal mismatch after re-forward specialisation")
+        except PEError:
+            fwd = None
+        if fwd is not None and not _mentions(fwd, v):
+            try:
+                guard5 = assert_stmt(_eq(s.enter_decl.init_expr, num(entry_val)), True, S, st)
+            except PEError:
+                guard5 = None
+            if guard5 is not None:
+                return ("replace", guard5 + fwd)
+
+    seeded = invert_stmts(residual_inv, global_mode=False)
+
+    # Rule (v), seeded case: the unrolling knew v at every point, so v survives in
+    # the residual only as its own updates.  If nothing reads it, drop those
+    # updates and the block; the wrapper was only there to carry the counter.
+    if RULE5 and not prefix and not _reads(seeded, v):
+        stripped = _drop_updates(seeded, v)
+        if stripped is not None and s.enter_decl.init_expr is not None:
+            try:
+                guard5 = assert_stmt(_eq(s.enter_decl.init_expr, num(entry_val)), True, S, st)
+            except PEError:
+                guard5 = None                      # the seed contradicts a static initialiser
+            if guard5 is not None:
+                return ("replace", guard5 + stripped)
+
+    guard = [AssertStmt(_eq(lv, num(entry_val)), POS)]
+    return ("body", (prefix + guard + seeded) if not EXIT_SEED_GENERAL else (guard + seeded))
 
 
 def _search(proc, S, static_vals, prefix=(), depth=0):
@@ -406,15 +524,17 @@ def _search(proc, S, static_vals, prefix=(), depth=0):
         raise PEError("no consistent decision sequence")
 
 
-def specialize_with(proc, static_vals, *, cut_paths=True, global_cut=True, exit_seed=True):
+def specialize_with(proc, static_vals, *, cut_paths=True, global_cut=True, exit_seed=True,
+                    feed_back=False, seed_whole_block=False):
     """Convenience wrapper: set the rule flags for one call and restore them."""
-    global RULE3, RULE4, EXIT_SEED
-    saved = (RULE3, RULE4, EXIT_SEED)
-    RULE3, RULE4, EXIT_SEED = cut_paths, global_cut, exit_seed
+    global RULE3, RULE4, RULE5, EXIT_SEED, EXIT_SEED_GENERAL
+    saved = (RULE3, RULE4, RULE5, EXIT_SEED, EXIT_SEED_GENERAL)
+    RULE3, RULE4, RULE5, EXIT_SEED, EXIT_SEED_GENERAL = \
+        cut_paths, global_cut, feed_back, exit_seed, seed_whole_block
     try:
         return specialize(proc, static_vals)
     finally:
-        RULE3, RULE4, EXIT_SEED = saved
+        RULE3, RULE4, RULE5, EXIT_SEED, EXIT_SEED_GENERAL = saved
 
 
 # ---- Mogensen Part 2, sec. 4 (end): merge adjacent dynamic assertions ----
@@ -686,3 +806,105 @@ def specialize_program(proc, static_vals, procs, *, cut_paths=True, global_cut=T
         residual = Proc(residual.procname, residual.params, combine_asserts(residual.body))
         residual_procs = [Proc(p.procname, p.params, combine_asserts(p.body)) for p in residual_procs]
     return residual, residual_procs, S
+
+
+def _snapshot(S, st):
+    """Hashable image of what drives specialisation: the static part of the store
+    together with the speculative-decision counter of rule (iv).  Leaving the
+    counter out makes the divergence test unsound in the presence of rule (iv):
+    two iterations with the same static store may take different branches."""
+    def h(v):
+        return tuple(h(x) for x in v) if isinstance(v, list) else v
+    return (CHOICE[0],) + tuple(sorted((k, h(st[k])) for k in S if k in st))
+
+DUAL = set()   # variables treated as static for evaluation whose updates are also emitted (rule ii)
+
+def _assigned(stmts, acc):
+    """Variables that these statements can modify."""
+    for x in stmts:
+        if isinstance(x, AssignStmt): acc.add(x.lval.ident.name)
+        elif isinstance(x, SwapStmt): acc.add(x.left.ident.name); acc.add(x.right.ident.name)
+        elif isinstance(x, (CallStmt, UncallStmt)):
+            for a in x.args:
+                if isinstance(a, LvalExpr): acc.add(a.lval.ident.name)
+        elif isinstance(x, (PushStmt, PopStmt)): acc.add(x.ident.name)
+        elif isinstance(x, IterateStmt): acc.add(x.ident.name)
+        for name in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, name): _assigned(getattr(x, name), acc)
+    return acc
+
+def _mentions(stmts, name):
+    """Whether these statements read or write the variable `name`."""
+    for x in stmts:
+        for attr in ("expr", "entry_cond", "exit_cond", "start_expr", "step_expr", "end_expr"):
+            e = getattr(x, attr, None)
+            if e is not None and not isinstance(e, list) and name in vars_of(e): return True
+        for attr in ("lval", "left", "right"):
+            lv = getattr(x, attr, None)
+            if lv is not None and getattr(lv, "ident", None) is not None and lv.ident.name == name: return True
+        for attr in ("ident",):
+            idt = getattr(x, attr, None)
+            if idt is not None and getattr(idt, "name", None) == name: return True
+        for a in getattr(x, "args", []) or []:
+            if name in vars_of(a): return True
+        for d in ("enter_decl", "exit_decl", "decl"):
+            dd = getattr(x, d, None)
+            if dd is not None:
+                if dd.ident.name == name: return True
+                if dd.init_expr is not None and name in vars_of(dd.init_expr): return True
+        for nm in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, nm) and _mentions(getattr(x, nm), name): return True
+    return False
+
+def _reads(stmts, name):
+    """Whether these statements *read* `name` (as opposed to only assigning it)."""
+    for x in stmts:
+        for attr in ("expr", "entry_cond", "exit_cond", "start_expr", "step_expr", "end_expr"):
+            e = getattr(x, attr, None)
+            if e is not None and not isinstance(e, list) and name in vars_of(e): return True
+        for attr in ("lval", "left", "right"):
+            lv = getattr(x, attr, None)
+            if lv is not None and getattr(lv, "ident", None) is not None:
+                if any(name in vars_of(i) for i in lv.indices): return True
+        for a in getattr(x, "args", []) or []:
+            if name in vars_of(a): return True
+        for d in ("enter_decl", "exit_decl", "decl"):
+            dd = getattr(x, d, None)
+            if dd is not None and dd.init_expr is not None and name in vars_of(dd.init_expr): return True
+        for nm in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, nm) and _reads(getattr(x, nm), name): return True
+    return False
+
+def _drop_updates(stmts, name):
+    """Remove assignments to `name`.  Sound only where every such assignment sits
+    at an unrolled (statically controlled) position, which `SeedEscaped`
+    guarantees for a seeded variable."""
+    out = []
+    for x in stmts:
+        if isinstance(x, AssignStmt) and not x.lval.selectors and x.lval.ident.name == name: continue
+        if isinstance(x, SwapStmt) and name in (x.left.ident.name, x.right.ident.name): return None
+        new = x
+        for nm in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, nm):
+                sub = _drop_updates(getattr(x, nm), name)
+                if sub is None: return None
+                new = replace(new, **{nm: sub})
+        out.append(new)
+    return out
+
+def _residual_loops(stmts):
+    """Number of `from` loops left in a residual."""
+    n = 0
+    for x in stmts:
+        if isinstance(x, FromStmt): n += 1
+        for name in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, name): n += _residual_loops(getattr(x, name))
+    return n
+
+def _has_unrollable_gap(stmts, S):
+    """Some loop in these statements cannot be unrolled forwards."""
+    for x in stmts:
+        if isinstance(x, FromStmt) and not is_static_expr(x.exit_cond, S): return True
+        for name in ("body", "if_part", "else_part", "do_part", "loop_part"):
+            if hasattr(x, name) and _has_unrollable_gap(getattr(x, name), S): return True
+    return False

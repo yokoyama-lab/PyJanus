@@ -243,3 +243,32 @@ def test_polyvariant_preserves_semantics(fname, pname, sv, K):
         out_orig = run_proc(prog, prog.procs, P, st, K=K)
         out_poly = run_proc(prog, procs_poly, residual, st, K=K)
         assert out_orig == out_poly, (st, out_orig, out_poly)
+
+
+def test_feed_back_eliminates_the_block():
+    """Rule (v): once the backward seeding has discovered the entry value of the
+    block variable, the block disappears and the two residuals coincide."""
+    from jana_py.ast import LocalStmt
+    prog = load("next_permutation_g.ja")
+    P = next(p for p in prog.procs if p.procname.name == "find_pivot")
+    sv = CASES[0][2]
+    rules = dict(cut_paths=True, global_cut=True, exit_seed=True)
+    peP, _ = PE.specialize_with(P, sv, feed_back=True, **rules)
+    inv_peP = Proc(P.procname, P.params, invert_stmts(peP.body, True))
+    pe_invP, _ = PE.specialize_with(invert_proc_globally(P), sv, feed_back=True, **rules)
+    assert not any(isinstance(s, LocalStmt) for s in pe_invP.body)
+    assert FMT.format_proc(inv_peP) == FMT.format_proc(pe_invP)
+    # without feed_back the block survives, so the test is not vacuous
+    without, _ = PE.specialize_with(invert_proc_globally(P), sv, feed_back=False, **rules)
+    assert any(isinstance(s, LocalStmt) for s in without.body)
+
+
+def test_divergence_key_includes_the_decision_counter():
+    """Cycle detection must not fire on a loop that terminates only because a
+    speculative decision (rule (iv)) advances; the decision counter is part of
+    the key.  `decreasekey` exercises the combination."""
+    prog = load("binary_heap_g.ja")
+    P = next(p for p in prog.procs if p.procname.name == "decreasekey")
+    res, _ = PE.specialize_with(P, {"i": 2, "key": 3}, cut_paths=True, global_cut=True,
+                                exit_seed=True, feed_back=True)
+    assert PE.count(res.body) > 0
