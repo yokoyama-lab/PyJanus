@@ -67,7 +67,8 @@ cat > "$AUDIT" <<'EOF'
 Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmallStep RevLoopLemma
                RevDenote RevFix RevInverse RevCat RevTrace RevSMC RevTraced RevCtrl RevJoin RevCompile RevSemantics RevSteps RevError RevPPR RevBennett.
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
-Require Import RevBack RevFrameBack.
+Require Import RevBack RevFrameBack RevArrBack.
+Require Import RevExtractP RevLevel1.
 Module BkS := RevBack.Back RevStack.StackPrim.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -353,6 +354,16 @@ Print Assumptions RevFrameBack.fex_exec.
 Print Assumptions RevFrameBack.bex_fex.
 Print Assumptions RevFrameBack.uncall_is_backward.
 Print Assumptions RevFrameBack.bex_det.
+(* these two were reported as audited only because another file audits a theorem
+   of the same name; the coverage check no longer accepts that (audit_coverage.py) *)
+Print Assumptions RevExtractP.run_sound.
+Print Assumptions RevLevel1.run_injective.
+(* and on the flat-local array kernel, whose Swap is its own inverse *)
+Print Assumptions RevArrBack.bex_invert.
+Print Assumptions RevArrBack.fex_exec.
+Print Assumptions RevArrBack.bex_fex.
+Print Assumptions RevArrBack.uncall_is_backward.
+Print Assumptions RevArrBack.bex_det.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1 || true)"
