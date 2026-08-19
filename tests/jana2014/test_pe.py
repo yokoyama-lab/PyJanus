@@ -9,7 +9,10 @@ import json, os, random
 from dataclasses import replace
 import pytest
 from jana_py import pe as PE
-from jana_py.ast import Program, ProcMain, Proc, LvalExpr, Lval, Vdecl, DeclType, Number, ArrayExpr, SourcePos, CallStmt
+from jana_py.ast import (
+    Program, ProcMain, Proc, LvalExpr, Lval, Vdecl, DeclType, Number, ArrayExpr, SourcePos, CallStmt,
+    Ident, IfStmt, AssignStmt, ModOp, BinExpr, BinOpKind, AssertStmt, Type, IntType,
+)
 from jana_py.cli import parse_for_std
 from jana_py.preprocess import preprocess_text
 from jana_py.validate import validate_program
@@ -42,6 +45,21 @@ def run_proc(prog, procs, proc, state, K=6):
         args.append(LvalExpr(Lval(p.ident, []), POS))
     main = ProcMain(vds, [CallStmt(proc.procname, args, False, POS)], POS)
     rt = Runtime(Program(main, procs, prog.struct_defs), std="jana2014")
+    try:
+        rt.run()
+    except (JanaError, RecursionError, ZeroDivisionError):
+        return ("fail", None)
+    return ("ok", json.dumps({k: c.value for k, c in rt._root_frame.vars.items()}, sort_keys=True))
+
+def run_synth(proc, procs, state):
+    """Like run_proc, but for procedures built directly from ast constructors
+    (no fixture program / struct defs, scalar params only)."""
+    vds, args = [], []
+    for p in proc.params:
+        vds.append(Vdecl(DeclType.VARIABLE, p.typ, p.ident, [], init_expr(state[p.ident.name]), POS))
+        args.append(LvalExpr(Lval(p.ident, []), POS))
+    main = ProcMain(vds, [CallStmt(proc.procname, args, False, POS)], POS)
+    rt = Runtime(Program(main, procs, []), std="jana2014")
     try:
         rt.run()
     except (JanaError, RecursionError, ZeroDivisionError):
@@ -108,3 +126,120 @@ def test_pe_is_not_identity():
     prog = load("ppm_lite_c.ja"); P = next(p for p in prog.procs if p.procname.name == "hufmax")
     peP, _ = PE.specialize_with(P, CASES[3][2])
     assert PE.count(peP.body) < PE.count(P.body)
+
+
+# ---- Mogensen Part 2, sec. 4 end: combine adjacent dynamic assertions ----
+
+def test_combine_asserts_merges_adjacent_dynamic_asserts():
+    x = Ident("x", POS)
+    def xv(): return LvalExpr(Lval(x, []), POS)
+    def gt0(): return AssertStmt(BinExpr(BinOpKind.GT, xv(), Number(0, POS), POS), POS)
+    def lt10(): return AssertStmt(BinExpr(BinOpKind.LT, xv(), Number(10, POS), POS), POS)
+    def ne5(): return AssertStmt(BinExpr(BinOpKind.NEQ, xv(), Number(5, POS), POS), POS)
+
+    stmts = [gt0(), lt10(), ne5()]
+    merged = PE.combine_asserts(stmts)
+    assert len(merged) == 1
+    assert isinstance(merged[0], AssertStmt)
+    assert isinstance(merged[0].expr, BinExpr) and merged[0].expr.op == BinOpKind.LAND
+
+    # recurses into nested if/else bodies
+    f = Ident("f", POS)
+    cond = BinExpr(BinOpKind.EQ, LvalExpr(Lval(f, []), POS), Number(1, POS), POS)
+    nested = [IfStmt(cond, [gt0(), lt10()], [ne5(), gt0()], cond, POS)]
+    merged_nested = PE.combine_asserts(nested)
+    assert len(merged_nested[0].if_part) == 1
+    assert len(merged_nested[0].else_part) == 1
+
+    # meaning is preserved: same ('ok'|'fail') outcome before/after merging, for every x
+    xdecl = Vdecl(DeclType.VARIABLE, Type("int", POS, IntType.UNBOUND), x, [], None, POS)
+    proc_before = Proc(Ident("chk", POS), [xdecl], stmts)
+    proc_after = Proc(Ident("chk", POS), [xdecl], merged)
+    for xval in range(-2, 12):
+        before = run_synth(proc_before, [proc_before], {"x": xval})
+        after = run_synth(proc_after, [proc_after], {"x": xval})
+        assert before == after, (xval, before, after)
+
+
+# ---- Mogensen Part 2, sec. 5.2: polyvariant specialisation of calls/uncalls ----
+
+def _make_step_driver(n_calls):
+    """Mirrors Mogensen's own illustrative example (Fig. 5 -> Fig. 6, sec. 5.3):
+    `step(j, flag, x)` never reads `j`; `driver` calls it `n_calls` times with a
+    different (unused) `j` each time but the same static `flag=1`, which lets the
+    `if` collapse. Polyvariant specialisation should produce exactly ONE residual
+    `step` (deduplicated on the *used* static arguments only), with a
+    single-statement body (the `if` resolved away)."""
+    j, flag, x = Ident("j", POS), Ident("flag", POS), Ident("x", POS)
+    def vdecl(ident): return Vdecl(DeclType.VARIABLE, Type("int", POS, IntType.UNBOUND), ident, [], None, POS)
+    def lv(ident): return LvalExpr(Lval(ident, []), POS)
+    cond = BinExpr(BinOpKind.EQ, lv(flag), Number(1, POS), POS)
+    step = Proc(Ident("step", POS), [vdecl(j), vdecl(flag), vdecl(x)], [
+        IfStmt(cond,
+               [AssignStmt(ModOp.ADD_EQ, Lval(x, []), Number(100, POS), POS)],
+               [AssignStmt(ModOp.ADD_EQ, Lval(x, []), Number(1, POS), POS)],
+               cond, POS),
+    ])
+    body = [CallStmt(Ident("step", POS), [Number(k, POS), Number(1, POS), lv(x)], False, POS) for k in range(n_calls)]
+    driver = Proc(Ident("driver", POS), [vdecl(x)], body)
+    return driver, step
+
+def test_polyvariant_dedups_on_unused_static_argument():
+    driver, step = _make_step_driver(5)
+    procs = [driver, step]
+    residual, callees, _S = PE.specialize_program(driver, {}, procs, polyvariant=True)
+    assert len(callees) == 1, [c.procname.name for c in callees]     # 5 different j's, 1 residual step
+    assert [p.ident.name for p in callees[0].params] == ["x"]        # j (unused) and flag (baked) both gone
+    assert PE.count(callees[0].body) == 1                            # the if collapsed to one assignment
+    assert all(isinstance(s, CallStmt) and s.ident.name == callees[0].procname.name for s in residual.body)
+
+def test_polyvariant_reduces_residual_size():
+    driver, step = _make_step_driver(5)
+    procs = [driver, step]
+    residual, callees, _S = PE.specialize_program(driver, {}, procs, polyvariant=True)
+    residual0, callees0, _S0 = PE.specialize_program(driver, {}, procs, polyvariant=False)
+    assert callees0 == []
+    total_poly = PE.count(residual.body) + sum(PE.count(c.body) for c in callees)
+    total_plain = PE.count(residual0.body) + PE.count(step.body)   # step is still required, unspecialised
+    assert total_poly < total_plain, (total_poly, total_plain)
+
+    # meaning is preserved for both polyvariant=True and polyvariant=False
+    others = [q for q in procs if q.procname.name != "driver"]
+    for xval in range(4):
+        out_orig = run_synth(driver, procs, {"x": xval})
+        out_poly = run_synth(residual, others + callees + [residual], {"x": xval})
+        out_plain = run_synth(residual0, others + callees0 + [residual0], {"x": xval})
+        assert out_orig == out_poly == out_plain, (xval, out_orig, out_poly, out_plain)
+
+POLY_CASES = [
+    ("ppm_lite_c.ja", "ppm_dec", {"bits": [0, 1, 0, 0, 0, 0], "nbits": 3, "n": 2}, 6),
+    ("binary_heap_g.ja", "decreasekey", {"i": 3, "key": 5}, 8),
+]
+
+@pytest.mark.parametrize("fname,pname,sv,K", POLY_CASES)
+def test_polyvariant_preserves_semantics(fname, pname, sv, K):
+    """ppm_dec (calls/uncalls hufmax) and decreasekey (calls/uncalls parent):
+    residual (body + any residual callees) must behave exactly like the
+    original over random inputs, failures included -- and polyvariant=False
+    must reproduce plain specialize_with() exactly (existing API unchanged)."""
+    prog = load(fname)
+    P = next(p for p in prog.procs if p.procname.name == pname)
+    others = [q for q in prog.procs if q.procname.name != pname]
+
+    residual, callees, _S = PE.specialize_program(P, sv, prog.procs, polyvariant=True)
+    procs_poly = others + callees + [residual]
+
+    residual0, callees0, _S0 = PE.specialize_program(P, sv, prog.procs, polyvariant=False, merge_asserts=False)
+    assert callees0 == []
+    residual_old, _S_old = PE.specialize_with(P, sv, cut_paths=True, global_cut=True, exit_seed=True)
+    assert FMT.format_proc(residual0) == FMT.format_proc(residual_old)   # polyvariant=False == existing API
+
+    rng = random.Random(0)
+    for _ in range(15):
+        st = {}
+        for p in P.params:
+            n = p.ident.name
+            st[n] = sv[n] if n in sv else ([rng.randint(0, K - 1) for _ in range(K)] if p.dimensions else rng.randint(0, K - 1))
+        out_orig = run_proc(prog, prog.procs, P, st, K=K)
+        out_poly = run_proc(prog, procs_poly, residual, st, K=K)
+        assert out_orig == out_poly, (st, out_orig, out_poly)
