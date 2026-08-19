@@ -300,6 +300,23 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   the local reversibility of atoms enters only through `exec_rev` on atoms. Five
   mutants (Seq order, call depth, `Uncall` direction, loop stop test, atom
   direction) all fail to prove.
+- `RevArrBack.v` — the same on the **flat-`local` array kernel** `RevArr`
+  (arrays with runtime aliasing, by-reference procedures via one renaming,
+  `local`/`delocal` on flat slots) — the development's other real-language
+  kernel, so the result now holds on both: `bex_invert : bex s b a <-> exec
+  (invert s) b a`, `fex_exec`, `bex_fex`, and `uncall_is_backward : exec (Uncall
+  p args) a b <-> bex (sbody p args) a b`, where `sbody` is the body with the
+  actuals renamed in. What `RevArr` adds over `RevFrame` is a primitive l-value
+  `Swap`, the one atom that **is its own inverse**, so it is the case in which
+  the backward judgement cannot be reading a syntactic difference between a
+  statement and its inverse. Six mutants of the definitions (Seq order,
+  entry/exit guard swapped, atom direction, `Uncall` running backwards, loop stop
+  test, and dropping the actual-for-formal renaming in `sbody`) all fail to
+  prove. A seventh — flipping `B_Swap`'s direction — also fails to compile, but
+  it is *not* a real detection and is not counted: `exec`'s Swap step is
+  symmetric (`exec_rev` sends it to itself), so the mutated rule is a true
+  statement that merely needs a different proof script, and it does compile once
+  the script is adjusted.
 - `harness/` — a **differential-testing driver**: runs the extracted verified
   interpreters on `.ja` programs and diffs the final store against PyJanus
   (`./harness/run.sh`). The array+procedure interpreter agrees with PyJanus on
@@ -904,6 +921,7 @@ core results) on each build.
 | Frame core hosts `*=` / `/=` under a guard | `RevFrame.app_ainv`, `RevFrame.aok_ainv` | `RevFrame.v` | none |
 | **The syntactic inverter is the semantic reverse** (invert-free `bex`) | `Back.bex_invert`, `Back.bex_fex`, `Back.uncall_is_backward` | `RevBack.v` | none (stack), funext (Janus) |
 | Same on the frame-stacked kernel | `RevFrameBack.bex_invert`, `RevFrameBack.uncall_is_backward` | `RevFrameBack.v` | funext |
+| Same on the flat-`local` array kernel (incl. the self-inverse `Swap`) | `RevArrBack.bex_invert`, `RevArrBack.uncall_is_backward` | `RevArrBack.v` | funext |
 | **The expression lowering preserves values** | `lower_expr_sound` | `RevLowerExpr.v` | none |
 | ...and lands in the core's safety guard | `lower_expr_safe`, `lower_expr_ok` | `RevLowerExpr.v` | none |
 | The `&&`/`\|\|` check is syntactic, and needed | `and_needs_wf`, `bool_check_is_syntactic` | `RevLowerExpr.v` | none |
