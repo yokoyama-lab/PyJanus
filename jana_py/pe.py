@@ -772,7 +772,8 @@ class _PolyCtx:
 
 
 def specialize_program(proc, static_vals, procs, *, cut_paths=True, global_cut=True,
-                        exit_seed=True, polyvariant=True, merge_asserts=True):
+                        exit_seed=True, feed_back=True, polyvariant=True,
+                        merge_asserts=True):
     """Specialise `proc` for `static_vals`, with `procs` as the set of
     procedures that may be (transitively) called. Returns
     (residual_proc, residual_callees, static_set). With polyvariant=True
@@ -785,10 +786,10 @@ def specialize_program(proc, static_vals, procs, *, cut_paths=True, global_cut=T
     residual bodies are combined. specialize()/specialize_with() are
     untouched by this function -- their behaviour is exactly the
     polyvariant=False, merge_asserts=False case."""
-    global RULE3, RULE4, EXIT_SEED, POLY
-    saved_rules = (RULE3, RULE4, EXIT_SEED)
+    global RULE3, RULE4, RULE5, EXIT_SEED, POLY
+    saved_rules = (RULE3, RULE4, RULE5, EXIT_SEED)
     saved_poly = POLY
-    RULE3, RULE4, EXIT_SEED = cut_paths, global_cut, exit_seed
+    RULE3, RULE4, RULE5, EXIT_SEED = cut_paths, global_cut, feed_back, exit_seed
     try:
         if polyvariant:
             by_name = {p.procname.name: p for p in procs}
@@ -800,7 +801,7 @@ def specialize_program(proc, static_vals, procs, *, cut_paths=True, global_cut=T
         residual, S = specialize(proc, static_vals)
         residual_procs = POLY.finish() if POLY is not None else []
     finally:
-        RULE3, RULE4, EXIT_SEED = saved_rules
+        RULE3, RULE4, RULE5, EXIT_SEED = saved_rules
         POLY = saved_poly
     if merge_asserts:
         residual = Proc(residual.procname, residual.params, combine_asserts(residual.body))
