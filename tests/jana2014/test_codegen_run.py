@@ -309,6 +309,20 @@ class CodegenRunTests(unittest.TestCase):
         """)
     self.assertEqual((got["q"], got["r"]), (-4, -1))
 
+  def test_u64_division_matches_the_interpreter(self) -> None:
+    """`_jdiv`/`_jmod` used to take `long long`, so a u64 value at or above
+    2**63 was reinterpreted as negative before dividing -- silently narrowing
+    an unsigned value through a signed helper."""
+    got = self._assert_matches("""\
+        procedure main()
+            u64 a
+            u64 q
+            a += 9223372036854775808
+            a += 1
+            q += a / 2
+        """)
+    self.assertEqual(got["q"], 4611686018427387904)
+
 
 @unittest.skipUnless(shutil.which("g++"), "g++ not available")
 class CodegenAssertionTests(unittest.TestCase):
@@ -439,6 +453,81 @@ class CodegenAssertionTests(unittest.TestCase):
             local int t = 0
                 t += 2
             delocal int t = 2
+        """)
+
+  def test_delocal_normalises_to_the_declared_width(self) -> None:
+    """The interpreter compares the exit value after normalising it to the
+    declared width (runtime.py `_expected_local_value` -> `_normalize_int`):
+    `delocal u8 t = 0 - 1` compares 255 == 255, not 255 == -1."""
+    self._assert_both_accept("""\
+        procedure main()
+            u8 t
+            t -= 1
+            local u8 s = 0
+                s += t
+            delocal u8 s = 0 - 1
+        """)
+
+  def test_delocal_checks_array_contents(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int a[2]
+            local int t[2] = {1, 2}
+                t[0] += 5
+            delocal int t[2] = {1, 2}
+        """)
+
+  def test_a_correct_array_delocal_still_runs(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int a[2]
+            local int t[2] = {1, 2}
+                t[0] += 5
+                t[0] -= 5
+            delocal int t[2] = {1, 2}
+        """)
+
+  def test_delocal_of_a_struct_is_declined_by_the_backend(self) -> None:
+    """A struct has no generated `operator==`, so its delocal cannot be
+    checked; the backend must decline (`CGERR`) rather than silently emit no
+    check at all -- see the `structs_local_c.ja` corpus fixture."""
+    program = _build("""\
+        struct Box {
+            int v;
+        };
+        procedure main()
+            Box a
+            a.v += 1
+            local struct Box e = a
+                e.v += 1
+            delocal struct Box e = a
+        """)
+    with self.assertRaises(ValueError):
+      format_program(None, program)
+
+  # -- pop --------------------------------------------------------------
+
+  def test_pop_rejects_a_nonzero_target(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int x
+            int y
+            stack s
+            x += 4
+            push(x, s)
+            y += 1
+            pop(y, s)
+        """)
+
+  def test_pop_accepts_a_zero_target(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int x
+            int y
+            stack s
+            x += 4
+            push(x, s)
+            pop(y, s)
         """)
 
   # -- assert 文 -------------------------------------------------------
