@@ -271,6 +271,194 @@ class CodegenRunTests(unittest.TestCase):
         """)
     self.assertEqual(got["x"], 4)
 
+  # -- 負数の除算・剰余 -----------------------------------------------
+
+  def test_negative_division_floors_like_the_interpreter(self) -> None:
+    """Janus の `/` は Python の床除算（`-3 / 2 = -2`）。C++ の `/` はゼロ方向へ
+    切り捨てる（`-1`）ので、そのまま出すと解釈系と食い違う。"""
+    got = self._assert_matches("""\
+        procedure main()
+            int a
+            int q
+            a -= 3
+            q += a / 2
+        """)
+    self.assertEqual(got["q"], -2)
+
+  def test_negative_modulo_follows_the_divisor_sign(self) -> None:
+    """Janus の `%` は Python 準拠で符号は除数に従う（`-3 % 2 = 1`）。
+    C++ は被除数に従う（`-1`）。"""
+    got = self._assert_matches("""\
+        procedure main()
+            int a
+            int r
+            a -= 3
+            r += a % 2
+        """)
+    self.assertEqual(got["r"], 1)
+
+  def test_negative_divisor(self) -> None:
+    got = self._assert_matches("""\
+        procedure main()
+            int a
+            int q
+            int r
+            a += 7
+            q += a / (0 - 2)
+            r += a % (0 - 2)
+        """)
+    self.assertEqual((got["q"], got["r"]), (-4, -1))
+
+
+@unittest.skipUnless(shutil.which("g++"), "g++ not available")
+class CodegenAssertionTests(unittest.TestCase):
+  """Janus's run-time assertions must survive the C++ translation.
+
+  The generated code used to drop them (`assert` became a comment, and the `fi`
+  / `from` / `delocal` conditions were never emitted), so a program the
+  interpreter rejects compiled into one that silently computed a value.  That
+  makes the backend unusable as a checker: a wrong program can look right.
+  Every case here is one the interpreter refuses; the generated binary must
+  refuse it too.
+  """
+
+  def _cpp_exit(self, program) -> int:
+    """Compile and run, returning the exit status (0 = ran to completion)."""
+    cpp = format_program(None, program).replace("return 1;", "return 0;")
+    comp = subprocess.run(["g++", "-std=c++17", "-O0", "-x", "c++", "-", "-o", "/tmp/_cga"],
+                          input=cpp, capture_output=True, text=True)
+    self.assertEqual(comp.returncode, 0, comp.stderr)
+    return subprocess.run(["/tmp/_cga"], capture_output=True, text=True,
+                          timeout=10).returncode
+
+  def _assert_both_reject(self, source: str) -> None:
+    program = _build(source)
+    with self.assertRaises(Exception):          # インタプリタは拒否する
+      _interp(program)
+    self.assertNotEqual(self._cpp_exit(program), 0,
+                        "generated C++ accepted a program the interpreter rejects")
+
+  def _assert_both_accept(self, source: str) -> None:
+    program = _build(source)
+    _interp(program)                            # 例外なく通ること
+    self.assertEqual(self._cpp_exit(program), 0,
+                     "generated C++ rejected a program the interpreter accepts")
+
+  # -- fi (if の脱出条件) --------------------------------------------
+
+  def test_fi_condition_must_match_the_branch_taken(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int a
+            a += 5
+            if a = 5 then
+                a += 1
+            else
+                skip
+            fi a = 99
+        """)
+
+  def test_fi_condition_must_be_false_when_the_else_branch_ran(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int a
+            a += 5
+            if a = 0 then
+                a += 1
+            else
+                a += 2
+            fi a = 7
+        """)
+
+  def test_a_consistent_fi_still_runs(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int a
+            a += 5
+            if a = 5 then
+                a += 1
+            else
+                skip
+            fi a = 6
+        """)
+
+  # -- from ... until -------------------------------------------------
+
+  def test_from_condition_must_hold_on_entry(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int i
+            i += 3
+            from i = 0 do
+                skip
+            loop
+                i += 1
+            until i = 5
+        """)
+
+  def test_from_condition_must_be_false_on_re_entry(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int i
+            int n
+            from i = 0 do
+                n += 1
+            loop
+                skip
+            until n = 3
+        """)
+
+  def test_a_consistent_loop_still_runs(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int i
+            from i = 0 do
+                skip
+            loop
+                i += 1
+            until i = 4
+        """)
+
+  # -- delocal --------------------------------------------------------
+
+  def test_delocal_value_must_match(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int a
+            a += 1
+            local int t = 0
+                t += 2
+            delocal int t = 5
+        """)
+
+  def test_a_correct_delocal_still_runs(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int a
+            a += 1
+            local int t = 0
+                t += 2
+            delocal int t = 2
+        """)
+
+  # -- assert 文 -------------------------------------------------------
+
+  def test_assert_statement_is_checked(self) -> None:
+    self._assert_both_reject("""\
+        procedure main()
+            int a
+            a += 5
+            assert a = 9
+        """)
+
+  def test_a_true_assert_still_runs(self) -> None:
+    self._assert_both_accept("""\
+        procedure main()
+            int a
+            a += 5
+            assert a = 5
+        """)
+
 
 if __name__ == "__main__":
   unittest.main()
