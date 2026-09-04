@@ -2,13 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 現在の状態（handoff: 2026-08-04）
+## 現在の状態（handoff: 2026-08-09）
 
-**全域性検査器（`jana_py/smv.py`）の符号化が全項目 Rocq で裏付けられた**セッション。
-前回残っていた「別名検査の結線」「large-block 同値」「段数保存」の3つを閉じ、続けて
-`docs/loop-queue.md` の14項目（うち後半6項目が**配列対応**）を自走ループで消化した。
+**stack が断片に入った。** 自走ループ2周で項目29〜40 を消化（項目37 のみ人の判断待ち）。
+被覆率 `unsupported` 67 → **57**、`proved` 20 → **26**、**examples からの `refuted` は 0 のまま**。
+stack を使う実物3本（`stack_uncall_c` / `run_length_enc_stack_c` / `gcd_g`）が
+**2 invariants とも proved ＝ 無条件**で通っている。**push はしていない（未 push 18本）。**
+
+**この2周で自分の誤りを3件出し、3件ともコーパス走査か error fixture が捕まえた**——
+(a) `stack` を `int` 仮引数へ渡すプログラムを **proved（＝不健全）** にしていた、
+(b) `size(配列)` を stack 専用にして走るプログラムを refuted にした、
+(c) **短絡評価の右側の義務を無条件に積んでいた**（これは stack より前から在ったバグ）。
+**「error fixture を毎回測る」というゲートが無ければ全部見逃していた。**
 
 ### 読む順
+
+1. `docs/loop-queue.md` の**進捗ログ末尾**（項目29〜40 で何を測り、予測をどう外したか）
+2. `docs/totality-checking.md` の **§16〜§21**（`^=` の実効12本・stack の内訳・
+   予算の測り直し・stack の意味論・符号化・最終の被覆率）
+3. `coq/README.md` — 何が証明済みかの claims 表
+4. `docs/reversible-categorical-semantics.md` — 圏論層と先行研究の対応（新規性の線引き）
 
 1. `coq/README.md` — 何が証明済みかの claims 表。「What compilation costs」
    「What the totality checker rests on」「The checker's aliasing decision」
@@ -47,9 +60,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   （PATH には無い）
 - **符号化が決定率を左右した**: large-block（直線部を1遷移に）で `--init zero` が
   2/8 → 5/8 proved。ASSIGN 形式はモデルを1/7にしたが**判定は1つも変えなかった**
-- 実測（149本・IC3・120秒・`--init zero`、2026-08-04 の配列対応後）:
-  refuted 17 / proved 10 / unknown 12 / unsupported 96 / parse-error 7 / static-error 7。
-  **examples の断片内は 8 → 17本**。誤検出ゼロは維持（examples から refuted は出ていない）
+- 実測（149本・IC3・120秒・`--init zero`、2026-08-05 最終）:
+  refuted 23 / **proved 19** / unknown 13 / unsupported 80 / parse-error 7 / static-error 7
+  （`style=assign` / `arrays=native`）。**examples の断片内は 8 → 32本**。
+  誤検出ゼロは維持（examples から refuted は出ていない）。error fixture は 23/23 検出
+- **`--init any` の方が決着する**（断片内 47/55 対 zero の 42/55）。反例を1本見つける方が
+  不変量を作るより易しいので、**2つの問いは難易度で順序づかない**。反例＝欠けている
+  事前条件で、`--smv-assume` で裏取り済み: `zagier` の `x,y,z ≥ 1` は **Zagier 対合の
+  定義域そのもの**、`fall` は10変数中3つだけ（うち1つは2実行の結線 `t_r = t_end_r`）
+- **不健全性を2件見つけて潰した（どちらも「安全」と誤って言う側）**。
+  (a) **`printf`/`show` を「ストアに触れない」と読み飛ばしていた**ため、PyJanus が
+  拒否する error fixture 5本を**証明していた**（§3.4）。(b) **nuXmv の予約識別子**
+  （`K` / `T` / `exp`）でモデルが構文エラーになり、それが `unknown` に化けていた——
+  `knapsack` と `injective_bwt_inverse` は**一度も検査されていなかった**（§3.5）。
+  後者は `Result.malformed` / `status == "model-error"` で区別するようにした。
+  **教訓: `refuted` を突き合わせるのと同じ手間を `proved` にもかける**
+- **被覆率をブロッカー表の足し算で見積もると外れる**（4回中3回外した。§15.1）。
+  「最初にぶつかる要因」の集計は**上界ですらない**——1本が阻害要因を何個でも持てる。
+  当たったのは着手前に内訳を数えた項目27（+2）だけ
 - **配列でボトルネックが移った**: 「断片外だから測れない」→「表現できるが決められない」。
   そして**符号化パラメータは3つとも律速でなかった**（`docs/totality-checking.md`
   §5.4〜§5.7）: 位置数（§5.4）、`_BLOCK_CHARS`（§5.6、判定不変）、モデルサイズ
@@ -73,27 +101,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 次の作業候補
 
-1. **論文執筆（PRO）** — 材料は揃った。軸は「可逆言語の意味論を言語非依存に一度証明し
-   5実例へ落とす／コンパイル後も可逆性と**段数**が転送される／独立実装との差分検証／
-   検査器の符号化を機械検証して実際に不健全性を1件発見」（大）
-2. **決定率を上げる — ただし符号化ではない**。3案とも測って判定が動かなかった（§5.4〜§5.7）。
-   次は**問題の与え方**: `--smv-assume` で事前条件を与える／配列長を小さく固定して
-   スケールを見る／性質を分割する（例: ERR の種類ごとに INVARSPEC を分ける）（中）
-5. **stack（31本）と struct（13本）** — 次の被覆率の壁。可変長の状態と複合型で、
-   配列とは別種の作業（大）
-3. **CFG 全体の接合** — `RevError.v`（抽象 `prim`/`guard`）と `RevSmvBlock.v`（具体
-   `sstmt`）は `RevLowerStmt.lower_stmt_iff` 経由で繋がるが、1つの Coq モデルには
-   なっていない。ここを閉じると検査器の符号化が端から端まで1本になる（大）
-4. **`--smv` の剰余符号化** — 現在は `-m`/`-p` との併用を拒否している（2026-08-04）。
-   符号化するなら移行先は `RevSMod.v` / `RevExtSMod.v` だが、剰余環では `*=` / `/=` の
-   条件が「非零」ではなく**単元**に変わるので現在の義務は流用できない。**設計判断**（中）
+1. **項目37（人の判断・唯一の残件）** — `coq/*.v` の `Theorem` 202本のうち
+   **125本が `Print Assumptions` の対象外**。`python3 coq/audit_coverage.py --list` で内訳。
+   どれが headline でどれが足場かは開発の主張の線引きなので機械が決めない。
+   ラチェットが入っているのでこれ以上は増えない
+2. **`^=` を実装する** — 実効 **12本**（`^` も一緒なら14本。§16。18本ではない）。
+   `^` と `^=` は同じ族なので一緒にやるのが正しい単位
+3. **決定率** — §5.10 のとおり `unknown` 13本は 600 秒（5倍）でも 1本も転じない。
+   予算ではないので、触るなら符号化ではなく**問題の与え方**（事前条件・配列長の固定）
+4. **論文執筆（PRO）** — 材料は揃っている。stack が入って被覆率の話が一段進んだ
 
 ### 注意
 
 - **この repo の `CLAUDE.md` は git 追跡下**（グローバル方針の例外）。この現状節は
   未コミットのまま置いてある（`docs/textbook-programs-plan.md` への参照追加・7行も同様）
-- **自走ループの手順・ゲート・保留項目は `docs/loop-queue.md`**。キューは一度空になった
-  （8/8）。再開するときは項目を足してから `/loop` を回す
+- **自走ループの手順・ゲート・保留項目は `docs/loop-queue.md`**。キューは
+  2026-08-09 に **29〜34 の6項目を補充した**（28/28 まで消化済み、以降が新規）。保留節に、この repo の
+  別の場所を直す話（`local int t[2] = a` で PyJanus が素の `TypeError`）と、断片の穴
+  （セル参照渡し `f(a[0])` 7本）を記録してある
 - `experiments/ultrametric-m0/` は **2026-07-10 の既存作業で未追跡**。直近セッションの
   産物ではないので消さないこと。追跡するか移すかは要判断
 - `coq/audit.sh` の `Print Assumptions` に書くモジュールは、同ファイル冒頭の
@@ -122,6 +147,27 @@ equivalence checking, pebble-game space profiling).
 > `tests/jana2014_in_out/programs/`), two-core verification, and the backlog.
 > Its catalog of source material is `docs/reversible-pearls.md`; dialects live in
 > `docs/DIALECTS.md`.
+
+> **To clean up the corpus that already exists**, see
+> `docs/corpus-cleanup-plan.md` — the eight glob-based corpus tests all check
+> *self-consistency*, so nothing pins what a program is supposed to compute. The
+> fix is a `// @summary/@technique/@source/@confirmed/@keep/@oracle/@expect` header
+> (with `@keep` deriving what is garbage, hence the `_g` filename suffix) enforced by
+> `tools/check_corpus_meta.py` and `tests/jana2014/test_corpus_metadata.py`
+> (unannotated files skip, so annotating incrementally never breaks CI).
+> `docs/corpus-annotation-manual.md` is the step-by-step manual written for an
+> undergraduate assistant doing the annotation as paid work.
+
+> **The independent oracle** the corpus lacked is `tests/jana2014/reference/` —
+> one Python module per example, written from the algorithm rather than ported
+> from the Janus, checked by `tests/jana2014/test_reference_impls.py`. All 97
+> exist and agree; five declare a `PARTIAL` string naming the part of the answer
+> they cannot predict, and a test pins that list. Each also declares `GARBAGE` —
+> the survivors that are history rather than answer — which is what decides the
+> filename suffix: **32 of the 97 leave garbage (`_g`), 65 are clean (`_c`)**, and
+> every example ends in one or the other so an unclassified file cannot pass as
+> clean. Nothing non-trivial may survive that is in neither `expected()` nor
+> `GARBAGE`.
 
 ## Commands
 
