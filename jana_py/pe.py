@@ -772,7 +772,7 @@ class _PolyCtx:
 
 
 def specialize_program(proc, static_vals, procs, *, cut_paths=True, global_cut=True,
-                        exit_seed=True, feed_back=True, polyvariant=True,
+                        exit_seed=True, feed_back=False, polyvariant=True,
                         merge_asserts=True):
     """Specialise `proc` for `static_vals`, with `procs` as the set of
     procedures that may be (transitively) called. Returns
