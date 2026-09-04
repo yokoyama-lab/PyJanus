@@ -127,7 +127,7 @@ def main() -> int:
     args.json.write_text(json.dumps(
       {"total": total, "agree": agree, "mismatch": mismatch,
        "both_fail": both_fail, "reference": binary}, indent=2))
-  return 0
+  return 1 if mismatch else 0
 
 
 if __name__ == "__main__":
