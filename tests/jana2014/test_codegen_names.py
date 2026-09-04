@@ -21,8 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from jana_py.ast import LocalStmt                         # noqa: E402
 from jana_py.parser_jana2014 import parse_program        # noqa: E402
 from jana_py.validate import validate_program            # noqa: E402
+from jana_py.c_codegen import format_local_decl          # noqa: E402
 from jana_py.c_codegen import format_program             # noqa: E402
 from jana_py.errors import JanaError                     # noqa: E402
 
@@ -78,7 +80,11 @@ class CodegenNameTests(unittest.TestCase):
     self.assertTrue(ok, err)
 
   def test_local_struct_is_zero_initialized(self) -> None:
-    cpp = gen("struct Point {\n"
+    # `delocal` of a struct has no generated `operator==` to check it with (see
+    # test_codegen_run.py::test_delocal_of_a_struct_is_declined_by_the_backend),
+    # so this inspects the `local` declaration directly rather than going
+    # through `format_program`, which now declines the whole program.
+    program = parse_program("<test>", "struct Point {\n"
               "    int x;\n"
               "    int y;\n"
               "}\n"
@@ -90,8 +96,11 @@ class CodegenNameTests(unittest.TestCase):
               "        s += q.x\n"
               "        q.x -= 1\n"
               "    delocal Point q\n")
-    ok, err = compiles(cpp)
-    self.assertTrue(ok, err)
+    validate_program(program)
+    [local_stmt] = [s for s in program.main.stmts if isinstance(s, LocalStmt)]
+    decl = format_local_decl(local_stmt.enter_decl)
+    self.assertNotIn("= 0", decl)
+    self.assertIn("= {}", decl)
 
   def test_rank2_array_parameter_keeps_its_extents(self) -> None:
     cpp = gen("procedure bump(int m[][], int n)\n"
@@ -156,6 +165,20 @@ class CodegenNameTests(unittest.TestCase):
     tail = body.rsplit("}  // namespace jana_user", 1)[1]
     # Nothing but the trampoline may live at global scope.
     self.assertEqual(tail.strip(), "int main() { return jana_user::main(); }")
+
+  def test_division_in_an_array_dimension_stays_a_constant_expression(self) -> None:
+    """`/` routes through `_jdiv`; if that helper is not `constexpr`, `int
+    a[8 / 2]` becomes a variable-length array -- accepted by g++ only as a GNU
+    extension, and rejected by -pedantic-errors or a stricter compiler."""
+    cpp = gen("procedure main()\n"
+              "    int a[8 / 2]\n"
+              "    a[0] += 1\n")
+    if not shutil.which("g++"):
+      raise unittest.SkipTest("g++ not available")
+    proc = subprocess.run(
+        ["g++", "-std=c++17", "-pedantic-errors", "-Wvla", "-fsyntax-only", "-x", "c++", "-"],
+        input=cpp, capture_output=True, text=True)
+    self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 class ValidatorTests(unittest.TestCase):

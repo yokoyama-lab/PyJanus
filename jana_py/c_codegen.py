@@ -237,25 +237,37 @@ def _resolve_array_lengths(program: Program) -> None:
 #: Janus の `/` と `%` は Python 準拠（床除算・符号は除数に従う）。C++ の組込み
 #: 演算子はゼロ方向へ切り捨てるので、負の被除数・除数で解釈系と食い違う。
 #: 逃さないよう常にこのヘルパを通す（正の値だけなら組込みと同じ値になる）。
+#: `long long` 固定にすると u64 の値（2^63 以上）が符号付きへ狭められて誤った
+#: 値になり、`constexpr` を外すと配列の添字（定数式が要る）が VLA になって
+#: ISO C++ から外れる。両方を避けるため被演算子の型を保つテンプレートにする。
+#: 無符号側は切り捨て = 床除算なので `if constexpr` の補正は生成されない。
 _DIVMOD_HELPERS = """
-static inline long long _jdiv(long long a, long long b) {
+template <class _A, class _B>
+static constexpr auto _jdiv(_A a, _B b) -> decltype(a / b) {
+  using _R = decltype(a / b);
   if (b == 0) throw "Division by zero";
-  long long q = a / b;
-  if ((a % b != 0) && ((a < 0) != (b < 0))) --q;   // 床方向へ丸める
+  _R q = _R(a) / _R(b);
+  if constexpr (std::is_signed<_R>::value) {
+    if ((_R(a) % _R(b) != 0) && ((a < 0) != (b < 0))) --q;   // 床方向へ丸める
+  }
   return q;
 }
-static inline long long _jmod(long long a, long long b) {
+template <class _A, class _B>
+static constexpr auto _jmod(_A a, _B b) -> decltype(a % b) {
+  using _R = decltype(a % b);
   if (b == 0) throw "Division by zero";
-  long long r = a % b;
-  if (r != 0 && ((r < 0) != (b < 0))) r += b;      // 符号を除数に合わせる
+  _R r = _R(a) % _R(b);
+  if constexpr (std::is_signed<_R>::value) {
+    if (r != 0 && ((r < 0) != (b < 0))) r += _R(b);          // 符号を除数に合わせる
+  }
   return r;
 }
 """
 
 
 def format_program(header: str | None, program: Program) -> str:
-  lines = ["#include <iostream>", "#include <utility>", "#include <vector>",
-           _DIVMOD_HELPERS]
+  lines = ["#include <cstring>", "#include <iostream>", "#include <type_traits>",
+           "#include <utility>", "#include <vector>", _DIVMOD_HELPERS]
   if header:
     lines.append(f'#include "{header}"')
   lines.append("")
@@ -454,19 +466,58 @@ def _tmp(prefix: str, pos) -> str:
 def _delocal_check(stmt, indent: int) -> list[str]:
   """`delocal T x = e` asserts that x holds e on the way out.
 
-  A bare `delocal T x` means 0 (same default as `local`).  Array and struct
-  locals are left unchecked: `==` on a C array does not compare elements, and
-  emitting a correct deep comparison needs the shape.  That gap is deliberate
-  and narrower than the previous one (nothing at all was checked).
+  A bare `delocal T x` means 0 (`{}` for a stack), the same default as
+  `local`.  A struct has no generated `operator==` (and a deep, field-by-field
+  comparison needs to recurse into nested arrays/structs), so its delocal --
+  scalar or array -- is not checked here; `format_program` refuses the whole
+  program instead of emitting C++ that silently accepts a wrong one (the
+  CGERR contract in test_codegen_corpus.py: decline loudly, don't lie).
   """
   pad = "  " * indent
   decl = stmt.exit_decl
-  if decl.dimensions or decl.typ.kind in ("struct", "stack"):
-    return [f"{pad}/* delocal of a non-scalar: value check not emitted */"]
   name = _esc(stmt.enter_decl.ident.name)
+  fail = 'throw "Assertion failed: delocal value does not match";'
+
+  if decl.typ.kind == "struct":
+    raise ValueError(
+        "delocal of a struct is not checked by the C++ backend "
+        "(no generated operator== for struct types)")
+
+  if decl.dimensions:
+    if decl.typ.kind == "stack":
+      raise ValueError("delocal of an array of stacks is not supported by the C++ backend")
+    # The exit side may elide the size (`delocal int t[] = ...`) to mean "same
+    # shape as declared"; the enter side is what was actually allocated, so
+    # its dimensions are the ones the generated array declaration itself used.
+    dims_source = (stmt.enter_decl.dimensions
+                   if any(d is None for d in decl.dimensions) else decl.dimensions)
+    if any(d is None for d in dims_source):
+      raise ValueError("delocal of an array whose size is not known here "
+                        "is not supported by the C++ backend")
+    dims = "".join(f"[{format_expr(d)}]" for d in dims_source)
+    tmp = _tmp("dexp", stmt.pos)
+    init = f" = {format_expr(decl.init_expr)}" if decl.init_expr is not None else " = {}"
+    # A C array has no `==`; two arrays of the same element type and shape are
+    # laid out contiguously with no padding, so a byte comparison is exact.
+    return [
+        f"{pad}{format_type(decl.typ)} {tmp}{dims}{init};",
+        f"{pad}if (memcmp(&{name}, &{tmp}, sizeof({name})) != 0) {fail}",
+    ]
+
+  if decl.typ.kind == "stack":
+    # A bare `{}` is only a brace-init-list in an initializer or argument list,
+    # not as a general operand of `!=` -- it needs a type to construct against.
+    if decl.init_expr is None or isinstance(decl.init_expr, NilExpr):
+      want = "std::vector<int>{}"
+    else:
+      want = format_expr(decl.init_expr)
+    return [f"{pad}if ({name} != {want}) {fail}"]
+
+  # Normalize the expected value to the declared width, exactly like the
+  # interpreter's `_expected_local_value` (runtime.py): `delocal u8 t = 0 - 1`
+  # must compare 255 == 255, not 255 == -1.
   want = format_expr(decl.init_expr) if decl.init_expr is not None else "0"
-  return [f"{pad}if (!({name} == ({want}))) "
-          f'throw "Assertion failed: delocal value does not match";']
+  return [f"{pad}if (!({name} == (({format_type(decl.typ)}) ({want})))) {fail}"]
 
 
 def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list[str]:
@@ -483,9 +534,10 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       ]
     if stmt.mod_op == ModOp.DIV_EQ:
       # Mirror the interpreter's guards: e != 0 and exact divisibility.
+      # `_jmod`/`_jdiv` each check the divisor themselves and throw the same
+      # "Division by zero", so a separate check here would only duplicate it.
       return [
         f"{pad}{{ auto _rhs = ({expr});",
-        f'{pad}  if (_rhs == 0) throw "Division by zero";',
         f'{pad}  if (_jmod({lval}, _rhs) != 0) throw "Division remains";',
         f"{pad}  {lval} = _jdiv({lval}, _rhs); }}",
       ]
@@ -589,8 +641,11 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     val = format_expr(stmt.expr)
     stack = _esc(stmt.ident.name)
     # `.back()` on an empty vector is undefined behaviour; the interpreter
-    # raises instead, so check rather than read garbage.
+    # raises instead, so check rather than read garbage.  It also refuses to
+    # pop onto a non-zero target (runtime.py PopStmt): overwriting it would
+    # destroy information `uncall` needs to push the value back.
     return [f'{pad}if ({stack}.empty()) throw "Pop from an empty stack";',
+            f'{pad}if ({val} != 0) throw "Can\'t pop to non-zero variable";',
             f"{pad}{val} = {stack}.back(); {stack}.pop_back();"]
   raise ValueError(f"Unsupported statement {type(stmt).__name__}")
 
