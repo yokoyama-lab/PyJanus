@@ -234,8 +234,28 @@ def _resolve_array_lengths(program: Program) -> None:
             changed = True
 
 
+#: Janus の `/` と `%` は Python 準拠（床除算・符号は除数に従う）。C++ の組込み
+#: 演算子はゼロ方向へ切り捨てるので、負の被除数・除数で解釈系と食い違う。
+#: 逃さないよう常にこのヘルパを通す（正の値だけなら組込みと同じ値になる）。
+_DIVMOD_HELPERS = """
+static inline long long _jdiv(long long a, long long b) {
+  if (b == 0) throw "Division by zero";
+  long long q = a / b;
+  if ((a % b != 0) && ((a < 0) != (b < 0))) --q;   // 床方向へ丸める
+  return q;
+}
+static inline long long _jmod(long long a, long long b) {
+  if (b == 0) throw "Division by zero";
+  long long r = a % b;
+  if (r != 0 && ((r < 0) != (b < 0))) r += b;      // 符号を除数に合わせる
+  return r;
+}
+"""
+
+
 def format_program(header: str | None, program: Program) -> str:
-  lines = ["#include <iostream>", "#include <utility>", "#include <vector>"]
+  lines = ["#include <iostream>", "#include <utility>", "#include <vector>",
+           _DIVMOD_HELPERS]
   if header:
     lines.append(f'#include "{header}"')
   lines.append("")
@@ -423,6 +443,32 @@ def _require_lvalue(stmt, kw: str) -> None:
     raise ValueError(f"Only l-values are supported for {kw}")
 
 
+def _tmp(prefix: str, pos) -> str:
+  """A temporary name unique to a source position (so the output stays
+  deterministic: two runs of the generator produce byte-identical code)."""
+  line = getattr(pos, "line", 0)
+  col = getattr(pos, "column", 0)
+  return f"_{prefix}_{line}_{col}"
+
+
+def _delocal_check(stmt, indent: int) -> list[str]:
+  """`delocal T x = e` asserts that x holds e on the way out.
+
+  A bare `delocal T x` means 0 (same default as `local`).  Array and struct
+  locals are left unchecked: `==` on a C array does not compare elements, and
+  emitting a correct deep comparison needs the shape.  That gap is deliberate
+  and narrower than the previous one (nothing at all was checked).
+  """
+  pad = "  " * indent
+  decl = stmt.exit_decl
+  if decl.dimensions or decl.typ.kind in ("struct", "stack"):
+    return [f"{pad}/* delocal of a non-scalar: value check not emitted */"]
+  name = _esc(stmt.enter_decl.ident.name)
+  want = format_expr(decl.init_expr) if decl.init_expr is not None else "0"
+  return [f"{pad}if (!({name} == ({want}))) "
+          f'throw "Assertion failed: delocal value does not match";']
+
+
 def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list[str]:
   pad = "  " * indent
   if isinstance(stmt, AssignStmt):
@@ -440,14 +486,19 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       return [
         f"{pad}{{ auto _rhs = ({expr});",
         f'{pad}  if (_rhs == 0) throw "Division by zero";',
-        f'{pad}  if ({lval} % _rhs != 0) throw "Division remains";',
-        f"{pad}  {lval} /= _rhs; }}",
+        f'{pad}  if (_jmod({lval}, _rhs) != 0) throw "Division remains";',
+        f"{pad}  {lval} = _jdiv({lval}, _rhs); }}",
       ]
     return [f"{pad}{lval} {stmt.mod_op.value} {expr};"]
   if isinstance(stmt, SwapStmt):
     return [f"{pad}std::swap({format_lval(stmt.left)}, {format_lval(stmt.right)});"]
   if isinstance(stmt, IfStmt):
-    lines = [f"{pad}if ({format_expr(stmt.entry_cond)}) {{"]
+    # Janus checks that the `fi` condition holds exactly when the then-branch
+    # ran (runtime.py: `exit_cond != cond` is an assertion failure).  Dropping
+    # it made the generated program accept inputs the interpreter rejects.
+    flag = _tmp("jc", stmt.pos)
+    lines = [f"{pad}{{ const bool {flag} = ({format_expr(stmt.entry_cond)});",
+             f"{pad}if ({flag}) {{"]
     for nested in stmt.if_part:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
@@ -456,18 +507,28 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
       for nested in stmt.else_part:
         lines.extend(format_stmt(nested, indent + 1, procs))
       lines.append(f"{pad}}}")
+    lines.append(
+      f"{pad}if (bool({format_expr(stmt.exit_cond)}) != {flag}) "
+      f'throw "Assertion failed: the fi condition does not match the branch taken";')
+    lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, FromStmt):
     # Janus `from e1 do s1 loop s2 until e2` runs s1, exits when e2 holds, else
     # runs s2 and repeats: s1; while(!e2){ s2; s1 } -- the do-part executes once
     # more than the loop-part (the loop off-by-one).  The earlier
     # `while(!e2){ s1; s2 }` dropped that trailing s1, computing a wrong result.
-    lines = []
+    # Janus asserts the `from` condition **true on entry** and **false on every
+    # re-entry** (runtime.py `_exec_from_forward`).  Both were missing.
+    entry = format_expr(stmt.entry_cond)
+    lines = [f"{pad}if (!({entry})) "
+             f'throw "Assertion failed: the from condition does not hold on entry";']
     for nested in stmt.do_part:
       lines.extend(format_stmt(nested, indent, procs))
     lines.append(f"{pad}while (!({format_expr(stmt.exit_cond)})) {{")
     for nested in stmt.loop_part:
       lines.extend(format_stmt(nested, indent + 1, procs))
+    lines.append(f"{pad}  if ({entry}) "
+                 f'throw "Assertion failed: the from condition holds on re-entry";')
     for nested in stmt.do_part:
       lines.extend(format_stmt(nested, indent + 1, procs))
     lines.append(f"{pad}}}")
@@ -490,6 +551,7 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
     lines = [f"{pad}{{", f"{pad}  {format_local_decl(stmt.enter_decl)};"]
     for nested in stmt.body:
       lines.extend(format_stmt(nested, indent + 1, procs))
+    lines.extend(_delocal_check(stmt, indent + 1))
     lines.append(f"{pad}}}")
     return lines
   if isinstance(stmt, CallStmt):
@@ -510,7 +572,8 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
   if isinstance(stmt, SkipStmt):
     return [f"{pad};"]
   if isinstance(stmt, AssertStmt):
-    return [f"{pad}/* assert {format_expr(stmt.expr)} */"]
+    return [f"{pad}if (!({format_expr(stmt.expr)})) "
+            f'throw "Assertion failed: {escape_cpp(format_expr(stmt.expr))}";']
   if isinstance(stmt, UserErrorStmt):
     return [f'{pad}throw "{escape_cpp(stmt.message)}";']
   if isinstance(stmt, PushStmt):
@@ -524,7 +587,11 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
   if isinstance(stmt, PopStmt):
     _require_lvalue(stmt, "pop")
     val = format_expr(stmt.expr)
-    return [f"{pad}{val} = {_esc(stmt.ident.name)}.back(); {_esc(stmt.ident.name)}.pop_back();"]
+    stack = _esc(stmt.ident.name)
+    # `.back()` on an empty vector is undefined behaviour; the interpreter
+    # raises instead, so check rather than read garbage.
+    return [f'{pad}if ({stack}.empty()) throw "Pop from an empty stack";',
+            f"{pad}{val} = {stack}.back(); {stack}.pop_back();"]
   raise ValueError(f"Unsupported statement {type(stmt).__name__}")
 
 
@@ -564,6 +631,10 @@ def format_expr(expr: Expr) -> str:
   if isinstance(expr, TypeCastExpr):
     return f"(({format_type(expr.typ)}) {format_expr(expr.expr)})"
   if isinstance(expr, BinExpr):
+    if expr.op.value == "/":
+      return f"_jdiv({format_expr(expr.left)}, {format_expr(expr.right)})"
+    if expr.op.value == "%":
+      return f"_jmod({format_expr(expr.left)}, {format_expr(expr.right)})"
     op = "==" if expr.op.value == "=" else expr.op.value
     return f"({format_expr(expr.left)} {op} {format_expr(expr.right)})"
   if isinstance(expr, TernaryExpr):
