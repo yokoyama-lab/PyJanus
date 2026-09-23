@@ -1,0 +1,131 @@
+family,size,param,file,steps,stack_peak,call_depth_peak,total_calls,final_live_bits,predicted_stack_peak,match,steps_ratio,stack_ratio
+gcd_fib,1,a=F(3)=2 b=F(2)=1,tests/resource_atlas/generated/gcd_fib_k01.ja,8,1,1,1,3,1,True,,
+gcd_fib,2,a=F(4)=3 b=F(3)=2,tests/resource_atlas/generated/gcd_fib_k02.ja,12,2,1,1,3,2,True,1.500,2.000
+gcd_fib,3,a=F(5)=5 b=F(4)=3,tests/resource_atlas/generated/gcd_fib_k03.ja,16,3,1,1,4,3,True,1.333,1.500
+gcd_fib,4,a=F(6)=8 b=F(5)=5,tests/resource_atlas/generated/gcd_fib_k04.ja,20,4,1,1,4,4,True,1.250,1.333
+gcd_fib,5,a=F(7)=13 b=F(6)=8,tests/resource_atlas/generated/gcd_fib_k05.ja,24,5,1,1,5,5,True,1.200,1.250
+gcd_fib,6,a=F(8)=21 b=F(7)=13,tests/resource_atlas/generated/gcd_fib_k06.ja,28,6,1,1,5,6,True,1.167,1.200
+gcd_fib,7,a=F(9)=34 b=F(8)=21,tests/resource_atlas/generated/gcd_fib_k07.ja,32,7,1,1,6,7,True,1.143,1.167
+gcd_fib,8,a=F(10)=55 b=F(9)=34,tests/resource_atlas/generated/gcd_fib_k08.ja,36,8,1,1,6,8,True,1.125,1.143
+gcd_fib,9,a=F(11)=89 b=F(10)=55,tests/resource_atlas/generated/gcd_fib_k09.ja,40,9,1,1,7,9,True,1.111,1.125
+gcd_fib,10,a=F(12)=144 b=F(11)=89,tests/resource_atlas/generated/gcd_fib_k10.ja,44,10,1,1,7,10,True,1.100,1.111
+gcd_fib,11,a=F(13)=233 b=F(12)=144,tests/resource_atlas/generated/gcd_fib_k11.ja,48,11,1,1,8,11,True,1.091,1.100
+gcd_fib,12,a=F(14)=377 b=F(13)=233,tests/resource_atlas/generated/gcd_fib_k12.ja,52,12,1,1,8,12,True,1.083,1.091
+gcd_fib,13,a=F(15)=610 b=F(14)=377,tests/resource_atlas/generated/gcd_fib_k13.ja,56,13,1,1,9,13,True,1.077,1.083
+gcd_fib,14,a=F(16)=987 b=F(15)=610,tests/resource_atlas/generated/gcd_fib_k14.ja,60,14,1,1,9,14,True,1.071,1.077
+gcd_fib,15,a=F(17)=1597 b=F(16)=987,tests/resource_atlas/generated/gcd_fib_k15.ja,64,15,1,1,10,15,True,1.067,1.071
+gcd_fib,16,a=F(18)=2584 b=F(17)=1597,tests/resource_atlas/generated/gcd_fib_k16.ja,68,16,1,1,10,16,True,1.062,1.067
+gcd_fib,17,a=F(19)=4181 b=F(18)=2584,tests/resource_atlas/generated/gcd_fib_k17.ja,72,17,1,1,11,17,True,1.059,1.062
+gcd_fib,18,a=F(20)=6765 b=F(19)=4181,tests/resource_atlas/generated/gcd_fib_k18.ja,76,18,1,1,11,18,True,1.056,1.059
+gcd_fib,19,a=F(21)=10946 b=F(20)=6765,tests/resource_atlas/generated/gcd_fib_k19.ja,80,19,1,1,12,19,True,1.053,1.056
+gcd_fib,20,a=F(22)=17711 b=F(21)=10946,tests/resource_atlas/generated/gcd_fib_k20.ja,84,20,1,1,12,20,True,1.050,1.053
+gcd_pair,3,a=48 b=36 sum_of_quotients=4,tests/resource_atlas/generated/gcd_pair_48_36.ja,16,3,1,1,9,3,True,,
+gcd_pair,18,a=100 b=7 sum_of_quotients=19,tests/resource_atlas/generated/gcd_pair_100_7.ja,76,18,1,1,17,18,True,,
+gcd_pair,5,a=60 b=25 sum_of_quotients=6,tests/resource_atlas/generated/gcd_pair_60_25.ja,24,5,1,1,9,5,True,,
+gcd_pair,6,a=17 b=5 sum_of_quotients=7,tests/resource_atlas/generated/gcd_pair_17_5.ja,28,6,1,1,6,6,True,,
+gcd_pair,98,a=99 b=1 sum_of_quotients=99,tests/resource_atlas/generated/gcd_pair_99_1.ja,396,98,1,1,100,98,True,,
+gcd_pair,335,a=1000 b=3 sum_of_quotients=336,tests/resource_atlas/generated/gcd_pair_1000_3.ja,1344,335,1,1,335,335,True,,
+bubble_sort,2,n=2 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n02.ja,39,1,1,2,12,1,True,,
+bubble_sort,3,n=3 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n03.ja,79,3,1,2,19,3,True,2.026,3.000
+bubble_sort,4,n=4 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n04.ja,135,6,1,2,28,6,True,1.709,2.000
+bubble_sort,5,n=5 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n05.ja,207,10,1,2,37,10,True,1.533,1.667
+bubble_sort,6,n=6 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n06.ja,295,15,1,2,46,15,True,1.425,1.500
+bubble_sort,7,n=7 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n07.ja,399,21,1,2,56,21,True,1.353,1.400
+bubble_sort,8,n=8 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n08.ja,519,28,1,2,67,28,True,1.301,1.333
+bubble_sort,9,n=9 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n09.ja,655,36,1,2,78,36,True,1.262,1.286
+bubble_sort,10,n=10 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n10.ja,807,45,1,2,89,45,True,1.232,1.250
+bubble_sort,11,n=11 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n11.ja,975,55,1,2,100,55,True,1.208,1.222
+bubble_sort,12,n=12 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n12.ja,1159,66,1,2,111,66,True,1.189,1.200
+bubble_sort,13,n=13 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n13.ja,1359,78,1,2,123,78,True,1.173,1.182
+bubble_sort,14,n=14 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n14.ja,1575,91,1,2,135,91,True,1.159,1.167
+bubble_sort,15,n=15 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n15.ja,1807,105,1,2,147,105,True,1.147,1.154
+bubble_sort,16,n=16 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n16.ja,2055,120,1,2,160,120,True,1.137,1.143
+bubble_sort,17,n=17 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n17.ja,2319,136,1,2,173,136,True,1.128,1.133
+bubble_sort,18,n=18 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n18.ja,2599,153,1,2,186,153,True,1.121,1.125
+bubble_sort,19,n=19 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n19.ja,2895,171,1,2,199,171,True,1.114,1.118
+bubble_sort,20,n=20 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n20.ja,3207,190,1,2,212,190,True,1.108,1.111
+bubble_sort,21,n=21 reverse-sorted,tests/resource_atlas/generated/bubble_sort_n21.ja,3535,210,1,2,225,210,True,1.102,1.105
+bubble_sort_fwd,2,"n=2 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n02.ja,20,1,1,1,12,1,True,,
+bubble_sort_fwd,3,"n=3 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n03.ja,40,3,1,1,19,3,True,2.000,3.000
+bubble_sort_fwd,4,"n=4 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n04.ja,68,6,1,1,29,6,True,1.700,2.000
+bubble_sort_fwd,5,"n=5 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n05.ja,104,10,1,1,39,10,True,1.529,1.667
+bubble_sort_fwd,6,"n=6 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n06.ja,148,15,1,1,50,15,True,1.423,1.500
+bubble_sort_fwd,7,"n=7 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n07.ja,200,21,1,1,63,21,True,1.351,1.400
+bubble_sort_fwd,8,"n=8 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n08.ja,260,28,1,1,78,28,True,1.300,1.333
+bubble_sort_fwd,9,"n=9 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n09.ja,328,36,1,1,93,36,True,1.262,1.286
+bubble_sort_fwd,10,"n=10 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n10.ja,404,45,1,1,109,45,True,1.232,1.250
+bubble_sort_fwd,11,"n=11 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n11.ja,488,55,1,1,126,55,True,1.208,1.222
+bubble_sort_fwd,12,"n=12 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n12.ja,580,66,1,1,144,66,True,1.189,1.200
+bubble_sort_fwd,13,"n=13 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n13.ja,680,78,1,1,164,78,True,1.172,1.182
+bubble_sort_fwd,14,"n=14 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n14.ja,788,91,1,1,185,91,True,1.159,1.167
+bubble_sort_fwd,15,"n=15 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n15.ja,904,105,1,1,207,105,True,1.147,1.154
+bubble_sort_fwd,16,"n=16 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n16.ja,1028,120,1,1,231,120,True,1.137,1.143
+bubble_sort_fwd,17,"n=17 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n17.ja,1160,136,1,1,255,136,True,1.128,1.133
+bubble_sort_fwd,18,"n=18 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n18.ja,1300,153,1,1,280,153,True,1.121,1.125
+bubble_sort_fwd,19,"n=19 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n19.ja,1448,171,1,1,306,171,True,1.114,1.118
+bubble_sort_fwd,20,"n=20 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n20.ja,1604,190,1,1,333,190,True,1.108,1.111
+bubble_sort_fwd,21,"n=21 reverse-sorted, call only",tests/resource_atlas/generated/bubble_sort_fwd_n21.ja,1768,210,1,1,361,210,True,1.102,1.105
+bubble_sort_perm,5,n=5 pseudo-random permutation (seed 5),tests/resource_atlas/generated/bubble_sort_perm_n05.ja,135,10,1,2,37,10,True,,
+bubble_sort_perm,8,n=8 pseudo-random permutation (seed 8),tests/resource_atlas/generated/bubble_sort_perm_n08.ja,407,28,1,2,67,28,True,,
+bubble_sort_perm,13,n=13 pseudo-random permutation (seed 13),tests/resource_atlas/generated/bubble_sort_perm_n13.ja,1023,78,1,2,123,78,True,,
+bubble_sort_perm,21,n=21 pseudo-random permutation (seed 21),tests/resource_atlas/generated/bubble_sort_perm_n21.ja,2631,210,1,2,225,210,True,,
+knapsack,1,n=1 cap=3,tests/resource_atlas/generated/knapsack_n01.ja,24,0,1,1,11,0,True,,
+knapsack,2,n=2 cap=4,tests/resource_atlas/generated/knapsack_n02.ja,50,0,1,1,28,0,True,2.083,
+knapsack,3,n=3 cap=5,tests/resource_atlas/generated/knapsack_n03.ja,83,0,1,1,50,0,True,1.660,
+knapsack,4,n=4 cap=6,tests/resource_atlas/generated/knapsack_n04.ja,123,0,1,1,81,0,True,1.482,
+knapsack,5,n=5 cap=7,tests/resource_atlas/generated/knapsack_n05.ja,170,0,1,1,119,0,True,1.382,
+knapsack,6,n=6 cap=8,tests/resource_atlas/generated/knapsack_n06.ja,224,0,1,1,167,0,True,1.318,
+knapsack,7,n=7 cap=9,tests/resource_atlas/generated/knapsack_n07.ja,285,0,1,1,223,0,True,1.272,
+knapsack,8,n=8 cap=10,tests/resource_atlas/generated/knapsack_n08.ja,353,0,1,1,288,0,True,1.239,
+knapsack,9,n=9 cap=11,tests/resource_atlas/generated/knapsack_n09.ja,428,0,1,1,360,0,True,1.212,
+knapsack,10,n=10 cap=12,tests/resource_atlas/generated/knapsack_n10.ja,510,0,1,1,440,0,True,1.192,
+knapsack,11,n=11 cap=13,tests/resource_atlas/generated/knapsack_n11.ja,599,0,1,1,535,0,True,1.175,
+knapsack,12,n=12 cap=14,tests/resource_atlas/generated/knapsack_n12.ja,695,0,1,1,641,0,True,1.160,
+knapsack,13,n=13 cap=15,tests/resource_atlas/generated/knapsack_n13.ja,798,0,1,1,757,0,True,1.148,
+knapsack,14,n=14 cap=16,tests/resource_atlas/generated/knapsack_n14.ja,908,0,1,1,885,0,True,1.138,
+knapsack,15,n=15 cap=17,tests/resource_atlas/generated/knapsack_n15.ja,1025,0,1,1,1023,0,True,1.129,
+knapsack,16,n=16 cap=18,tests/resource_atlas/generated/knapsack_n16.ja,1149,0,1,1,1172,0,True,1.121,
+knapsack,17,n=17 cap=19,tests/resource_atlas/generated/knapsack_n17.ja,1280,0,1,1,1330,0,True,1.114,
+knapsack,18,n=18 cap=20,tests/resource_atlas/generated/knapsack_n18.ja,1418,0,1,1,1498,0,True,1.108,
+knapsack,19,n=19 cap=21,tests/resource_atlas/generated/knapsack_n19.ja,1563,0,1,1,1676,0,True,1.102,
+knapsack,20,n=20 cap=22,tests/resource_atlas/generated/knapsack_n20.ja,1715,0,1,1,1864,0,True,1.097,
+lcs,1,m=n=1,tests/resource_atlas/generated/lcs_n01.ja,14,0,1,1,7,0,True,,
+lcs,2,m=n=2,tests/resource_atlas/generated/lcs_n02.ja,29,0,1,1,17,0,True,2.071,
+lcs,3,m=n=3,tests/resource_atlas/generated/lcs_n03.ja,54,0,1,1,25,0,True,1.862,
+lcs,4,m=n=4,tests/resource_atlas/generated/lcs_n04.ja,85,0,1,1,40,0,True,1.574,
+lcs,5,m=n=5,tests/resource_atlas/generated/lcs_n05.ja,124,0,1,1,61,0,True,1.459,
+lcs,6,m=n=6,tests/resource_atlas/generated/lcs_n06.ja,169,0,1,1,86,0,True,1.363,
+lcs,7,m=n=7,tests/resource_atlas/generated/lcs_n07.ja,224,0,1,1,113,0,True,1.325,
+lcs,8,m=n=8,tests/resource_atlas/generated/lcs_n08.ja,285,0,1,1,149,0,True,1.272,
+lcs,9,m=n=9,tests/resource_atlas/generated/lcs_n09.ja,354,0,1,1,193,0,True,1.242,
+lcs,10,m=n=10,tests/resource_atlas/generated/lcs_n10.ja,429,0,1,1,245,0,True,1.212,
+lcs,11,m=n=11,tests/resource_atlas/generated/lcs_n11.ja,514,0,1,1,303,0,True,1.198,
+lcs,12,m=n=12,tests/resource_atlas/generated/lcs_n12.ja,605,0,1,1,367,0,True,1.177,
+lcs,13,m=n=13,tests/resource_atlas/generated/lcs_n13.ja,704,0,1,1,439,0,True,1.164,
+lcs,14,m=n=14,tests/resource_atlas/generated/lcs_n14.ja,809,0,1,1,517,0,True,1.149,
+lcs,15,m=n=15,tests/resource_atlas/generated/lcs_n15.ja,924,0,1,1,599,0,True,1.142,
+lcs,16,m=n=16,tests/resource_atlas/generated/lcs_n16.ja,1045,0,1,1,692,0,True,1.131,
+lcs,17,m=n=17,tests/resource_atlas/generated/lcs_n17.ja,1174,0,1,1,795,0,True,1.123,
+lcs,18,m=n=18,tests/resource_atlas/generated/lcs_n18.ja,1309,0,1,1,908,0,True,1.115,
+lcs,19,m=n=19,tests/resource_atlas/generated/lcs_n19.ja,1454,0,1,1,1029,0,True,1.111,
+lcs,20,m=n=20,tests/resource_atlas/generated/lcs_n20.ja,1605,0,1,1,1160,0,True,1.104,
+edit_distance,1,m=n=1,tests/resource_atlas/generated/edit_distance_n01.ja,26,0,1,1,10,0,True,,
+edit_distance,2,m=n=2,tests/resource_atlas/generated/edit_distance_n02.ja,46,0,1,1,25,0,True,1.769,
+edit_distance,3,m=n=3,tests/resource_atlas/generated/edit_distance_n03.ja,83,0,1,1,42,0,True,1.804,
+edit_distance,4,m=n=4,tests/resource_atlas/generated/edit_distance_n04.ja,125,0,1,1,67,0,True,1.506,
+edit_distance,5,m=n=5,tests/resource_atlas/generated/edit_distance_n05.ja,179,0,1,1,99,0,True,1.432,
+edit_distance,6,m=n=6,tests/resource_atlas/generated/edit_distance_n06.ja,238,0,1,1,141,0,True,1.330,
+edit_distance,7,m=n=7,tests/resource_atlas/generated/edit_distance_n07.ja,314,0,1,1,189,0,True,1.319,
+edit_distance,8,m=n=8,tests/resource_atlas/generated/edit_distance_n08.ja,395,0,1,1,247,0,True,1.258,
+edit_distance,9,m=n=9,tests/resource_atlas/generated/edit_distance_n09.ja,488,0,1,1,313,0,True,1.235,
+edit_distance,10,m=n=10,tests/resource_atlas/generated/edit_distance_n10.ja,586,0,1,1,387,0,True,1.201,
+edit_distance,11,m=n=11,tests/resource_atlas/generated/edit_distance_n11.ja,701,0,1,1,467,0,True,1.196,
+edit_distance,12,m=n=12,tests/resource_atlas/generated/edit_distance_n12.ja,821,0,1,1,559,0,True,1.171,
+edit_distance,13,m=n=13,tests/resource_atlas/generated/edit_distance_n13.ja,953,0,1,1,666,0,True,1.161,
+edit_distance,14,m=n=14,tests/resource_atlas/generated/edit_distance_n14.ja,1090,0,1,1,785,0,True,1.144,
+edit_distance,15,m=n=15,tests/resource_atlas/generated/edit_distance_n15.ja,1244,0,1,1,912,0,True,1.141,
+edit_distance,16,m=n=16,tests/resource_atlas/generated/edit_distance_n16.ja,1403,0,1,1,1051,0,True,1.128,
+edit_distance,17,m=n=17,tests/resource_atlas/generated/edit_distance_n17.ja,1574,0,1,1,1200,0,True,1.122,
+edit_distance,18,m=n=18,tests/resource_atlas/generated/edit_distance_n18.ja,1750,0,1,1,1359,0,True,1.112,
+edit_distance,19,m=n=19,tests/resource_atlas/generated/edit_distance_n19.ja,1943,0,1,1,1526,0,True,1.110,
+edit_distance,20,m=n=20,tests/resource_atlas/generated/edit_distance_n20.ja,2141,0,1,1,1703,0,True,1.102,
