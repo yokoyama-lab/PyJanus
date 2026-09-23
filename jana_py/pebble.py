@@ -7,6 +7,12 @@ maximum number of simultaneous pebbles.
 
 This module provides a SpaceProfiler that wraps Runtime execution and records
 per-step memory snapshots without altering program behavior.
+
+It also measures the RC-03 "resource atlas" vector (steps, stack_peak,
+call_depth_peak, final_live_bits, per-array puts/takes, erasures) by scanning
+the live frames after every executed statement; storage is identified by
+identity so reference-passed stacks/arrays are never double counted.  See
+``tests/resource_atlas/README.md`` for the definitions.
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ from .ast import (
     SwapStmt,
     UncallStmt,
 )
-from .runtime import Cell, Frame, Runtime
+from .runtime import ArraySliceProxy, Cell, Frame, Runtime
 
 
 # ---------------------------------------------------------------------------
@@ -42,14 +48,63 @@ class SpaceSnapshot:
 
 
 @dataclass
+class ArrayStats:
+    """Per-array put/take census (RC-03 ``puts`` / ``takes``).
+
+    A *put* is a cell transition 0 -> non-0, a *take* the reverse, both
+    observed statement by statement.  Arrays are identified by the identity
+    of their storage (so an array passed by reference is one array, however
+    many frames hold it) and reported under the name they had in the frame
+    where they were first seen.  A local array that is allocated several
+    times (e.g. inside a loop) contributes several ``instances`` to the same
+    name.
+    """
+    name: str
+    size: int = 0               # total cells over all instances
+    puts: int = 0
+    takes: int = 0
+    instances: int = 1
+    end_nonzero: int = 0        # non-zero cells at the last observation
+    live_at_end: bool = False   # still held by a live frame when main ended
+
+    @property
+    def written(self) -> bool:
+        return self.puts > 0
+
+    @property
+    def ends_empty(self) -> bool:
+        return self.end_nonzero == 0
+
+
+@dataclass
 class SpaceProfile:
-    """Aggregate result of a profiling run."""
+    """Aggregate result of a profiling run.
+
+    The first block of fields is the historical pebble profile; the second
+    block is the RC-03 resource vector (steps, stack_peak, call_depth_peak,
+    final_live_bits, puts/takes, erasures).  ``steps`` and ``call_depth_peak``
+    are aliases of ``total_steps`` / ``call_depth_max``.
+    """
     max_live_vars: int          # peak number of non-zero variables
     max_live_bits: int          # peak total bits of non-zero data
     total_steps: int            # total statement executions
     timeline: list[SpaceSnapshot] = field(default_factory=list)
     call_depth_max: int = 0     # maximum call stack depth
     local_var_max: int = 0      # peak local (ancilla) variables
+    # --- RC-03 resource vector -------------------------------------------
+    stack_peak: int = 0         # peak total depth of all Janus `stack`s (identity-deduplicated)
+    total_calls: int = 0        # number of call + uncall events
+    final_live_bits: int = 0    # bits of non-zero state when main ends
+    arrays: dict[str, ArrayStats] = field(default_factory=dict)
+    erasures: int = 0           # irreversible erasures: identically 0 in Janus
+
+    @property
+    def steps(self) -> int:
+        return self.total_steps
+
+    @property
+    def call_depth_peak(self) -> int:
+        return self.call_depth_max
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +169,38 @@ def _count_all_frames(frames: list[Frame]) -> tuple[int, int]:
     return total_live, total_bits
 
 
+def _is_zero_fast(value: Any) -> bool:
+    """`_is_zero` with a fast path for plain ints (the common array element)."""
+    if type(value) is int:
+        return value == 0
+    return _is_zero(value)
+
+
+class _ArrayTrack:
+    """Bookkeeping for one array *storage* (one Python list)."""
+    __slots__ = ("name", "ref", "zero", "puts", "takes")
+
+    def __init__(self, name: str, ref: list):
+        self.name = name
+        # Hold a reference so the list can never be freed and its id() reused
+        # by a different array while we still key on it.
+        self.ref = ref
+        self.zero = [_is_zero_fast(x) for x in ref]
+        self.puts = 0
+        self.takes = 0
+
+    def observe(self) -> None:
+        zero = self.zero
+        for i, x in enumerate(self.ref):
+            z = _is_zero_fast(x)
+            if z != zero[i]:
+                if z:
+                    self.takes += 1
+                else:
+                    self.puts += 1
+                zero[i] = z
+
+
 # ---------------------------------------------------------------------------
 # Profiling Runtime subclass
 # ---------------------------------------------------------------------------
@@ -132,6 +219,17 @@ class _ProfilingRuntime(Runtime):
         self._peak_live_bits: int = 0
         self._peak_call_depth: int = 0
         self._peak_local_vars: int = 0
+        # RC-03 resource vector.  `_live_frames` is a proper frame *stack*
+        # (root frame + one frame per active call), unlike the historical
+        # `_frames` list above, which keeps every frame ever executed in and
+        # is retained unchanged so that max_live_vars / max_live_bits keep
+        # their historical values.
+        self._live_frames: list[Frame] = []
+        self._stack_peak: int = 0
+        self._total_calls: int = 0
+        self._arrays: dict[int, _ArrayTrack] = {}
+        self._array_names: dict[str, int] = {}
+        self._final_live_bits: int = 0
 
     # -- hooks ---------------------------------------------------------------
 
@@ -142,6 +240,7 @@ class _ProfilingRuntime(Runtime):
         frame = Frame(vars={})
         self._root_frame = frame
         self._frames = [frame]
+        self._live_frames = [frame]
         self.main_vdecls = list(self.program.main.vdecls)
         self._first_stmt_line = (
             self.program.main.stmts[0].pos.line
@@ -155,6 +254,8 @@ class _ProfilingRuntime(Runtime):
             event="init",
         )
         self._exec_block(frame, self.program.main.stmts)
+        self._scan_resources()
+        self._final_live_bits = self._live_bits(self._live_frames)
         store = self._format_store(frame)
         return "".join(self.stdout) + store + ("\n" if store else "")
 
@@ -189,8 +290,10 @@ class _ProfilingRuntime(Runtime):
         record_nested: bool = False,
     ) -> None:
         self._call_depth += 1
+        self._total_calls += 1
         if self._call_depth > self._peak_call_depth:
             self._peak_call_depth = self._call_depth
+        n_live = len(self._live_frames)
         try:
             super()._call_proc(
                 caller, name, args, pos,
@@ -199,6 +302,7 @@ class _ProfilingRuntime(Runtime):
             )
         finally:
             self._call_depth -= 1
+            del self._live_frames[n_live:]
 
     def _uncall_proc(
         self,
@@ -210,8 +314,10 @@ class _ProfilingRuntime(Runtime):
         record_nested: bool = False,
     ) -> None:
         self._call_depth += 1
+        self._total_calls += 1
         if self._call_depth > self._peak_call_depth:
             self._peak_call_depth = self._call_depth
+        n_live = len(self._live_frames)
         try:
             super()._uncall_proc(
                 caller, name, args, pos,
@@ -220,6 +326,7 @@ class _ProfilingRuntime(Runtime):
             )
         finally:
             self._call_depth -= 1
+            del self._live_frames[n_live:]
 
     def _exec_local(
         self,
@@ -236,9 +343,100 @@ class _ProfilingRuntime(Runtime):
         finally:
             self._local_var_count -= 1
 
+    def _bind_args(self, caller: Frame, name: str, args: list[Expr], pos: SourcePos):
+        proc, frame, value_checks = super()._bind_args(caller, name, args, pos)
+        # The callee frame becomes live here; `_call_proc`/`_uncall_proc`
+        # truncate `_live_frames` back on return (also on error).
+        self._live_frames.append(frame)
+        return proc, frame, value_checks
+
+    # -- RC-03 resource scan -------------------------------------------------
+
+    def _scan_resources(self) -> None:
+        """Scan the live frames once: stack depth (peak) and array put/take.
+
+        Cells are identified by the identity of their storage (`id()` of the
+        underlying list), so a stack or array passed by reference is counted
+        once no matter how many frames hold it (rc03.tex:120).
+        """
+        seen_stacks: set[int] = set()
+        seen_arrays: set[int] = set()
+        depth = 0
+        arrays = self._arrays
+        for frame in self._live_frames:
+            for name, cell in frame.vars.items():
+                if isinstance(cell, ArraySliceProxy):
+                    # A sub-array view: its storage is the owner's array,
+                    # which is tracked through the owner's frame.
+                    continue
+                value = cell.value
+                if not isinstance(value, list):
+                    continue
+                key = id(value)
+                if cell.kind == "stack":
+                    if key not in seen_stacks:
+                        seen_stacks.add(key)
+                        depth += len(value)
+                elif cell.shape is not None:
+                    if key in seen_arrays:
+                        continue
+                    seen_arrays.add(key)
+                    track = arrays.get(key)
+                    if track is None:
+                        arrays[key] = _ArrayTrack(name, value)
+                    else:
+                        track.observe()
+        if depth > self._stack_peak:
+            self._stack_peak = depth
+
+    @staticmethod
+    def _live_bits(frames: list[Frame]) -> int:
+        """Bits of non-zero state held by `frames`, mutable storage deduplicated."""
+        seen: set[int] = set()
+        bits = 0
+        for frame in frames:
+            for cell in frame.vars.values():
+                value = cell.value
+                if isinstance(value, (list, dict)):
+                    key = id(value)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                bits += _value_bits(value)
+        return bits
+
+    def _array_stats(self) -> dict[str, ArrayStats]:
+        live_ids: set[int] = set()
+        for frame in self._live_frames:
+            for cell in frame.vars.values():
+                value = cell.value
+                if isinstance(value, list) and cell.shape is not None:
+                    live_ids.add(id(value))
+        stats: dict[str, ArrayStats] = {}
+        for key, track in self._arrays.items():
+            # `zero` is current as of the last scan (arrays are only mutated
+            # by statements, and every statement is followed by a scan).
+            end_nonzero = sum(1 for z in track.zero if not z)
+            st = stats.get(track.name)
+            if st is None:
+                stats[track.name] = ArrayStats(
+                    name=track.name, size=len(track.ref), puts=track.puts,
+                    takes=track.takes, instances=1, end_nonzero=end_nonzero,
+                    live_at_end=key in live_ids,
+                )
+            else:
+                st.size += len(track.ref)
+                st.puts += track.puts
+                st.takes += track.takes
+                st.instances += 1
+                st.end_nonzero += end_nonzero
+                st.live_at_end = st.live_at_end or key in live_ids
+        return stats
+
     # -- internal helpers ----------------------------------------------------
 
     def _record_snapshot(self, line: int, event: str) -> None:
+        self._scan_resources()
         live_vars, live_bits = _count_all_frames(self._frames)
         if live_vars > self._peak_live_vars:
             self._peak_live_vars = live_vars
@@ -275,6 +473,11 @@ class _ProfilingRuntime(Runtime):
             timeline=list(self._snapshots),
             call_depth_max=self._peak_call_depth,
             local_var_max=self._peak_local_vars,
+            stack_peak=self._stack_peak,
+            total_calls=self._total_calls,
+            final_live_bits=self._final_live_bits,
+            arrays=self._array_stats(),
+            erasures=0,
         )
 
 
@@ -306,7 +509,20 @@ def format_profile(profile: SpaceProfile) -> str:
         f"Peak live bits:      {profile.max_live_bits}",
         f"Max call depth:      {profile.call_depth_max}",
         f"Peak local vars:     {profile.local_var_max}",
+        "--- RC-03 resource vector ---",
+        f"Stack peak:          {profile.stack_peak}",
+        f"Total calls:         {profile.total_calls}",
+        f"Final live bits:     {profile.final_live_bits}",
+        f"Erasures:            {profile.erasures}",
     ]
+    if profile.arrays:
+        lines.append("")
+        lines.append("Arrays (name | size | puts | takes | end_nonzero):")
+        for st in profile.arrays.values():
+            lines.append(
+                f"  {st.name:<12s} | {st.size:>5d} | {st.puts:>5d} | "
+                f"{st.takes:>5d} | {st.end_nonzero:>5d}"
+            )
     if profile.timeline:
         lines.append("")
         lines.append("Timeline (step | line | live_vars | live_bits | depth | event):")
@@ -317,6 +533,41 @@ def format_profile(profile: SpaceProfile) -> str:
                 f"{snap.call_depth:>5d} | {snap.event}"
             )
     return "\n".join(lines)
+
+
+def profile_to_dict(profile: SpaceProfile, include_timeline: bool = False) -> dict[str, Any]:
+    """Return a JSON-serialisable dict of the profile (RC-03 resource vector
+    plus the historical pebble fields).  The timeline is omitted unless asked
+    for, since it has one entry per executed statement."""
+    out: dict[str, Any] = {
+        "steps": profile.total_steps,
+        "stack_peak": profile.stack_peak,
+        "call_depth_peak": profile.call_depth_max,
+        "total_calls": profile.total_calls,
+        "final_live_bits": profile.final_live_bits,
+        "erasures": profile.erasures,
+        "arrays": {
+            name: {
+                "size": st.size,
+                "puts": st.puts,
+                "takes": st.takes,
+                "instances": st.instances,
+                "end_nonzero": st.end_nonzero,
+                "live_at_end": st.live_at_end,
+            }
+            for name, st in profile.arrays.items()
+        },
+        "max_live_vars": profile.max_live_vars,
+        "max_live_bits": profile.max_live_bits,
+        "local_var_max": profile.local_var_max,
+    }
+    if include_timeline:
+        out["timeline"] = [
+            {"step": s.step, "line": s.line, "live_vars": s.live_vars,
+             "live_bits": s.live_bits, "call_depth": s.call_depth, "event": s.event}
+            for s in profile.timeline
+        ]
+    return out
 
 
 def compare_profiles(a: SpaceProfile, b: SpaceProfile) -> str:
@@ -336,5 +587,8 @@ def compare_profiles(a: SpaceProfile, b: SpaceProfile) -> str:
         _delta("Peak live bits", a.max_live_bits, b.max_live_bits),
         _delta("Max call depth", a.call_depth_max, b.call_depth_max),
         _delta("Peak local vars", a.local_var_max, b.local_var_max),
+        _delta("Stack peak", a.stack_peak, b.stack_peak),
+        _delta("Total calls", a.total_calls, b.total_calls),
+        _delta("Final live bits", a.final_live_bits, b.final_live_bits),
     ]
     return "\n".join(lines)
