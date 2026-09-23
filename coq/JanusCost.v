@@ -47,6 +47,7 @@
                                          stack_peak = sub_steps a b,
                                          steps = 2 + 4 sub_steps a b
       - [gcd_fib_stack]                : (F(k+2),F(k+1)): stack_peak = k
+      - [sub_steps_quotients]          : sub_steps a b + 1 = Σ Euclidean quotients
       - [bsort_stack_eq_comparisons]   : bubble sort on any n-array:
                                          stack_peak = n(n-1)/2, steps in
                                          [3+3n+4C, 3+3n+8C], C = n(n-1)/2
@@ -1205,6 +1206,90 @@ Proof.
     - exact Hlp. }
   subst c k. rewrite HL in Hlen. cbn in Hlen.
   repeat split; try assumption; cbn; try rewrite HL; cbn; lia.
+Qed.
+
+(** *** Relation to the Euclidean division sequence.
+    [Quots a b l]: [l] is the list of quotients of the Euclidean division
+    sequence (a,b) -> (b, a mod b) -> ... ending at the first zero remainder.
+    Its length is the number of Euclidean divisions.  The subtractive count is
+    the sum of the quotients minus one (the last division, which ends with
+    a = b, performs one subtraction fewer than its quotient). *)
+Inductive Quots : Z -> Z -> list Z -> Prop :=
+| Q_last : forall a b, 0 < b -> a mod b = 0 -> Quots a b [a / b]
+| Q_more : forall a b l, 0 < b -> a mod b <> 0 -> Quots b (a mod b) l -> Quots a b (a / b :: l).
+
+Definition zsum (l : list Z) : Z := fold_right Z.add 0 l.
+
+Lemma Quots_total : forall n a b, (Z.to_nat (a + 2 * b) <= n)%nat -> 0 < a -> 0 < b ->
+  exists l, Quots a b l.
+Proof.
+  induction n; intros a b Hn Ha Hb.
+  - exfalso. pose proof (to_nat_pos (a + 2 * b) ltac:(lia)). lia.
+  - destruct (Z.eq_dec (a mod b) 0) as [E | E].
+    + exists [a / b]. apply Q_last; assumption.
+    + pose proof (Z.mod_pos_bound a b Hb) as [Hr0 Hrb].
+      assert (Hn' : (Z.to_nat (b + 2 * (a mod b)) <= n)%nat).
+      { pose proof (to_nat_lt (b + 2 * (a mod b)) (a + 2 * b) ltac:(lia)).
+        destruct (Z_lt_le_dec a b) as [Hab | Hab].
+        - rewrite Z.mod_small in * by lia. lia.
+        - lia. }
+      destruct (IHn b (a mod b) Hn' Hb ltac:(lia)) as [l Hl].
+      exists (a / b :: l). apply Q_more; assumption.
+Qed.
+
+(** k subtractions of b from (k+1) b reach b. *)
+Lemma SubSteps_mult : forall k b, 0 < b -> SubSteps (Z.of_nat k * b + b) b k.
+Proof.
+  induction k; intros b Hb.
+  - replace (Z.of_nat 0 * b + b) with b by lia. apply SS_eq.
+  - rewrite Nat2Z.inj_succ. apply SS_gt; [nia |].
+    replace (Z.succ (Z.of_nat k) * b + b - b) with (Z.of_nat k * b + b) by lia.
+    apply IHk; assumption.
+Qed.
+
+(** k subtractions of b from k b + r (0 < r < b) reach r. *)
+Lemma SubSteps_shift : forall k b r m, 0 < b -> 0 < r < b ->
+  SubSteps r b m -> SubSteps (Z.of_nat k * b + r) b (k + m).
+Proof.
+  induction k; intros b r m Hb Hr Hm.
+  - replace (Z.of_nat 0 * b + r) with r by lia. exact Hm.
+  - rewrite Nat2Z.inj_succ. apply SS_gt; [nia |].
+    replace (Z.succ (Z.of_nat k) * b + r - b) with (Z.of_nat k * b + r) by lia.
+    apply IHk; assumption.
+Qed.
+
+(** sub_steps a b = (sum of the Euclidean quotients) - 1. *)
+Theorem SubSteps_quotients : forall a b l, 0 < a -> Quots a b l ->
+  forall n, SubSteps a b n -> Z.of_nat n + 1 = zsum l.
+Proof.
+  intros a b l Ha H. induction H; intros n Hn.
+  - (* a = b * q, q >= 1 : q - 1 subtractions *)
+    pose proof (Z.div_mod a b ltac:(lia)) as Hdm. rewrite H0 in Hdm.
+    assert (Hq : 0 < a / b) by nia.
+    destruct (Z.to_nat (a / b)) as [| k] eqn:Ek; [lia |].
+    assert (Hqk : a / b = Z.of_nat (S k)) by (rewrite <- Ek, Z2Nat.id; lia).
+    assert (HSS : SubSteps a b k).
+    { replace a with (Z.of_nat k * b + b) by (rewrite Hqk, Nat2Z.inj_succ in Hdm; nia).
+      apply SubSteps_mult; assumption. }
+    rewrite (SubSteps_det _ _ _ Hn _ HSS). cbn. lia.
+  - (* a = b * q + r, 0 < r < b : q subtractions then continue from (r, b) *)
+    pose proof (Z.div_mod a b ltac:(lia)) as Hdm.
+    pose proof (Z.mod_pos_bound a b H) as [Hr0 Hrb].
+    pose proof (Z.div_pos a b ltac:(lia) H) as Hq0.
+    pose proof (sub_steps_spec (a mod b) b ltac:(lia) H) as Hm.
+    pose proof (SubSteps_shift (Z.to_nat (a / b)) b (a mod b) _ H ltac:(lia) Hm) as HSS.
+    rewrite Z2Nat.id in HSS by assumption.
+    replace (a / b * b + a mod b) with a in HSS by nia.
+    rewrite (SubSteps_det _ _ _ Hn _ HSS).
+    specialize (IHQuots ltac:(lia) _ (SubSteps_sym _ _ _ Hm)).
+    unfold zsum in *. cbn. rewrite Nat2Z.inj_add, Z2Nat.id by assumption. lia.
+Qed.
+
+Corollary sub_steps_quotients : forall a b l, 0 < a -> 0 < b -> Quots a b l ->
+  Z.of_nat (sub_steps a b) + 1 = zsum l.
+Proof.
+  intros a b l Ha Hb Hq. apply (SubSteps_quotients a b l Ha Hq).
+  apply sub_steps_spec; assumption.
 Qed.
 
 (** *** Fibonacci corollary. *)
