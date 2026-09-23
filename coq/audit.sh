@@ -26,6 +26,7 @@ Require Import Janus RevCore RevExtract RevInvert RevStack RevCA
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
+Require Import JanusCost.
 Module ModFacts256 := RevMod.ModFacts RevMod.M256.
 Module ExtModFacts256 := RevExtMod.ExtModFacts RevExtMod.M256.
 Module SModFacts8 := RevSMod.SModFacts RevSMod.B8.
@@ -102,6 +103,19 @@ Print Assumptions RevExtSMod.i8_cell_swraps.
 Print Assumptions RevExtSMod.expr_wraps_mid_computation.
 Print Assumptions RevExtractSMod.Run8.run_sound.
 Print Assumptions RevExtractSMod.Run8.run_injective.
+(* cost semantics: determinism of cost, cost-preserving reversal, and the
+   RC-03 resource laws (gcd / bubble sort stack peaks, syntactic checks) *)
+Print Assumptions JanusCost.exec_det.
+Print Assumptions JanusCost.exec_cost_rev.
+Print Assumptions JanusCost.exec_injective.
+Print Assumptions JanusCost.exec_peak_lo.
+Print Assumptions JanusCost.no_push_stack_zero.
+Print Assumptions JanusCost.acyclic_depth_bound.
+Print Assumptions JanusCost.no_call_in_loop_bounded_calls.
+Print Assumptions JanusCost.GCD.gcd_stack_eq_divisions.
+Print Assumptions JanusCost.GCD.gcd_fib_stack.
+Print Assumptions JanusCost.GCD.gcd_fib_sub_steps.
+Print Assumptions JanusCost.BSORT.bsort_stack_eq_comparisons.
 EOF
 
 OUT="$("$ROCQ" compile -Q . "" "$AUDIT" 2>&1)"
