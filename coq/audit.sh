@@ -115,6 +115,7 @@ Print Assumptions JanusCost.no_call_in_loop_bounded_calls.
 Print Assumptions JanusCost.GCD.gcd_stack_eq_divisions.
 Print Assumptions JanusCost.GCD.gcd_fib_stack.
 Print Assumptions JanusCost.GCD.gcd_fib_sub_steps.
+Print Assumptions JanusCost.GCD.sub_steps_quotients.
 Print Assumptions JanusCost.BSORT.bsort_stack_eq_comparisons.
 EOF
 

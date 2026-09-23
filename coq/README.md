@@ -330,6 +330,7 @@ nesting; `total_calls` the number of call events.
 | L1 gcd | `GCD.gcd_stack_eq_divisions` | for `a, b > 0`, empty log: `call gcd` terminates with `a = b = gcd a b`, `length log = stack_peak = sub_steps a b`, `steps = 2 + 4·sub_steps a b`, depth = calls = 1 |
 | L1 Fibonacci | `GCD.gcd_fib_stack` | on `(F(k+2), F(k+1))`: `stack_peak = length log = k`, `steps = 2 + 4k` |
 |  | `GCD.gcd_fib_sub_steps` | `sub_steps (F(k+2)) (F(k+1)) = k` |
+|  | `GCD.sub_steps_quotients` | `Quots a b l → sub_steps a b + 1 = Σ l` (Σ of the Euclidean quotients) |
 | L2 bubble sort | `BSORT.bsort_stack_eq_comparisons` | for **any** array contents and size `n`: `stack_peak = length gb = n(n−1)/2`; `steps = 3 + 3n + 4·n(n−1)/2 + 4w` with `w ≤ n(n−1)/2` the number of swaps performed, i.e. `steps ∈ [3+3n+4C, 3+3n+8C]` |
 | L3a no push ⇒ no stack | `no_push_stack_zero` | if no `push`/`pop` occurs in `s` nor in any procedure accepted by `ok` (closed under calls), then `stack_peak c = ssize a` and `ssize b = ssize a` |
 | L3b acyclic ⇒ depth bound | `acyclic_depth_bound` | if `rank(callee) < rank(caller)` for every call site (`env_ranked`) and every call site in `s` has rank `< h`, then `call_depth_peak c ≤ h` |
@@ -339,9 +340,10 @@ nesting; `total_calls` the number of call events.
 `1 + sub_steps (a−b) b` if `a > b`, `1 + sub_steps a (b−a)` otherwise; defined
 with fuel `a + b` and characterised by the inductive `SubSteps`). On consecutive
 Fibonacci numbers it equals the number of Euclidean divisions `k`
-(`gcd_fib_sub_steps`); in general it is Σ(quotients) − 1 over the division
-sequence — stated in the file's comments, proved here only for the Fibonacci
-case.
+(`gcd_fib_sub_steps`); in general `sub_steps a b + 1 = Σ quotients` of the
+Euclidean division sequence `(a,b) → (b, a mod b) → …` up to the first zero
+remainder (`sub_steps_quotients`, with the sequence given by the inductive
+`Quots` and shown total by `Quots_total`).
 
 Where soundness needs assumptions: (a) "no push" has to mean *no push and no
 pop* — `uncall` runs the inverted body in which pushes and pops are exchanged
