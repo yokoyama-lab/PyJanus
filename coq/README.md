@@ -281,6 +281,79 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
   free from `exec_iff`. Covers in-place affine/XOR atoms, array l-values, divmod
   consume (`ODiv`/`OMod`), a reversible `If`, and a general-`N` `Loop` proved by
   loop-invariant induction.
+- `JanusCost.v` — a **cost semantics** for core Janus (integer store, arrays,
+  Janus `stack` variables, `local`/`delocal`, `push`/`pop`, `call`/`uncall`)
+  with machine-checked **resource laws**: determinism of the cost, exact cost
+  preservation under program inversion, the gcd and bubble-sort stack-peak
+  equalities that RC-03 checked at 6 points only, and soundness of three
+  syntactic resource checks. See the section below.
+
+## Cost semantics and resource laws (`JanusCost.v`)
+
+RC-03 (「可逆プログラムは何を払っているか」, the Janus resource atlas) measures
+per run `steps` (executed statements), `stack_peak` (peak total depth of all
+Janus `stack` variables) and `call_depth_peak`, observes at 6 input sizes that
+the gcd stack peak equals the number of Euclidean divisions and the bubble-sort
+stack peak equals the number of comparisons n(n−1)/2, and notes that these are
+"6-point agreements, not proofs". `JanusCost.v` is standalone (no dependency on
+the other files) and turns them into theorems.
+
+**Language.** A `state` is `{vars : nat → Z; arrs : nat → Z → Z; stks : nat → list Z;
+nstk : nat}` (`nstk` = number of declared stacks; `ssize st` = total number of
+stacked values). Statements: `Skip` (the *empty block*), `x op= e`
+(`+= -= ^=`, side condition `occurs x e = false`), `a[i] op= e` (array `a` not
+read by `i` or `e`), `Seq`, `If e1 s1 s2 e2`, `Loop e1 s1 s2 e2` (Janus
+`from/do/loop/until`, exactly as `Janus.v`), `Local x e1 s e2` (modelled as a
+plain store variable: must be 0 on entry, initialised to `e1`, asserted equal to
+`e2` on exit and re-zeroed; `x` must not occur in `e1`, `e2`), `Push x k` (the
+value of `x` is pushed on stack `k` and `x` becomes 0), `Pop x k` (`x` must be
+0), `Call p`/`Uncall p` with a procedure environment `Γ : pname → stmt`.
+Parameters are modelled by global variables, as in `Janus.v`. Expressions read
+variables, array cells, `top(s)` and `empty(s)`.
+
+**Cost.** `exec Γ s a b c` is the big-step relation instrumented with
+`c : cost = {steps; stack_peak; call_depth_peak; total_calls}`. Counting follows
+`jana_py/pebble.py`: every executed statement is 1, compound statements
+(`if`/`loop`/`local`/`call`/`uncall`) count 1 plus their children, `Skip` (the
+empty block) is 0 — this reproduces pebble's totals for the two fixtures
+(gcd.ja: 16, bubble_sort.ja: 247). `stack_peak` is the maximum of `ssize` over
+all intermediate states (each rule records the sizes of its own states,
+sequential composition takes the max; `exec_peak_lo` shows the peak dominates
+the entry and exit sizes). `call_depth_peak` is the peak `call`/`uncall`
+nesting; `total_calls` the number of call events.
+
+| Result | Rocq name | Statement |
+|---|---|---|
+| Determinism | `exec_det` | `exec s a b c → exec s a b' c' → b = b' ∧ c = c'` |
+| Reversal preserves cost | `exec_cost_rev` | `exec s a b c → exec (invert s) b a c` (same `c`: steps, stack peak, call depth and call count are all invariant under inversion) |
+| Backward determinism | `exec_injective` | `exec s a b c → exec s a' b c' → a = a' ∧ c = c'` |
+| L1 gcd | `GCD.gcd_stack_eq_divisions` | for `a, b > 0`, empty log: `call gcd` terminates with `a = b = gcd a b`, `length log = stack_peak = sub_steps a b`, `steps = 2 + 4·sub_steps a b`, depth = calls = 1 |
+| L1 Fibonacci | `GCD.gcd_fib_stack` | on `(F(k+2), F(k+1))`: `stack_peak = length log = k`, `steps = 2 + 4k` |
+|  | `GCD.gcd_fib_sub_steps` | `sub_steps (F(k+2)) (F(k+1)) = k` |
+| L2 bubble sort | `BSORT.bsort_stack_eq_comparisons` | for **any** array contents and size `n`: `stack_peak = length gb = n(n−1)/2`; `steps = 3 + 3n + 4·n(n−1)/2 + 4w` with `w ≤ n(n−1)/2` the number of swaps performed, i.e. `steps ∈ [3+3n+4C, 3+3n+8C]` |
+| L3a no push ⇒ no stack | `no_push_stack_zero` | if no `push`/`pop` occurs in `s` nor in any procedure accepted by `ok` (closed under calls), then `stack_peak c = ssize a` and `ssize b = ssize a` |
+| L3b acyclic ⇒ depth bound | `acyclic_depth_bound` | if `rank(callee) < rank(caller)` for every call site (`env_ranked`) and every call site in `s` has rank `< h`, then `call_depth_peak c ≤ h` |
+| L3c no call in loops ⇒ bounded calls | `no_call_in_loop_bounded_calls` | additionally, if no `call`/`uncall` occurs inside any loop body, then `total_calls c ≤ cbound h s`, where `cbound` is the syntactic count Σ_{call sites}(1 + calls(callee)) (input-independent) |
+
+`sub_steps a b` is the executable subtractive-Euclid step count (`0` if `a = b`,
+`1 + sub_steps (a−b) b` if `a > b`, `1 + sub_steps a (b−a)` otherwise; defined
+with fuel `a + b` and characterised by the inductive `SubSteps`). On consecutive
+Fibonacci numbers it equals the number of Euclidean divisions `k`
+(`gcd_fib_sub_steps`); in general it is Σ(quotients) − 1 over the division
+sequence — stated in the file's comments, proved here only for the Fibonacci
+case.
+
+Where soundness needs assumptions: (a) "no push" has to mean *no push and no
+pop* — `uncall` runs the inverted body in which pushes and pops are exchanged
+(`stackfree` forbids both and is `invert`-invariant, so `uncall` needs no
+extra hypothesis); (b)/(c) acyclicity is witnessed by a ranking function; (c)
+loop bodies must be call-free in *both* parts of every `from/loop/until`, in the
+entry statement and in every procedure body. All predicates are closed under
+`invert`. What is **not** modelled: swap, `/` `%`, `for`/`iterate`, structs,
+value parameters, per-activation local frames (locals are global slots that must
+be 0 on entry — faithful for `gcd.ja` and `bubble_sort.ja`, whose locals always
+exit at 0 or are re-zeroed by `delocal`), and array bounds. `final_live_bits`,
+`puts`/`takes` are not in the cost record.
 
 ## Building
 
