@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from collections import defaultdict
 from pathlib import Path
 import sys
@@ -57,11 +58,48 @@ def pct(n: int, d: int) -> str:
   return "-" if d == 0 else f"{100.0 * n / d:.1f}%"
 
 
-def build_report(per_file, sidecar, *, csv_path: Path, ann_path: Path) -> tuple[str, dict]:
+def read_sidecar_entries(path: Path) -> list[dict]:
+  """Raw sidecar entries (needed to tell ``arrays`` from ``stacks`` names)."""
+  with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+  return data["programs"] if isinstance(data, dict) else data
+
+
+def reverse_check(per_file, entries) -> tuple[list[tuple[str, str, str]], list[str]]:
+  """Annotated arrays that the profiler never emitted, and annotated programs absent from the CSV.
+
+  The profiler identifies arrays by storage identity and names them by the
+  variable they were first seen in; an array *field* of a struct (sidecar
+  name ``a.v``) is currently not reported at all, so such arrays can only be
+  listed here, never classified.
+  """
+  missing: list[tuple[str, str, str]] = []
+  absent_programs: list[str] = []
+  for e in entries:
+    f = e["file"]
+    arrays = e.get("arrays") or {}
+    seen = per_file.get(f, {})
+    if f not in per_file and arrays:
+      absent_programs.append(f)
+    for name, role in arrays.items():
+      if name not in seen:
+        reason = "struct field: profiler does not report array fields of structs" if "." in name else "not emitted by the profiler"
+        missing.append((f, name, f"{role}; {reason}"))
+  return missing, absent_programs
+
+
+def stack_rows(per_file) -> int:
+  """Number of CSV rows flagged as stacks (``kind`` == ``stack``), 0 if the column is absent."""
+  return sum(1 for arrays in per_file.values() for row in arrays.values()
+             if (row.get("kind") or "").strip().lower() == "stack")
+
+
+def build_report(per_file, sidecar, *, csv_path: Path, ann_path: Path, entries=None) -> tuple[str, dict]:
   all_items: list[Classified] = []
   per_program: list[tuple[str, str | None, list[Classified]]] = []
   unmatched_files: list[str] = []
   unmatched_names: list[tuple[str, str]] = []
+  mismatches: list[tuple[str, str, str]] = []
   for file, arrays in per_file.items():
     ann = sidecar_for(file, sidecar)
     if ann is None:
@@ -71,8 +109,14 @@ def build_report(per_file, sidecar, *, csv_path: Path, ann_path: Path) -> tuple[
       for c in items:
         if c.role is None:
           unmatched_names.append((file, c.name))
+    for c in items:
+      if c.written and c.note and c.note != "unannotated":
+        mismatches.append((file, c.name, c.note))
     all_items.extend(items)
     per_program.append((file, ann.confidence if ann else None, items))
+  entries = entries or []
+  missing_arrays, absent_programs = reverse_check(per_file, entries)
+  n_stack_rows = stack_rows(per_file)
 
   s = summarize(all_items)
   written = s["written"]
@@ -84,20 +128,24 @@ def build_report(per_file, sidecar, *, csv_path: Path, ann_path: Path) -> tuple[
   lines.append(f"- arrays CSV: `{csv_path}`")
   lines.append(f"- annotations: `{ann_path}`")
   lines.append(f"- programs in CSV: {len(per_file)}; arrays: {s['arrays']}; written arrays: {written}")
+  if entries:
+    lines.append(f"- programs in the sidecar: {len(entries)}; sidecar programs without a CSV row: "
+                 f"{len([e for e in entries if e['file'] not in per_file])} "
+                 f"(no arrays declared, or only struct-field arrays -- see 'Annotated arrays absent from the CSV')")
   lines.append("")
   lines.append("## Headline (written arrays)")
   lines.append("")
   lines.append("RC-03 (unannotated): \"of the written arrays, N never take a cell back to 0, M end empty\".")
   lines.append("")
-  lines.append("| quantity | count | % of written |")
-  lines.append("|---|---:|---:|")
-  lines.append(f"| written arrays | {written} | 100% |")
-  lines.append(f"| never take (takes = 0) | {never} | {pct(never, written)} |")
-  lines.append(f"| ... of which **output** | {nb[CLASS_OUTPUT]} | {pct(nb[CLASS_OUTPUT], written)} |")
-  lines.append(f"| ... of which **input-preserved** | {nb[CLASS_INPUT]} | {pct(nb[CLASS_INPUT], written)} |")
-  lines.append(f"| ... of which **garbage** | {nb[CLASS_GARBAGE]} | {pct(nb[CLASS_GARBAGE], written)} |")
-  lines.append(f"| ... of which clean (never take yet all-zero: never written non-zero) | {nb[CLASS_CLEAN]} | {pct(nb[CLASS_CLEAN], written)} |")
-  lines.append(f"| end empty (ends_empty) | {s['ends_empty']} | {pct(s['ends_empty'], written)} |")
+  lines.append("| quantity | count | % of written | % of never-take |")
+  lines.append("|---|---:|---:|---:|")
+  lines.append(f"| written arrays | {written} | 100% | - |")
+  lines.append(f"| never take (takes = 0) | {never} | {pct(never, written)} | 100% |")
+  lines.append(f"| ... of which **output** | {nb[CLASS_OUTPUT]} | {pct(nb[CLASS_OUTPUT], written)} | {pct(nb[CLASS_OUTPUT], never)} |")
+  lines.append(f"| ... of which **input-preserved** | {nb[CLASS_INPUT]} | {pct(nb[CLASS_INPUT], written)} | {pct(nb[CLASS_INPUT], never)} |")
+  lines.append(f"| ... of which **garbage** | {nb[CLASS_GARBAGE]} | {pct(nb[CLASS_GARBAGE], written)} | {pct(nb[CLASS_GARBAGE], never)} |")
+  lines.append(f"| ... of which clean (never take yet all-zero: never written non-zero) | {nb[CLASS_CLEAN]} | {pct(nb[CLASS_CLEAN], written)} | {pct(nb[CLASS_CLEAN], never)} |")
+  lines.append(f"| end empty / clean (ends_empty) | {s['ends_empty']} | {pct(s['ends_empty'], written)} | - |")
   lines.append("")
   lines.append("Reading: the RC-03 \"never cleared\" share is the *never take* row; the three rows")
   lines.append("below it split it into legitimate outputs, untouched inputs, and garbage proper.")
@@ -122,11 +170,62 @@ def build_report(per_file, sidecar, *, csv_path: Path, ann_path: Path) -> tuple[
     lines.append("Arrays in annotated programs that the sidecar does not name (counted as garbage):")
     for f, n in unmatched_names:
       lines.append(f"- `{f}`: `{n}`")
-  if s["mismatches"]:
+  if mismatches:
     lines.append("")
-    lines.append("Annotation / measurement mismatches:")
-    for name, note in s["mismatches"]:
-      lines.append(f"- `{name}`: {note}")
+    lines.append("Annotation / measurement mismatches (classification unchanged; listed for review):")
+    for f, name, note in mismatches:
+      lines.append(f"- `{f}`: `{name}`: {note}")
+  lines.append("")
+  lines.append("## Annotated arrays absent from the CSV")
+  lines.append("")
+  if not entries:
+    lines.append("(sidecar entries not available; reverse check skipped)")
+  elif not missing_arrays:
+    lines.append("Every array named in the sidecar has a CSV row.")
+  else:
+    lines.append(f"{len(missing_arrays)} annotated arrays in {len({f for f, _, _ in missing_arrays})} programs have no CSV row, "
+                 "so they are neither in the RC-03 count nor in the split above:")
+    lines.append("")
+    lines.append("| program | array | annotated role; reason |")
+    lines.append("|---|---|---|")
+    for f, name, why in missing_arrays:
+      lines.append(f"| `{f}` | `{name}` | {why} |")
+    if absent_programs:
+      lines.append("")
+      lines.append("Programs with annotated arrays but no CSV row at all: " + ", ".join(f"`{f}`" for f in absent_programs))
+  lines.append("")
+  lines.append("## Stacks")
+  lines.append("")
+  if n_stack_rows:
+    lines.append(f"The CSV has {n_stack_rows} stack rows; they are classified together with the arrays above.")
+  else:
+    lines.append("The arrays CSV has **no stack rows** (the profiler reports stacks only as the aggregate "
+                 "`stack_peak` in `corpus_atlas.csv`), so a measured output / input / garbage split for stacks "
+                 "is not possible.  Annotation-side counts from the sidecar (roles of the stacks declared in `main`):")
+    if entries:
+      counts: dict[str, int] = defaultdict(int)
+      per_prog_garbage: list[tuple[str, list[str]]] = []
+      for e in entries:
+        stacks = e.get("stacks") or {}
+        gs = []
+        for name, role in stacks.items():
+          head = role.split()[0].split("(")[0].lower()
+          counts[head] += 1
+          if head == "garbage":
+            gs.append(name)
+        if gs:
+          per_prog_garbage.append((e["file"], gs))
+      total = sum(counts.values())
+      lines.append("")
+      lines.append("| stack role | count | % of stacks |")
+      lines.append("|---|---:|---:|")
+      lines.append(f"| stacks annotated | {total} | 100% |")
+      for role in ("output", "input", "garbage", "scratch"):
+        if counts.get(role):
+          lines.append(f"| {role} | {counts[role]} | {pct(counts[role], total)} |")
+      lines.append("")
+      lines.append("Garbage stacks per program (reversibility logs): " +
+                   "; ".join(f"`{f.rsplit('/', 1)[-1]}`: {', '.join(gs)}" for f, gs in per_prog_garbage))
   lines.append("")
   lines.append("## Garbage arrays per program")
   lines.append("")
@@ -158,7 +257,15 @@ def main(argv: list[str] | None = None) -> int:
     return 2
   sidecar = load_sidecar(args.annotations)
   per_file = read_csv(args.csv)
-  report, _ = build_report(per_file, sidecar, csv_path=args.csv, ann_path=args.annotations)
+  entries = read_sidecar_entries(args.annotations)
+
+  def rel(p: Path) -> Path:
+    try:
+      return p.resolve().relative_to(ROOT)
+    except ValueError:
+      return p
+
+  report, _ = build_report(per_file, sidecar, csv_path=rel(args.csv), ann_path=rel(args.annotations), entries=entries)
   if not args.quiet:
     print(report, end="")
   if str(args.out) != "-":

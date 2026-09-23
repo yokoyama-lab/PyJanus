@@ -81,6 +81,29 @@ rc03 §規模を振った計測（:201-234）は 9 族 × 6 サイズ．ここ�
 揃っていることの照合になっている．配列本数（146 対 177）の差は，配列の同定法
 （ここでは記憶域の同一性で 1 本，ローカル配列の再確保は同名 1 本に合算）の違いと考えられる．
 
+### 出力/ゴミ再集計 — `recount.py`, `annotations/`, `data/recount.md`
+
+Janus には「出力」の概念が無いので，上の「takes = 0 の配列 65.1%」は正当な結果配列と
+ゴミを区別できない．`annotations/out_annotations.json`（101 本の手書き注釈，
+`docs/output-annotation.md` 参照）を `data/corpus_arrays.csv` と結合し，
+`python3 tests/resource_atlas/recount.py` で `data/recount.md` を再生成する．
+
+| 量 | 本数 | 書き込み配列比 | takes = 0 比 |
+|---|---:|---:|---:|
+| 書き込みのあった配列 | 146 | 100% | — |
+| takes = 0（rc03 の「消されない」） | 95 | 65.1% | 100% |
+| 　うち出力 (output) | 39 | 26.7% | 41.1% |
+| 　うち入力保存 (input-preserved) | 34 | 23.3% | 35.8% |
+| 　うちゴミ (garbage) | 22 | 15.1% | 23.2% |
+| 終端で空 (clean) | 17 | 11.6% | — |
+
+書き込み配列 146 本の 4 分類は output 62 / input-preserved 40 / garbage 27 / clean 17．
+CSV 中の配列は 146/146 が注釈と一致（未注釈 0）．逆向きには，構造体フィールドの配列 7 本
+（`a.v`, `a.grid`, `d.entries`）を計測器が報告していないため CSV に無く，`recount.md` に
+理由付きで列挙してある．スタックは CSV に行が無い（`stack_peak` の総和のみ）ので注釈側の
+本数だけ（42 本 = garbage 31 / output 6 / scratch 5）．プログラム別のゴミ配列一覧も
+`recount.md` にある．
+
 ## 3. 構文的予測器 — `jana_py/costcheck.py`（`--costcheck`）, `compare.py`
 
 AST だけから次を予測する（`analyze(program) -> CostPrediction`）:
