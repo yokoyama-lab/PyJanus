@@ -1,0 +1,14 @@
+patched_sites	10
+source_lines_tagged
+  889:  | O -> failwith "FUEL_EXHAUSTED"
+  897:        | False -> failwith "NONE_AT_897")
+  901:        | False -> failwith "NONE_AT_901")
+  907:        | False -> failwith "NONE_AT_907")
+  913:        | False -> failwith "NONE_AT_913")
+  924:                        | False -> failwith "NONE_AT_924")
+  929:                        | True -> failwith "NONE_AT_929"
+  935:        | False -> failwith "NONE_AT_935")
+  951:  | O -> failwith "FUEL_EXHAUSTED"
+  961:              | True -> failwith "NONE_AT_961"
+control_tiny_fuel_loop_count	-	Fatal error: exception Failure("FUEL_EXHAUSTED")
+structs_array_field_c	-	Fatal error: exception Failure("NONE_AT_897")

@@ -1,0 +1,34 @@
+...................s....ss.....s...............s..s....s......s.....s... [ 12%]
+.s........s.s.....ss.........s...ss......s...sss........................ [ 24%]
+........................................................................ [ 36%]
+........................................................................ [ 48%]
+........................................................................ [ 60%]
+.ssssssss..sssssss.sssssssssssssssssssssssssssssssssssssssssssssssssssss [ 72%]
+ssssssssssssssssssssssssssssssssssssssssssssssss.ssssssss....sssss.sssss [ 84%]
+sssssssssssssssssssssssssssssssss.ssssssssssssssssssssssssssssssssssssss [ 96%]
+ssssssssssssssssssssssss                                                 [100%]
+=========================== short test summary info ============================
+SKIPPED [13] tests/jana2014/test_verified_corpus.py:37: self-recursion with local variables (no frame stack)
+SKIPPED [4] tests/jana2014/test_verified_corpus.py:37: *=
+SKIPPED [1] tests/jana2014/test_verified_corpus.py:37: /=
+SKIPPED [1] tests/jana2014/test_verified_corpus.py:37: array of structs with an array-typed field
+SKIPPED [1] tests/jana2014/test_verified_corpus.py:37: interpreter returned NONE (out of fuel?)
+SKIPPED [1] tests/jana2014/test_verified_corpus.py:37: local struct initialized from a non-variable
+SKIPPED [12] tests/jana2014/test_verified_cores_corpus.py:39: array declaration
+SKIPPED [99] tests/jana2014/test_verified_cores_corpus.py:39: uses procedures (verified Call needs parameters)
+SKIPPED [17] tests/jana2014/test_verified_cores_corpus.py:39: stmt ['body', 'enter_decl', 'exit_decl', 'pos']
+SKIPPED [2] tests/jana2014/test_verified_cores_corpus.py:39: stmt ['expr', 'ident', 'pos']
+SKIPPED [2] tests/jana2014/test_verified_cores_corpus.py:39: expr ['cond', 'else_expr', 'pos', 'then_expr']
+SKIPPED [2] tests/jana2014/test_verified_cores_corpus.py:39: operator &
+SKIPPED [22] tests/jana2014/test_verified_cores_corpus.py:39: uses structs
+SKIPPED [61] tests/jana2014/test_verified_cores_corpus.py:39: array parameter
+SKIPPED [1] tests/jana2014/test_verified_cores_corpus.py:39: non-variable argument
+SKIPPED [3] tests/jana2014/test_verified_cores_corpus.py:39: operator /
+SKIPPED [1] tests/jana2014/test_verified_cores_corpus.py:39: stmt ['body', 'end_expr', 'exclusive', 'ident', 'pos', 'start_expr', 'step_expr', 'typ']
+SKIPPED [2] tests/jana2014/test_verified_cores_corpus.py:39: expr ['ident', 'pos']
+SKIPPED [2] tests/jana2014/test_verified_cores_corpus.py:39: operator %
+SKIPPED [1] tests/jana2014/test_verified_cores_corpus.py:39: operator >=
+SKIPPED [1] tests/jana2014/test_verified_cores_corpus.py:39: 'left'
+SKIPPED [1] tests/jana2014/test_verified_cores_corpus.py:39: *=
+350 passed, 250 skipped in 348.14s (0:05:48)
+runcap: 成功 / 経過 0h05m48s / 最大メモリ 188 MB（上限 8 GB）
