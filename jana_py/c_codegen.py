@@ -531,7 +531,9 @@ def format_stmt(stmt, indent: int, procs: dict[str, Proc] | None = None) -> list
 def format_local_decl(decl) -> str:
   if decl.dimensions:
     dims = "".join(f"[{format_expr(dim)}]" for dim in decl.dimensions if dim is not None)
-    init = f" = {format_expr(decl.init_expr)}" if decl.init_expr is not None else ""
+    # `local int t[3]` with no initializer is all-zero in Janus, as for the
+    # scalar case below; a bare `int t[3];` would leave stack garbage.
+    init = f" = {format_expr(decl.init_expr)}" if decl.init_expr is not None else " = {}"
     return f"{format_type(decl.typ)} {_esc(decl.ident.name)}{dims}{init}"
   # `local int x` with no initializer means 0 in Janus; C++ would leave it
   # indeterminate.  A struct zero-initializes with `{}`.
