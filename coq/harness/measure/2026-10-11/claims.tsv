@@ -1,0 +1,17 @@
+# Frozen differential-testing numbers for the Janus mechanization paper
+# (overleaf 2026_rev_janus_coq, main.tex @ ded8e3c), re-measured 2026-10-11 on
+# the artifact branch coq/invert-free-backward @ 3b0f79a (the branch main.tex:1133
+# names).  Every "measured" value is a count in art-3b0f79a/counts.tsv,
+# meta.tsv or fuel_probe.log, produced by ../remeasure.sh 3b0f79a <dir>.
+# verdict: match = the sentence is true as written; differs = it must change.
+id	manuscript_anchor	manuscript_says	measured	verdict	evidence
+J1	main.tex:881-885	corpus = 120 programs (101 examples + 19 fixtures)	120 = 101 + 19	match	art-3b0f79a/meta.tsv:3-4
+J2	main.tex:54-56,152-153,886-887	flat-slot verified interpreter agrees on all 99 in-subset programs, 0 disagreements	99 passed, 0 failed of 120	match	art-3b0f79a/counts.tsv:4
+J3	main.tex:887-891	21 skipped = 20 model limits + 1 program that exhausts the fuel budget	21 skipped, 0 by fuel: 13 self-recursion with locals, 4 *=, 1 /=, 3 struct lowering (structs_array_field_c is rejected by the run-time aliasing guard wf_assign, not by fuel)	differs	art-3b0f79a/counts.tsv:8-13; art-3b0f79a/fuel_probe.log
+J4	main.tex:986-990	structs_array_field_c is in subset but exhausts the interpreter's fuel budget	returns NONE at fuel 3,000,000 and at 30,000,000 within 2 s; with the fuel branch made fatal it still fails at the Assign side condition (NONE_AT_897 = wf_assign false); control: fuel 3 on loop_count.ja raises FUEL_EXHAUSTED	differs	art-3b0f79a/fuel_probe.log
+J5	main.tex:945-950	caption: the 21 skips are limits of the flat-slot model	all 21 are model/lowering limits (see J3)	match	art-3b0f79a/counts.tsv:8-13
+J6	main.tex:817-820	vjanus: whole example corpus, 101 programs, forward and inverse, 240 differential checks, no skips	120 programs (101 + 19): forward 120 passed, inverse 120 passed = 240, 0 skipped	differs (101 -> 120)	art-3b0f79a/counts.tsv:6-7
+J7	main.tex:70-71,892-893	vjanus runs all 101 example programs forward and inverse with no skips	true (the 101 are a subset of the 120 in J6)	match	art-3b0f79a/counts.tsv:6-7
+J8	main.tex:76,899-900	five distinct wrong-output codegen bugs (+ a sixth compile-fail)	historical, not re-measurable: PyJanus 3d91c9d (2026-06-20) lists exactly five; a823058 is the name-collision compile fix	match	git show 3d91c9d; git show a823058
+J9	main.tex:922-923	the code generator now agrees with the interpreter on every in-subset program it supports	codegen_diff over 120 programs: PASS 119, WRONG 1 (local_array.ja: `local int tmp[3]` emitted as uninitialised `int tmp[3];`, output garbage); development 9d30e2f: still WRONG (delocal check now throws)	differs	art-3b0f79a/codegen_diff.log; art-3b0f79a/counts.tsv:14-16
+J10	README.md:8 (overleaf, not main.tex)	harness 34/38	stale; current harness numbers are J2/J3	differs	-

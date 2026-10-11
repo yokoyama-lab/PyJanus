@@ -1,0 +1,16 @@
+quantity	value
+junit.test_verified_cores_corpus.passed	11
+junit.test_verified_cores_corpus.skipped	229
+junit.test_verified_corpus.passed	99
+junit.test_verified_corpus.skipped	21
+junit.test_vjanus_corpus.passed	120
+junit.test_vjanus_inverse.passed	120
+skip.test_verified_corpus[*=]	4	dynamic_array_g.ja glaisher_c.ja modexp_g.ja zagier_c.ja
+skip.test_verified_corpus[/=]	1	rans_encode_c.ja
+skip.test_verified_corpus[array of structs with an array-typed field]	1	structs_array_field_arr_c.ja
+skip.test_verified_corpus[interpreter returned NONE (out of fuel?)]	1	structs_array_field_c.ja
+skip.test_verified_corpus[local struct initialized from a non-variable]	1	structs_local_c.ja
+skip.test_verified_corpus[self-recursion with local variables (no frame stack)]	13	ackermann_c.ja avl_delete_g.ja avl_insert_g.ja binary_heap_g.ja depth_first_search_g.ja factorial_c.ja heap_sort_g.ja kosaraju_scc_g.ja merge_sort_g.ja quick_sort_g.ja stack_operations_c.ja topological_sort_g.ja tree_sort_g.ja
+codegen_diff.PASS	119
+codegen_diff.WRONG	1
+codegen_diff.nonpass	WRONG	local_array.ja
