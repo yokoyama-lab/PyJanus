@@ -90,6 +90,29 @@ class CodegenRunTests(unittest.TestCase):
     self.assertEqual(got["x"], 5)
     self.assertEqual(got["a[0]"], 0)
 
+  def test_uninitialized_local_array_is_zero(self) -> None:
+    """`local int tmp[3]` with no initializer means all-zero in Janus; the C++
+    backend used to emit a bare `int tmp[3];`, so the cells held stack garbage
+    (the `coq/harness/fixtures/local_array.ja` WRONG of 2026-10-11).  Checked
+    on the emitted text too: an uninitialized stack may happen to read as 0."""
+    src = """\
+        procedure work(int out[])
+            local int tmp[3]
+            tmp[0] += 5
+            tmp[1] += 7
+            out[0] += tmp[0]
+            out[1] += tmp[1]
+            tmp[0] -= out[0]
+            tmp[1] -= out[1]
+            delocal int tmp[3]
+        procedure main()
+            int out[3]
+            call work(out)
+        """
+    self.assertRegex(format_program(None, _build(src)), r"tmp\w*\[3\] = \{\}")
+    got = self._assert_matches(src)
+    self.assertEqual((got["out[0]"], got["out[1]"]), (5, 7))
+
   def test_from_loop_offbyone(self) -> None:
     # do-part runs once more than the loop-part: x += 2 four times -> 18.
     got = self._assert_matches("""\
