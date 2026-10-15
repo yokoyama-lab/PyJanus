@@ -8,6 +8,7 @@ import sys
 from enum import Enum
 import math
 import signal
+from pathlib import Path
 
 from .ast import ProcMain, Program
 from .format import formatter_for_std
@@ -177,7 +178,7 @@ def validate_args(args) -> None:
     int(args.timeout)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, include_roots: list[Path] | None = None) -> int:
   parser = build_parser()
   args = parser.parse_args(normalize_argv(argv or sys.argv[1:]))
   if args.file is None:
@@ -205,7 +206,8 @@ def main(argv: list[str] | None = None) -> int:
   phase = "preprocessing"
   try:
     from pathlib import Path as _Path
-    preprocessed = preprocess_text(args.file, text, include_dirs=[_Path(d) for d in args.include_dirs], std=args.std)
+    preprocessed = preprocess_text(args.file, text, include_dirs=[_Path(d) for d in args.include_dirs], std=args.std,
+                                   include_roots=include_roots)
     if timeout_enabled:
       signal.signal(signal.SIGALRM, _timeout_handler)
       signal.alarm(timeout_sec)
@@ -310,6 +312,9 @@ def main(argv: list[str] | None = None) -> int:
       direction=args.direction,
       sources=_source_map(args.file, text),
     ))
+    return 1
+  except MemoryError:
+    print("insufficient memory")
     return 1
   except Exception as exc:
     print(str(exc))
