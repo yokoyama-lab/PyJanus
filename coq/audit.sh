@@ -69,6 +69,7 @@ Require Import Janus RevCore RevExt RevExtract RevInvert RevStack RevCA RevSmall
 Require Import RevArr RevExtractAr RevFrame RevExtractFrame.
 Require Import RevBack RevFrameBack RevArrBack.
 Require Import RevExtractP RevLevel1.
+Require RevNecessity.
 Module BkS := RevBack.Back RevStack.StackPrim.
 Require Import RevPipeline RevPipelineArr RevGolomb RevVarint RevZigzag RevDeltaN.
 Require Import RevIO RevMul RevLowering RevLowerExpr RevLowerStmt RevSmvExpr RevSmvAlias RevSmvBlock RevMod RevExtMod RevExtractMod RevSMod RevExtSMod RevExtractSMod.
@@ -86,6 +87,8 @@ Module SemS := RevSemantics.Semantics RevStack.StackPrim.
 Module StpS := RevSteps.Steps RevStack.StackPrim.
 Module ErrE := RevError.ErrSem RevExt.ExtPrim.
 Module HS  := RevInverse.InvMonoidHom RevStack.StackPrim.
+(* the three laws characterize admissible atoms: deterministic + injective *)
+Print Assumptions RevNecessity.admissible_iff_injective.
 (* core reversibility *)
 Print Assumptions Janus.exec_injective.
 Print Assumptions Janus.exec_iff.

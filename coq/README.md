@@ -77,10 +77,15 @@ The three `REV_PRIM` laws are not just *sufficient* but *necessary*:
 - `reset_inadmissible` — a "reset to 0" atom is forward-*deterministic* yet
   non-injective, and provably has **no** deterministic reversing completion, so
   it can satisfy neither `pstep_rev`/`pstep_det` nor host any `REV_PRIM`.
+- `admissible_iff_injective` — the converse, as one first-class theorem: an atom
+  family can be hosted by primitives satisfying the three laws **iff** it is
+  forward-deterministic and injective. The ⇐ direction adjoins a formal inverse
+  to every atom (primitives `atom * bool`, `pinv` flips the flag); the same
+  completion is packaged as the `REV_PRIM` instance `Complete (A : ATOMS)`.
 
-Sufficiency (`RevCore`) + necessity (`RevNecessity`) together: **a primitive is
-admissible to the framework iff it is injective** — forward determinism alone is
-not enough.
+Sufficiency (`RevCore`) + `admissible_iff_injective` together: **a
+forward-deterministic primitive is admissible to the framework iff it is
+injective** — forward determinism alone is not enough.
 
 ### Instances
 
@@ -334,7 +339,9 @@ them keeps `exec_iff` intact. Every theorem here is axiom-audited (`audit.sh`).
 - `RevAlgebra.v` — reversibility as an open algebra of relational combinators
   (Seq/If/Loop become closure theorems); the syntax is one instance.
 - `RevNecessity.v` — the three `REV_PRIM` laws are necessary (tight): they force
-  primitive injectivity, and a non-injective atom is inadmissible.
+  primitive injectivity, a non-injective atom is inadmissible, and conversely
+  every deterministic injective atom family is admissible
+  (`admissible_iff_injective`).
 - `RevSmallStep.v` — a small-step (structural operational) semantics for the
   framework, **proved equivalent** to the big-step `exec`
   (`exec Γ s a b ↔ multistep Γ (embed s) a RSkip b`).
