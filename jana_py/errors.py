@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import re
 
 from .ast import SourcePos
 
@@ -73,6 +75,8 @@ def format_jana_error(
       lines.extend(_indent_block(detail))
 
   hints = _fix_hints(error.message)
+  if os.environ.get(REPAIR_HINTS_ENV) == "1":
+    hints.extend(_repair_hints(error.message, _source_line(error.pos, sources or {}), std))
   if hints:
     lines.extend(["", "Fix hints:"])
     lines.extend(f"  - {hint}" for hint in hints)
@@ -169,4 +173,66 @@ def _fix_hints(message: str) -> list[str]:
     hints.append("The reversible control-flow assertion did not hold; check the matching entry/exit condition.")
   if "division by zero" in lower:
     hints.append("Ensure the divisor expression is non-zero before executing this operation.")
+  return hints
+
+
+# ---------------------------------------------------------------------------
+# 生成 AI による自動修復向けのヒント（2026-11-04 追加）
+#
+# 環境変数 PYJANUS_REPAIR_HINTS=1 のときだけ出す（既定の出力は変えない）。
+# 位置だけでなく「Janus ではどう書くか」を返す。LLM が他の言語の癖で書いた行
+# （代入 `x = e`、`call` なしの呼び出し、定数との交換など）を、エラー行の字面から見分ける。
+# ---------------------------------------------------------------------------
+REPAIR_HINTS_ENV = "PYJANUS_REPAIR_HINTS"
+
+_LVAL = r"[A-Za-z_]\w*(?:\[[^\]]*\])*"
+_KEYWORDS = {"if", "then", "else", "fi", "from", "do", "loop", "until", "local", "delocal",
+             "call", "uncall", "skip", "procedure", "read", "write", "error", "printf",
+             "show", "push", "pop", "iterate", "external"}
+
+
+def _source_line(pos: SourcePos, sources: dict[str, str]) -> str | None:
+  if pos.line <= 0:
+    return None
+  text = _source_text(pos.filename, sources)
+  if text is None:
+    return None
+  lines = text.splitlines()
+  return lines[pos.line - 1] if pos.line <= len(lines) else None
+
+
+def _repair_hints(message: str, line: str | None, std: str | None = None) -> list[str]:
+  code = (line or "").split("//")[0].strip()
+  lower = message.lower()
+  hints: list[str] = []
+  m = re.match(rf"({_LVAL})\s*(:=|<=(?!>)|=(?!=))", code)
+  if m:
+    hints.append(
+      f"Janus has no assignment `{m.group(2)}`. Update a variable reversibly with "
+      f"`{m.group(1)} += e`, `{m.group(1)} -= e` or `{m.group(1)} ^= e` "
+      f"(`+=`/`^=` set it to e only when it is 0 beforehand), or exchange two variables with "
+      f"`a <=> b`. The updated variable must not occur in e.")
+  if re.search(r"<=>\s*-?\d", code) or re.match(r"-?\d+\s*<=>", code):
+    hints.append("Both sides of `<=>` must be variables; a constant cannot be swapped. "
+                 "Use `x += c` / `x -= c` to change a variable by a constant.")
+  m = re.match(r"([A-Za-z_]\w*)\s*\(", code)
+  if m and m.group(1) not in _KEYWORDS:
+    hints.append(f"Procedures are invoked with `call {m.group(1)}(...)` "
+                 f"(or `uncall {m.group(1)}(...)` to run it backward), not by name alone.")
+  if re.match(r"(?:local|delocal)\b", code) and "," in code:
+    hints.append("Each variable in a `local`/`delocal` list needs its own type, e.g. "
+                 "`local int a = 0, int b = 1`; writing one `local int x = e` per line is clearer. "
+                 "Every `local` needs a matching `delocal` with the variable's final value.")
+  if re.match(r"(?:while|for)\b", code):
+    hints.append("Janus loops are `from <entry condition> do ... loop ... until <exit condition>`.")
+  if re.match(r"return\b", code):
+    hints.append("Janus procedures have no `return`; results are left in the parameters.")
+  if re.match(r"(?:else\s+if|elif)\b", code):
+    hints.append("Janus has no `else if`; nest a full `if c then ... else ... fi c` inside the else branch.")
+  if not (std or "").startswith("janus2026") and (code.endswith(";") or "{" in code or "}" in code):
+    hints.append("This standard uses no braces and no semicolons; write one statement per line.")
+  if not hints and "expecting statement" in lower:
+    hints.append("A statement must be one of: `x += e`, `x -= e`, `x ^= e`, `a <=> b`, "
+                 "`if c then ... else ... fi c`, `from c do ... loop ... until c`, "
+                 "`local int x = e ... delocal int x = e`, `call p(...)`, `uncall p(...)`, `skip`.")
   return hints
