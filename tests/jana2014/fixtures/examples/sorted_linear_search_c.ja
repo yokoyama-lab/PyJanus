@@ -1,0 +1,71 @@
+// @summary:   clean sorted linear lower bound and first-match-or-n, with duplicate keys
+// @technique: bennett-uncompute
+// @source:    Classical lower-bound scan and compute-copy-uncompute
+// @confirmed: independent list membership/index/count or bisect_left oracle; see tests/jana2014/test_clean_search_examples.py and reference/sorted_linear_search_c.py
+// @keep:      a, n, p, f, result
+// @oracle:    a == [-2, 0, 0, 4, 9] and key == 0 and n == 5 and p == 1 and f == 6 and result == 6
+// @expect: a[5] = {-2, 0, 0, 4, 9}
+// @expect: f = 6
+// @expect: key = 0
+// @expect: n = 5
+// @expect: p = 1
+// @expect: result = 6
+//
+// Sorted retained-input search; see docs/clean-search-examples.md.
+// Input: k[0..n) nondecreasing, duplicates allowed, retained, n>=0.
+// Output p starts at zero. No sentinel cell is needed.
+
+procedure sorted_lower_bound(int k[], int key, int n, int p)
+  from p = 0 loop
+    p += 1
+  until p = n || k[p] >= key
+
+procedure sorted_flag_keep_bound(int k[], int key, int n, int f, int p)
+  call sorted_lower_bound(k, key, n, p)
+  if p < n && k[p] = key then
+    f ^= 1
+  fi p < n && k[p] = key
+
+procedure sorted_flag_clean(int k[], int key, int n, int f)
+  local int p = 0
+    call sorted_lower_bound(k, key, n, p)
+    if p < n && k[p] = key then
+      f ^= 1
+    fi p < n && k[p] = key
+    uncall sorted_lower_bound(k, key, n, p)
+  delocal int p = 0
+
+// Unlike lower_bound, return n for every absent key.
+// p is a temporary insertion position; result is a separate meaningful output.
+procedure sorted_first_position_clean(int k[], int key, int n, int result)
+  local int p = 0
+    call sorted_lower_bound(k, key, n, p)
+    if p < n && k[p] = key then
+      result ^= p
+    else
+      result ^= n
+    fi p < n && k[p] = key
+    uncall sorted_lower_bound(k, key, n, p)
+  delocal int p = 0
+
+procedure main()
+  int a[5]
+  int key
+  int n
+  int p
+  int f
+  int result
+
+  a[0] += -2
+  a[1] += 0
+  a[2] += 0
+  a[3] += 4
+  a[4] += 9
+  key += 0
+  n += 5
+  f += 7
+  result += 7
+
+  call sorted_lower_bound(a, key, n, p)
+  call sorted_flag_clean(a, key, n, f)
+  call sorted_first_position_clean(a, key, n, result)
