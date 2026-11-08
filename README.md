@@ -177,6 +177,13 @@ harness.
 future candidates drawn from Bird's *Pearls of Functional Algorithm Design* and
 JFP functional pearls (Burrows–Wheeler, arithmetic coding, permutation ranking, …).
 
+## Clean reversible search examples
+
+Four `jana2014` samples cover general linear search, sorted lower bounds,
+restorable sentinels and binary lifting. They handle duplicates and empty logical
+prefixes, with explicit output/scratch contracts and independent regression
+tests. See [the contracts, attribution and test commands](docs/clean-search-examples.md).
+
 ## Tests
 
 ```bash

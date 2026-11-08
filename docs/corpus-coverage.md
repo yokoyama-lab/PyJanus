@@ -197,3 +197,24 @@ pytest の要約は総数しか出さないので、**どのプログラムが�
 
 `fib_c.ja`
 
+
+## 2026-11-08: new clean-search samples
+
+The earlier 101-program matrix above is a historical measurement, preserved
+without claiming it was rerun. The four new rows below were generated with
+`tools/corpus_coverage.py` from a focused pytest JUnit report for these samples.
+They are **not** a fresh full-corpus or full-suite result.
+
+Reproduce the new rows with the corpus-checker command above, adding
+`-k 'linear_search_c or binary_lifting_search_c or sentinel_search_c'`.
+On the development host, `PYJANUS_SKIP_VERIFIED=1` deliberately skipped
+heavyweight Coq-extracted-interpreter builds; the Haskell reference was absent.
+Result: **48 passed, 24 skipped**. The four C++ differential checks passed.
+The separate finite-domain search suite passed **132 tests**.
+
+| プログラム | `reversibility` | `inverse` | `format` | `codegen` | `flat core` | `both cores` | `vjanus` | `vjanus inv` | `step1` | `reference` | `metadata` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `binary_lifting_search_c.ja` | o | o | o | o | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | requires the Haskell reference impleme | o | o |
+| `linear_search_c.ja` | o | o | o | o | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | requires the Haskell reference impleme | o | o |
+| `sentinel_search_c.ja` | o | o | o | o | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | requires the Haskell reference impleme | o | o |
+| `sorted_linear_search_c.ja` | o | o | o | o | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | PYJANUS_SKIP_VERIFIED is set | requires the Haskell reference impleme | o | o |
