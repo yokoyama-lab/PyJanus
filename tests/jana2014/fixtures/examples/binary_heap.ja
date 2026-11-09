@@ -10,6 +10,10 @@
  * multi-declaration locals, no array literals, no size(), no error(),
  * and only constant array sizes.  Behaviour is identical to
  * minheap_Nohr2015.j.
+ *
+ * Original code (S. V. Nohr, no license stated):
+ *   https://github.com/Ekima/Reversible-Graph-Algorithms-Janus-/blob/89b96be6ee78a0be872c3f8505d20f38eb619477/heaps.janus
+ * The parts taken from it are not covered by this repository's BSD-3 license.
  */
 
 procedure insert(int A[], int heapsize, int key, int garbage[], int garbagecounter)
