@@ -117,6 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("-I", dest="include_dirs", metavar="DIR", action="append", default=[], help="add DIR to the `#include` search path (repeatable); the bundled standard library is always searched")
   parser.add_argument("--circuit", action="store_true", dest="circuit", help="synthesize and print a reversible circuit")
   parser.add_argument("--profile", action="store_true", dest="profile", help="profile space usage and print a memory profile")
+  parser.add_argument("--profile-json", action="store_true", dest="profile_json", help="profile space usage and print the RC-03 resource vector as JSON")
+  parser.add_argument("--costcheck", action="store_true", dest="costcheck", help="static cost prediction: call-depth bound, stack-free certificate, call-count bound")
   parser.add_argument("--inverse", dest="inverse_store", default=None, metavar="JSON", help="compute an initial store from the given final store JSON")
   parser.add_argument("--direction", dest="direction", choices=["forward", "backward"], default="forward", help="execution direction: forward (default) or backward (run the program inverted)")
   parser.add_argument("--expect", dest="expect", default=None, metavar="TEXT", help="compare program output against TEXT; exit 0 if equal, 1 otherwise")
@@ -214,11 +216,19 @@ def main(argv: list[str] | None = None) -> int:
       circuit = synthesize_program(program)
       print(circuit.to_text())
       return 0
-    if args.profile:
+    if args.costcheck:
+      phase = "cost analysis"
+      from .costcheck import analyze, format_prediction
+      print(format_prediction(analyze(program)))
+      return 0
+    if args.profile or args.profile_json:
       phase = "profiling"
-      from .pebble import profile_space, format_profile
-      profile = profile_space(program)
-      print(format_profile(profile))
+      from .pebble import profile_space, format_profile, profile_to_dict
+      profile = profile_space(program, std=args.std)
+      if args.profile_json:
+        print(json.dumps(profile_to_dict(profile), indent=2))
+      else:
+        print(format_profile(profile))
       return 0
     if args.inverse_store is not None:
       phase = "inverse analysis"

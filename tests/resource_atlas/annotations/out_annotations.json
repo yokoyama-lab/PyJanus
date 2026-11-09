@@ -1,0 +1,1354 @@
+{
+ "_schema": "pyjanus resource-atlas output/garbage annotations v1 (see README.md and docs/output-annotation.md)",
+ "roles": {
+  "output": "intended result; expected non-zero at termination",
+  "input": "input data; expected unchanged from its initial value at termination",
+  "garbage": "not an intended result, left non-zero at termination (logs, retained intermediates). Stacks may say 'garbage (reversibility log)' -- the loader keeps the first word.",
+  "scratch": "intended to be all-zero / empty at termination (uncomputed, consumed, or never written)"
+ },
+ "programs": [
+  {
+   "file": "tests/jana2014/fixtures/examples/avl_delete.ja",
+   "std": "jana2014",
+   "arrays": {
+    "key": "output",
+    "left": "output",
+    "right": "output",
+    "ht": "output"
+   },
+   "scalars_out": [
+    "root",
+    "nfree"
+   ],
+   "stacks": {
+    "alog": "garbage (reversibility log)",
+    "hlog": "garbage (reversibility log)",
+    "rlog": "garbage (reversibility log)",
+    "dlog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'uncall delete re-inserts the key and restores the exact tree'; the four node arrays ARE the tree (output); the deleted node 5 'is left detached as reversible garbage' inside them; alog/hlog/rlog/dlog are overwrite/decision logs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/avl_insert.ja",
+   "std": "jana2014",
+   "arrays": {
+    "key": "output",
+    "left": "output",
+    "right": "output",
+    "ht": "output"
+   },
+   "scalars_out": [
+    "root",
+    "nfree"
+   ],
+   "stacks": {
+    "alog": "garbage (reversibility log)",
+    "hlog": "garbage (reversibility log)",
+    "rlog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'result is the balanced AVL tree, root = node 4'; node arrays are the output data structure; 'alog -- old child/root pointers', 'hlog -- old node heights', 'rlog -- one rotation code per visited node' are logs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/avl_search.ja",
+   "std": "jana2014",
+   "arrays": {
+    "key": "input",
+    "left": "input",
+    "right": "input"
+   },
+   "scalars_out": [
+    "res5",
+    "res8"
+   ],
+   "stacks": {},
+   "rationale": "Header: 'leaving only res (Bennett compute-copy-uncompute)'; tree arrays are read-only input; res5=5, res8=0.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/base_convert.ja",
+   "std": "jana2014",
+   "arrays": {
+    "d": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'the map (n,b) |-> digits is injective'; n,b read-only scalars, d holds the digits 6,2,0,2.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/bellman_ford.ja",
+   "std": "jana2014",
+   "arrays": {
+    "eu": "input",
+    "ev": "input",
+    "ew": "input",
+    "dist": "output",
+    "pred": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "dlog": "garbage (reversibility log)",
+    "plog": "garbage (reversibility log)",
+    "rlog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: dist[], pred[], and the logs dlog/plog/rlog'; the edge lists are read-only input; logs hold overwritten values / decision bits.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/bfs.ja",
+   "std": "jana2014",
+   "arrays": {
+    "adj": "input",
+    "dist": "output",
+    "visited": "output",
+    "queue": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: dist[], visited[], queue[] (visit order), blog'; adj read-only; head/tail are queue pointers (not counted as outputs).",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/binary_heap.ja",
+   "std": "jana2014",
+   "arrays": {
+    "A": "output",
+    "heapgarbage": "garbage",
+    "heapgarbage1": "garbage",
+    "heapgarbage2": "garbage",
+    "heapgarbage3": "garbage",
+    "heapgarbage4": "garbage",
+    "heapgarbage5": "garbage",
+    "insertgarbage": "garbage",
+    "insertgarbage1": "garbage",
+    "insertgarbage2": "garbage",
+    "insertgarbage3": "garbage",
+    "insertgarbage4": "garbage"
+   },
+   "scalars_out": [
+    "min1",
+    "min2",
+    "min3",
+    "min4",
+    "min5",
+    "min6"
+   ],
+   "stacks": {},
+   "rationale": "main comments: 'garbage for each extractmin' / 'garbage for each insert's decreasekey'; A is the heap after 6 extracts + 5 re-inserts; min1..min6 are the extracted minima.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/bitwise_ops.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "a",
+    "o",
+    "e"
+   ],
+   "stacks": {},
+   "rationale": "Header: 'x & y = 8, x | y = 14, x ^ y = 6'; x,y inputs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/bubble_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "ord": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "gb": "scratch"
+   },
+   "rationale": "Header 'bubble sort with optimal garbage'; a sorted in place, ord = permutation recovered by 'uncall bsort(ord,sz,gb)', which also empties the 'garbage stack' gb.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/cantor_pair.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "z"
+   ],
+   "stacks": {},
+   "rationale": "Header: 'the map (x,y) |-> z is injective'; pair(3,5)=41 in z, x,y read-only.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/closest_pair.ja",
+   "std": "jana2014",
+   "arrays": {
+    "x": "input",
+    "y": "input"
+   },
+   "scalars_out": [
+    "res"
+   ],
+   "stacks": {},
+   "rationale": "Header: 'forward: res = min over i<j of ...'; fold 'uncalled to erase the logs'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/combination.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "res"
+   ],
+   "stacks": {},
+   "rationale": "res = C(5,2); n,r inputs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/convex_hull.ja",
+   "std": "jana2014",
+   "arrays": {
+    "x": "input",
+    "y": "input",
+    "hull": "output"
+   },
+   "scalars_out": [
+    "start"
+   ],
+   "stacks": {
+    "hseq": "output"
+   },
+   "rationale": "Header: 'outputs: hull[i] = 1 iff point i is a hull vertex; hseq = hull walk; start = starting vertex index'; hseq 'doubles as the hull sequence' so the stack is an output.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/counting_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "b": "output",
+    "c": "garbage"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'forward : (A, B=0, C=0) -> (A, B sorted, C = start offsets)'; 'C is retained as the reversible log (size k)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/depth_first_search.ja",
+   "std": "jana2014",
+   "arrays": {
+    "adj": "input",
+    "visited": "output",
+    "order": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: visited[], order[] (DFS preorder), blog'; cnt is the visit counter.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/dijkstra.ja",
+   "std": "jana2014",
+   "arrays": {
+    "w": "input",
+    "dist": "output",
+    "visited": "garbage"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "dlog": "garbage (reversibility log)",
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: dist[], visited[] (all 1), logs dlog/blog'; visited is all-1 at the end and carries no information, so it is classified garbage although the header lists it among the outputs.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/dup_insertion_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "b": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'forward : (a, b=0) -> (a, b sorted)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/dynamic_array.ja",
+   "std": "jana2014",
+   "arrays": {
+    "data": "output"
+   },
+   "scalars_out": [
+    "length",
+    "cap",
+    "q",
+    "x1",
+    "x2"
+   ],
+   "stacks": {
+    "dbit": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'expected: data={10,20,30,0,...}, length=3, cap=8, q=30, x1=50, x2=40'; dbit is the 'resize log (1 bit per add/delete)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/edit_distance.ja",
+   "std": "jana2014",
+   "arrays": {
+    "x": "input",
+    "y": "input",
+    "D": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'D[m][n] is the edit distance'; 'the full table is retained' -- only one cell is the answer, the rest of D is the DP table kept for reversibility (table-as-output caveat).",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/ext_gcd.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "a",
+    "x0",
+    "y0"
+   ],
+   "stacks": {
+    "qlog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'forward: (a,b, x0=1,x1=0,y0=0,y1=1) -> (g, 0, bezout..., qlog)'; a=g, x0,y0 Bezout coefficients; x1,y1 are leftover garbage scalars; qlog logs quotients.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/factor.ja",
+   "std": "jana2014",
+   "arrays": {
+    "fact": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main comments: 'num ... Ends up zero', 'fact ... Ends with factors in ascending order'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/factorial.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "res"
+   ],
+   "stacks": {},
+   "rationale": "res = 5!; n input.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/fall.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "t",
+    "v",
+    "h_r"
+   ],
+   "stacks": {},
+   "rationale": "No header. call fall(g,t,v,h,t_end) produces t,v from h,t_end; uncall fall(g,t_r,v_r,h_r,t_end_r) produces h_r (printed) consuming t_r,v_r.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/fib.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header 'Calculates a fibonacci pair'; call then uncall -> x1,x2 back to 0; roundtrip demo, only the input n remains.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/fib_variants.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "x1",
+    "x2",
+    "ar",
+    "br"
+   ],
+   "stacks": {},
+   "rationale": "No header. fib(n,x1,x2) leaves the pair (x1,x2); fiba/fibb leave their result in ar/br (an stays as input, ax*/bx* end zero).",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/floyd_warshall.ja",
+   "std": "jana2014",
+   "arrays": {
+    "path": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "dlog": "garbage (reversibility log)",
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: path[] (shortest paths), logs dlog/blog'; path is transformed in place from the input matrix.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/gcd.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "a",
+    "b"
+   ],
+   "stacks": {
+    "log": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'forward: (a,b) with a,b>0, a!=b -> (a=b=gcd(a,b), step log)'; 'the log is what lets uncall reconstruct the path'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/gray_code.ja",
+   "std": "jana2014",
+   "arrays": {
+    "bits": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'done in place with one ^= per bit'; 'bits = 1010 -> Gray 1111'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/gray_code_roundtrip.ja",
+   "std": "jana2014",
+   "arrays": {
+    "bits": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'the final store must equal the initial one'; call gray then uncall gray.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/heap_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "ord": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "gb": "garbage (reversibility log)"
+   },
+   "rationale": "Header 'heapsort with optimal garbage'; a sorted in place; ord ('permutation') is declared but never written in this main; gb ('garbage stack') is left holding the branch history.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_arith_coding.ja",
+   "std": "jana2014",
+   "arrays": {
+    "m": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'Decode = uncall: read the symbols back out of x, leaving x = 0'; m restored to {1,0,1,0}.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_arithmetic.ja",
+   "std": "jana2014",
+   "arrays": {
+    "coeffs": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'uncall each procedure to clear the result variable'; fact, pow, y end 0; coeffs read-only.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_basics.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "x",
+    "y",
+    "c",
+    "sq",
+    "z"
+   ],
+   "stacks": {},
+   "rationale": "Chain of injective demos; x=-6 (inc,neg), y=24 (add,dbl,mul_const), c=28, sq=36, z=31 are the printed results; n,a,b,ca,cb inputs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_bennett.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "q2",
+    "r2"
+   ],
+   "stacks": {},
+   "rationale": "main: 'uncall the Bennett-wrapped procedure clears the outputs while leaving x and d untouched'; second call divmod_clean(x2,d,q2,r2) is not uncalled: q2=0, r2=3.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_bits.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "y"
+   ],
+   "stacks": {},
+   "rationale": "xor_key applied twice restores a; gray_encode/feistel_round are uncalled; only xor_into(x,y) leaves a result y=15 (x=240 input).",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_bwt_inverse.ja",
+   "std": "jana2014",
+   "arrays": {
+    "L": "input",
+    "cnt": "scratch",
+    "C": "scratch",
+    "occ": "scratch",
+    "T": "scratch",
+    "path": "scratch",
+    "s": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'uncall = forward BWT: recover (L, I), clearing s and every ancilla'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_ca_rule90.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "scratch",
+    "b": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'uncall replays the rule backwards in time and recovers the original two-slot history (zeros and the impulse)'; a back to zeros, b back to the impulse.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_cipher_sbox.ja",
+   "std": "jana2014",
+   "arrays": {
+    "rk": "scratch",
+    "sbox": "input",
+    "inv_sbox": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: encrypt then 'decrypt' (uncall) then 'rk cleared' (uncall key_schedule); L,R restored; sbox tables read-only.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_gcd.ja",
+   "std": "jana2014",
+   "arrays": {
+    "log": "scratch"
+   },
+   "scalars_out": [
+    "g2",
+    "g3"
+   ],
+   "stacks": {},
+   "rationale": "main: gcd_clean is a Bennett wrapper (computes, copies g, uncomputes) so log returns to zero after every call; first call is uncalled (g=0), g2=7 and g3=9 remain.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_iterate.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "b": "output",
+    "c": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: cumsum on a is uncalled ('restores the original sequence'); xor_chain(b) and odd_even_swap(c) transform in place and are not uncalled; feistel_block uncalled.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_lehmer.ja",
+   "std": "jana2014",
+   "arrays": {
+    "perm": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'uncall the chain to restore (perm, int_result = 0)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_mini_cipher.ja",
+   "std": "jana2014",
+   "arrays": {
+    "logs": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: encrypt then uncall -> 'decrypt: L=100 R=42 logs=000'; L,R restored, logs cleared.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_partition.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "flags": "scratch",
+    "b": "output",
+    "flags_b": "garbage"
+   },
+   "scalars_out": [
+    "q"
+   ],
+   "stacks": {},
+   "rationale": "main: case A 'uncall scatters the elements back, restoring the input and clearing flags'; case B is not uncalled: b partitioned in place (unchanged since already ordered), q=3, flags_b left as the decision log.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_sort_network.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "log": "scratch",
+    "b": "output",
+    "log_b": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: sort4(a) uncalled 'restoring a to its original order and clearing log'; sort4(b) on 'already-sorted input: no comparator swaps, log stays zero'.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/injective_vm.ja",
+   "std": "jana2014",
+   "arrays": {
+    "ops": "input",
+    "args": "input"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "s": "scratch"
+   },
+   "rationale": "main: run then uncall -> 'after uncall: size=0'; top_val/below are pushed back (push zeroes them), empty_check = size(s) = 0.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/kmp.ja",
+   "std": "jana2014",
+   "arrays": {
+    "p": "input",
+    "t": "input",
+    "f": "garbage"
+   },
+   "scalars_out": [
+    "cnt"
+   ],
+   "stacks": {
+    "gq": "garbage (reversibility log)",
+    "gb": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'kmp_count : cnt = number of occurrences'; f is the failure function computed by compf as an intermediate (kept for reversibility); gq 'destroyed prefix lengths + backtrack counts', gb 'branch decision bits'.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/knapsack.ja",
+   "std": "jana2014",
+   "arrays": {
+    "wt": "input",
+    "val": "input",
+    "K": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'The full (n+1) x (W+1) table is retained ... Answer: K[n][W]'; only K[23] is the answer, the rest of K is the DP table (table-as-output caveat).",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/kosaraju_scc.ja",
+   "std": "jana2014",
+   "arrays": {
+    "adj": "input",
+    "adjt": "input",
+    "visited": "garbage",
+    "order": "garbage",
+    "comp": "output"
+   },
+   "scalars_out": [
+    "ncomp"
+   ],
+   "stacks": {
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: comp[], ncomp, order[] (finish order), visited[], blog'; comp/ncomp are the SCC answer; order (pass-1 finish order) and visited (all 1) are intermediates kept for reversibility.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/lcs.ja",
+   "std": "jana2014",
+   "arrays": {
+    "x": "input",
+    "y": "input",
+    "L": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'The whole table is retained ... L[m][n] holds the answer'; table-as-output caveat as for knapsack/edit_distance.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/lis.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "L": "garbage"
+   },
+   "scalars_out": [
+    "res"
+   ],
+   "stacks": {},
+   "rationale": "Header: 'The final answer (max over all L[i]) is produced ... into res'; L[i] per-position lengths are the retained DP intermediates.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/matrix_apsp.ja",
+   "std": "jana2014",
+   "arrays": {
+    "m_arr": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'All lg V intermediate matrices are stored consecutively in one flat array M'; 'final matrix W^4 occupies m_arr[32..47]' -- one array mixing input W, intermediate W^2 and the answer W^4.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/matrixmult.ja",
+   "std": "jana2014",
+   "arrays": {
+    "A": "output",
+    "B": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "No header. uncall crout(B) / multLD / multU / call crout(B): A becomes A*B in place, B is restored to its input value.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/matrixmult_v1.0.ja",
+   "std": "jana2014",
+   "arrays": {
+    "A": "input",
+    "B": "output",
+    "LDU": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "No header. call crout(A,LDU) computes the LDU decomposition into LDU, B := A*B in place, uncall crout clears LDU; x,y unused inputs.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/merge_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "ord": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "gbg": "scratch"
+   },
+   "rationale": "Header 'mergesort using internally optimal garbage'; a sorted in place with ord carrying the permutation; gbg ('garbage stack') and gbfg are declared but unused in this main.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/modexp.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "r"
+   ],
+   "stacks": {
+    "g": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'forward: (r=0, p=0, pw=0) -> (r = base^e mod m, p,pw,g garbage)'; main comments: 'p // garbage: final running power', 'pw // scratch (returned to zero)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/next_permutation.ja",
+   "std": "jana2014",
+   "arrays": {
+    "d": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "glog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'forward: p -> next permutation of p; glog gains (j, i)'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/perm-to-code.ja",
+   "std": "jana2014",
+   "arrays": {
+    "x": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "No header; perm_to_code(x) rewrites the permutation into its Lehmer code in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/permutation_rank.ja",
+   "std": "jana2014",
+   "arrays": {
+    "b": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: 'call rankCC(b, n, index)' then 'call unrankCC(b, n, index)' ('clean: index -> b'); b is restored and index returns to 0.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/prim_mst.ja",
+   "std": "jana2014",
+   "arrays": {
+    "w": "input",
+    "key": "garbage",
+    "parent": "output",
+    "intree": "garbage"
+   },
+   "scalars_out": [
+    "total"
+   ],
+   "stacks": {
+    "dlog": "garbage (reversibility log)",
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: total = MST weight, parent[] (MST edges), intree[], logs'; key (final keys) and intree (all 1) are intermediates kept for reversibility.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/quick_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "ord": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header 'qsort using minimum garbage'; a sorted in place, ord carries the permutation; internal stacks are local and delocalised.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/reversible_ca_ring.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "b": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'the result left in the store'; two-slot second-order CA: after step(a,b); step(b,a) both slots hold generations of the state.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/reversible_ca_rule90.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "b": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'the result left in the store'; two-slot Rule 90R history after two steps.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/reversible_gates.ja",
+   "std": "jana2014",
+   "arrays": {
+    "ctrl": "output",
+    "p": "output",
+    "q": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'result left in the store'; fredkin swaps p/q lanes in place, toffoli flips ctrl[3].",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/run-length-enc-stack.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {
+    "text": "scratch",
+    "arc": "output"
+   },
+   "rationale": "main comments: 'text // uncompressed text', 'arc // compressed text as (n, char) pairs'; text is consumed (empty at the end).",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/run-length-enc.ja",
+   "std": "jana2014",
+   "arrays": {
+    "text": "scratch",
+    "arc": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header 'Run-length encoding'; encode consumes text (all cells return to 0) and writes the (count,char) pairs into arc.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/selection_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "output",
+    "ftab": "garbage",
+    "p": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header 'selection sort with optimal garbage (linear size)'; a sorted in place; ftab ('factorial table') encodes the permutation as the garbage; p ('permutation') is never written in this main (id_perm not called).",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/sqrt.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "root",
+    "num"
+   ],
+   "stacks": {},
+   "rationale": "Lutz-Derby sqrt: root = floor(sqrt(66)) = 8 and num := num - root*root = 2 (the remainder); both printed.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/stack-operations.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {
+    "s": "output"
+   },
+   "rationale": "reverse(s) reverses the stack in place; s = <5,4,3,2,1] is the result.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/stack_uncall.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {
+    "s": "output"
+   },
+   "rationale": "main comments: after uncall build(s,200) 's = <100, 101, 102]'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_array.ja",
+   "std": "jana2014",
+   "arrays": {
+    "v": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Struct-array feature test; v[3] of Pair is written and swapped in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_array_field.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a.v": "output",
+    "a.grid": "output"
+   },
+   "scalars_out": [
+    "a"
+   ],
+   "stacks": {},
+   "rationale": "Struct feature test; Box a has array fields v[3] and grid[2][2] (dotted names) plus scalar w; all written in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_array_field_arr.ja",
+   "std": "jana2014",
+   "arrays": {
+    "g": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Struct-array feature test; g[2] of Row (each with v[3], sum) written in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_array_param.ja",
+   "std": "jana2014",
+   "arrays": {
+    "data": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "bump(data, n) increments each data[i].v in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_flat_param.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a.v": "input"
+   },
+   "scalars_out": [
+    "r",
+    "a"
+   ],
+   "stacks": {},
+   "rationale": "main comments: 'r = 2+3+5+7 = 17', 'a.w = 7 + 4*2 = 15'; array field a.v is read-only.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_flat_repass.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a.v": "input"
+   },
+   "scalars_out": [
+    "r"
+   ],
+   "stacks": {},
+   "rationale": "main comment: 'outer: r += 20 => r=35'; a untouched.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_grid.ja",
+   "std": "jana2014",
+   "arrays": {
+    "grid": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "2-D struct array feature test; grid written in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_local.ja",
+   "std": "jana2014",
+   "arrays": {
+    "out": "input"
+   },
+   "scalars_out": [
+    "s"
+   ],
+   "stacks": {},
+   "rationale": "local struct copies of out[j] are summed into s and delocalised; out unchanged.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_local_arr.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a.v": "input"
+   },
+   "scalars_out": [
+    "s"
+   ],
+   "stacks": {},
+   "rationale": "local struct Box e = a summed into s; a unchanged.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_local_arr2d.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a.grid": "input"
+   },
+   "scalars_out": [
+    "s"
+   ],
+   "stacks": {},
+   "rationale": "local struct Box e = a summed into s; a unchanged.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_nested.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "p"
+   ],
+   "stacks": {},
+   "rationale": "main comments: accumulate/uncall/accumulate -> 'p = {21, 42}'; q input.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_param.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "a",
+    "b"
+   ],
+   "stacks": {},
+   "rationale": "main comments: 'a = {7, 6}', 'b = {10, 0}'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/structs_scalar.ja",
+   "std": "jana2014",
+   "arrays": {},
+   "scalars_out": [
+    "p",
+    "q"
+   ],
+   "stacks": {},
+   "rationale": "main comments: 'p.x = 10, q.x = 7'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/test2.ja",
+   "std": "jana2014",
+   "arrays": {
+    "test_array": "output"
+   },
+   "scalars_out": [
+    "test_int"
+   ],
+   "stacks": {},
+   "rationale": "Feature test with no algorithmic contract: test_rev increments test_int and test_array[0] in place.",
+   "confidence": "low"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/topological_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "adj": "input",
+    "visited": "garbage",
+    "order": "output"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "blog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'outputs: order[k] = k-th vertex in POST-order ..., visited[], blog'; visited is all 1 at the end (intermediate kept for reversibility).",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014/fixtures/examples/tree_sort.ja",
+   "std": "jana2014",
+   "arrays": {
+    "a": "input",
+    "b": "output",
+    "key": "garbage",
+    "left": "garbage",
+    "right": "garbage",
+    "ht": "garbage",
+    "cnt": "garbage"
+   },
+   "scalars_out": [],
+   "stacks": {
+    "alog": "garbage (reversibility log)",
+    "hlog": "garbage (reversibility log)",
+    "rlog": "garbage (reversibility log)"
+   },
+   "rationale": "Header: 'forward: (a preserved) -> (a, b sorted, AVL tree of distinct keys)'; for a sort the AVL node arrays are the reversibility structure ('uncall sort restores the empty tree'), not the result; root/nfree likewise.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/factor.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "fact": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same program as jana2014/factor.ja: 'num ... Ends up zero', 'fact ... Ends with factors in ascending order'.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/fib.ja",
+   "std": "jana2014_in_out",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/fib.ja: call then uncall, only n remains.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/matrixmult.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "A": "output",
+    "B": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/matrixmult.ja: A := A*B in place, B restored.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/matrixmult_v1.0.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "A": "input",
+    "B": "output",
+    "LDU": "scratch"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/matrixmult_v1.0.ja: B := A*B, LDU cleared by uncall crout.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/perm-to-code.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "x": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/perm-to-code.ja: Lehmer code in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/run-length-enc-stack.ja",
+   "std": "jana2014_in_out",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {
+    "text": "scratch",
+    "arc": "output"
+   },
+   "rationale": "Same as jana2014/run-length-enc-stack.ja: text consumed, arc = compressed pairs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/run-length-enc.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "text": "scratch",
+    "arc": "output"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/run-length-enc.ja: text consumed, arc = compressed pairs.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/sqrt.ja",
+   "std": "jana2014_in_out",
+   "arrays": {},
+   "scalars_out": [
+    "root",
+    "num"
+   ],
+   "stacks": {},
+   "rationale": "Same as jana2014/sqrt.ja: root = 8, num = remainder 2.",
+   "confidence": "medium"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/stack-operations.ja",
+   "std": "jana2014_in_out",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {
+    "s": "output"
+   },
+   "rationale": "Same as jana2014/stack-operations.ja: s reversed in place.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014_in_out/fixtures/examples/test2.ja",
+   "std": "jana2014_in_out",
+   "arrays": {
+    "test_array": "output"
+   },
+   "scalars_out": [
+    "test_int"
+   ],
+   "stacks": {},
+   "rationale": "Same as jana2014/test2.ja: feature test, no algorithmic contract.",
+   "confidence": "low"
+  },
+  {
+   "file": "tests/janus2026/fixtures/examples/build-dict.ja",
+   "std": "janus2026",
+   "arrays": {
+    "out": "input",
+    "d.entries": "output"
+   },
+   "scalars_out": [
+    "i",
+    "d"
+   ],
+   "stacks": {},
+   "rationale": "Header only says 'Dictionary-building example'; build_dict fills d.entries (struct array field) from the code sequence out[] and accumulates i; out is read-only; j is a loop index left non-zero.",
+   "confidence": "low"
+  },
+  {
+   "file": "tests/janus2026/fixtures/examples/caesar.ja",
+   "std": "janus2026",
+   "arrays": {
+    "msg": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Header: 'call/uncall reversibility'; 'back: hello world' -- msg restored, key input.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/janus2026/fixtures/examples/linked-list.ja",
+   "std": "janus2026",
+   "arrays": {
+    "pool": "scratch",
+    "vals": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: three inserts then three uncalls -> 'after undo: count=0 head=0 alloc=1'; pool (struct node array) back to zero, vals read-only.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/janus2026/fixtures/examples/sort-network.ja",
+   "std": "janus2026",
+   "arrays": {
+    "arr": "input"
+   },
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "main: sort4 then uncall sort4 -> 'unsorted:' original order; arr (struct item array) restored, swaps back to 0.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014basic/fixtures/examples/fib.ja",
+   "std": "jana2014basic",
+   "arrays": {},
+   "scalars_out": [],
+   "stacks": {},
+   "rationale": "Same as jana2014/fib.ja: call then uncall, only n remains.",
+   "confidence": "high"
+  },
+  {
+   "file": "tests/jana2014basic/fixtures/examples/test2.ja",
+   "std": "jana2014basic",
+   "arrays": {
+    "test_array": "output"
+   },
+   "scalars_out": [
+    "test_int"
+   ],
+   "stacks": {},
+   "rationale": "Same as jana2014/test2.ja: feature test, no algorithmic contract.",
+   "confidence": "low"
+  }
+ ]
+}
