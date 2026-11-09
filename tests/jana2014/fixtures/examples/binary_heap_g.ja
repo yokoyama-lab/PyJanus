@@ -1,6 +1,6 @@
 // @summary:   reversible binary min-heap: six extract-mins, then five re-inserts
 // @technique: history-stack
-// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Theorems 6.7/6.8; adapted from Sarah Vang Nohr, Reversible Graph Algorithms, bachelor's project, University of Copenhagen, 17 January 2015
+// @source:    Demaine, Lynch, Mirano and Tyagi, "Energy-Efficient Algorithms", ITCS 2016 (arXiv:1605.08448), Theorems 6.7/6.8; adapted from Sarah Vang Nohr, Reversible Graph Algorithms, bachelor's project, University of Copenhagen, 17 January 2015; original code (no license stated): https://github.com/Ekima/Reversible-Graph-Algorithms-Janus-/blob/89b96be6ee78a0be872c3f8505d20f38eb619477/heaps.janus; the parts taken from it are not covered by this repository's BSD-3 license
 // @confirmed: reproduced by tests/jana2014/reference/binary_heap_g.py, an independent Python implementation written from the algorithm (only the inputs and the conventions this program fixes are transcribed); it agrees on A, heapsize, min1, min2, min3, min4, min5, min6
 // @keep:      A, heapsize, min1, min2, min3, min4, min5, min6
 // @expect: A[8] = {0, 1, 4, 2, 9, 7, 3, 1000000}
