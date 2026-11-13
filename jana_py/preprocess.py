@@ -61,6 +61,8 @@ def preprocess_text(
   text: str,
   include_dirs: list[Path] | None = None,
   std: str | None = None,
+  *,
+  include_roots: list[Path] | None = None,
 ) -> PreprocessedText:
   current_path = Path(filename).resolve() if filename not in {"", "-"} else None
   include_stack = [current_path] if current_path is not None else []
@@ -72,7 +74,8 @@ def preprocess_text(
   if std and (STDLIB_DIR / std).is_dir():
     search_dirs.append(STDLIB_DIR / std)
   search_dirs.append(STDLIB_DIR)
-  return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH, search_dirs) # Pass initial depth and max_depth
+  roots = None if include_roots is None else [p.resolve() for p in include_roots]
+  return _preprocess_text(filename, text, {}, {}, include_stack, 0, MAX_MACRO_EXPANSION_DEPTH, search_dirs, roots)
 
 
 def _preprocess_text(
@@ -84,6 +87,7 @@ def _preprocess_text(
   depth: int, # Add depth parameter
   max_depth: int, # Add max_depth parameter
   search_dirs: list[Path] | None = None,
+  include_roots: list[Path] | None = None,
 ) -> PreprocessedText:
   search_dirs = search_dirs or []
   out_lines: list[str] = []
@@ -174,6 +178,10 @@ def _preprocess_text(
         if current_path is not None:
           candidates.append((current_path.parent / include_target).resolve())
         candidates.extend((d / include_target).resolve() for d in search_dirs)
+        # Web submissions may only read the bundled library. Check resolved
+        # paths before probing/reading, including nested includes and symlinks.
+        if include_roots is not None:
+          candidates = [c for c in candidates if any(c.is_relative_to(root) for root in include_roots)]
         include_path = next((c for c in candidates if c.exists()), None)
         if include_path is None:
           if current_path is None and not search_dirs:
@@ -184,7 +192,7 @@ def _preprocess_text(
           raise JanaError(SourcePos(filename, lineno, 1), f"Cyclic include detected: {chain}")
         included_text = include_path.read_text(encoding="utf-8")
         # Pass depth and max_depth to recursive call for included files
-        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path], depth, max_depth, search_dirs)
+        included = _preprocess_text(str(include_path), included_text, macros, function_macros, include_stack + [include_path], depth, max_depth, search_dirs, include_roots)
         if included.text:
           out_lines.append(included.text)
           line_origins.extend(included.line_origins)
