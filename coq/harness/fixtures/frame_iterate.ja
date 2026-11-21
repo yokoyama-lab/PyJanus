@@ -1,0 +1,17 @@
+// frame stack: an `iterate` counter inside a recursive procedure is live across
+// the recursive call, so it must live in a frame cell.
+procedure rec(int d, int out[])
+  if d = 0 then
+    skip
+  else
+    iterate int k = 0 to 1
+      call rec(d - 1, out)
+      out[d] += k + 1
+    end
+  fi d = 0
+
+procedure main()
+  int out[4]
+  int d
+  d += 3
+  call rec(d, out)

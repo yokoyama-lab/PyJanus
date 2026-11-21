@@ -76,10 +76,18 @@ reference.
 
 ## Scope
 
-Skipped automatically (each needs a deeper model extension): a procedure that is
-**self-recursive and declares locals** (the flat-slot model has no per-frame
-stack for locals — recursion with only reference parameters, e.g. `fib`, is
-fine), a *self-referential* `delocal` (`delocal x = x`, needing a whole-block
+**Recursion with locals (frame stack, `differentialar.py`).** A procedure on a
+call-graph cycle that has locals or call-site temporaries gets a per-procedure
+depth counter (`+1` on entry, `-1` on exit); its scalar locals (incl. `iterate`
+counters) live in frame cells `P#x#frame[depth]`, with `local`/`delocal` lowered
+to `cell += e0 … cell -= e1` between zero assertions (`if 1 … fi cell = 0`).  Each
+call-site argument in such a procedure is first moved into a per-site frame cell
+and only then exchanged with the site temp, which may still hold a live argument
+of an outer activation.  Translation only — the verified kernel is unchanged.
+Fixtures: `frame_value_arg.ja`, `frame_cell_index.ja`, `frame_iterate.ja`.
+
+Skipped automatically (each needs a deeper model extension): local arrays,
+stacks or structs **inside a recursive procedure**, a *self-referential* `delocal` (`delocal x = x`, needing a whole-block
 argument), and `size(A)` for arrays (runtime array length). Also skipped:
 programs PyJanus rejects at run time (out-of-bounds, division by zero).
 

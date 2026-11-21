@@ -1,0 +1,22 @@
+// frame stack: a frame-local passed by reference to the recursive call, and an
+// array cell a[j] indexed by that frame-local passed to a helper.
+procedure bump(int x, int s)
+  s += x
+
+procedure walk(int i, int a[], int s)
+  if i = 0 then
+    skip
+  else
+    local int j = i - 1
+      call bump(a[j], s)
+      call walk(j, a, s)
+      s += j * i
+    delocal int j = i - 1
+  fi i = 0
+
+procedure main()
+  int a[5] = {3, 1, 4, 1, 5}
+  int i
+  int s
+  i += 5
+  call walk(i, a, s)

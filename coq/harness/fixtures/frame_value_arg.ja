@@ -1,0 +1,19 @@
+// frame stack: recursion with a local AND a value argument that reads the
+// caller's formal (n - 1).  The site temp of `call tri(n - 1, acc)` is the
+// renamed formal n of the outer activation, so it must be parked per frame.
+procedure tri(int n, int acc)
+  if n = 0 then
+    skip
+  else
+    local int k = n
+      acc += k * k
+      call tri(n - 1, acc)
+      acc += k
+    delocal int k = n
+  fi n = 0
+
+procedure main()
+  int n
+  int acc
+  n += 6
+  call tri(n, acc)

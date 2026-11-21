@@ -13,9 +13,18 @@ array-element swap, structs (`s[i].f` -> `s[i][ord(f)]`), `local`/`delocal`
 (scalars and **constant-dimension** local arrays; bare `local int x`/`delocal int x`
 default to 0), stacks (`push`/`pop`/`top`/`empty`/`size`), `iterate`/`for`, `/`, `%`,
 `>=`/`<=`/`!=`/`&&`/`||`, the ternary `c ? a : b`, reference procedures and value args.
+Recursion with locals (frame stack): a procedure on a call-graph cycle gets a
+per-procedure depth counter `P#depth` (+1 on entry, -1 on exit) and every scalar
+local `x` of it (incl. `iterate` counters) lives in the frame cell `P#x#frame[depth]`
+instead of a flat slot; `local`/`delocal` become `cell += e0 … cell -= e1` bracketed
+by zero assertions (`if 1 … fi cell = 0`, so a violated delocal gets stuck exactly
+like the verified `Exit`).  Call-site temporaries (cell-by-reference / value
+arguments) in such a procedure first park their previous content in a per-site
+frame cell, so a nested activation of the same site cannot clobber a live outer
+argument.  This is a translation only: the verified kernel is unchanged.
 Skipped: local arrays with a *non-constant* dimension (`local int A[size(in)]`,
-`A[i+1]`), self-referential `delocal x = x`, and programs PyJanus rejects at run
-time (e.g. out-of-bounds).
+`A[i+1]`), self-referential `delocal x = x`, local arrays / stacks / structs inside
+a recursive procedure, and programs PyJanus rejects at run time (e.g. out-of-bounds).
 
 Usage:  differentialar.py <driver-binary> <file.ja> [file.ja ...]
 """
@@ -98,6 +107,32 @@ def _any(o, pred):
     return False
 
 
+def needs_frame(proc):
+    """Locals or call-site temporaries that must be per-activation."""
+    body = proc["body"]
+    has_local = _any(body, lambda o: isinstance(o, dict)
+                     and ("enter_decl" in o or ("start_expr" in o and "step_expr" in o)))
+    has_temp = _any(body, lambda o: isinstance(o, dict) and "ident" in o and "args" in o
+                    and any("lval" not in a or a["lval"].get("selectors") for a in o["args"]))
+    return has_local or has_temp
+
+
+def cyclic_procs(procs, calls_of):
+    """Names of procedures that lie on a call-graph cycle (incl. self-loops)."""
+    names = [pr["procname"]["name"] for pr in procs]
+    succ = {n: {c for c in calls_of(n) if c in names} for n in names}
+    out = set()
+    for n in names:                                          # n reaches itself?
+        seen, todo = set(), list(succ[n])
+        while todo:
+            m = todo.pop()
+            if m == n:
+                out.add(n); break
+            if m not in seen:
+                seen.add(m); todo.extend(succ[m])
+    return out
+
+
 def recursive_with_locals(proc):
     # flat-gid model has no call stack for locals: a self-recursive procedure
     # that declares locals would reuse the same slots across frames.
@@ -128,6 +163,30 @@ class T:
         self.struct_fields = {}                              # structName -> [field names, in order]
         self.struct_decls = {}                               # structName -> [field decls, in order]
         self.field_ord = {}                                  # field name -> ordinal (across structs)
+        self.framed = {}                                     # proc -> set of frame-local names
+        self.sitec = 0                                       # call-site counter (frame parking cells)
+
+    # ---- frame stack (recursive procedures with locals) ----------------------
+    def depth(self, sc):
+        return self.gid(sc, "#depth")
+
+    def is_frame_local(self, sc, name):
+        return name in self.framed.get(sc, ())
+
+    def frame_cell(self, sc, name):                          # (read, lvalue) of x's cell in this frame
+        X, D = self.gid(sc, name + "#frame"), self.depth(sc)
+        return f"(ar {X} (v {D}))", f"(la {X} (v {D}))"
+
+    @staticmethod
+    def assert_zero(r):                                      # stuck unless r = 0 (both directions)
+        return f"(if (c 1) (skip) (skip) (b eq {r} (c 0)))"
+
+    def frame_block(self, sc, name, e0, body, e1):
+        """`local x = e0; body; delocal x = e1` on x's frame cell."""
+        r, l = self.frame_cell(sc, name)
+        z = self.assert_zero(r)
+        return (f"(seq {z} (seq (asgn {l} add {e0}) (seq {body} "
+                f"(seq (asgn {l} sub {e1}) {z}))))")
 
     def stack_ids(self, sc, name):                           # a stack = array + top counter
         self.stacks.add((sc, name))
@@ -295,11 +354,15 @@ class T:
 
     def read(self, sc, lv):
         sel = lv.get("selectors", [])
+        if not sel and self.is_frame_local(sc, lv["ident"]["name"]):
+            return self.frame_cell(sc, lv["ident"]["name"])[0]
         g = self.gid(sc, lv["ident"]["name"])
         return f"(v {g})" if not sel else f"(ar {g} {self._index(sc, sel)})"
 
     def target(self, sc, lv):
         sel = lv.get("selectors", [])
+        if not sel and self.is_frame_local(sc, lv["ident"]["name"]):
+            return self.frame_cell(sc, lv["ident"]["name"])[1]
         g = self.gid(sc, lv["ident"]["name"])
         return f"(ls {g})" if not sel else f"(la {g} {self._index(sc, sel)})"
 
@@ -321,6 +384,9 @@ class T:
                     f"{self.seq(sc, s['loop_part'])} {self.expr(sc, s['exit_cond'])})")
         if "enter_decl" in s:                                # local … / delocal …
             ed, xd = s["enter_decl"], s["exit_decl"]
+            if sc in self.framed and (ed["typ"]["kind"] in ("stack", "struct")
+                                      or ed.get("dimensions") or xd.get("dimensions")):
+                raise Unsupported("local array/stack/struct in a recursive procedure")
             if ed["typ"]["kind"] == "stack":                 # local stack ss = nil  (track its counter)
                 _, top = self.stack_ids(sc, ed["ident"]["name"])
                 return f"(seq (enter {top} (c 0)) (seq {self.seq(sc, s['body'])} (exit {top} (c 0))))"
@@ -343,18 +409,27 @@ class T:
             # `delocal x = x`-style self-references need a whole-block argument.
             if self._reads(ed["init_expr"], xname) or self._reads(xd["init_expr"], xname):
                 raise Unsupported("self-referential local/delocal")
-            x = self.gid(sc, ed["ident"]["name"])
             # a bare `local int x` / `delocal int x` (no initializer) defaults to 0
             e0 = self.expr(sc, ed["init_expr"]) if ed.get("init_expr") is not None else "(c 0)"
             e1 = self.expr(sc, xd["init_expr"]) if xd.get("init_expr") is not None else "(c 0)"
+            if self.is_frame_local(sc, xname):
+                return self.frame_block(sc, xname, e0, self.seq(sc, s["body"]), e1)
+            x = self.gid(sc, ed["ident"]["name"])
             return f"(seq (enter {x} {e0}) (seq {self.seq(sc, s['body'])} (exit {x} {e1})))"
         if "start_expr" in s and "step_expr" in s:          # iterate int i = start to end [step]
-            i = self.gid(sc, s["ident"]["name"])
+            iname = s["ident"]["name"]
+            if not self.is_frame_local(sc, iname):
+                i = self.gid(sc, iname)                      # keep the original slot order
             start = self.expr(sc, s["start_expr"])
             step = self.expr(sc, s["step_expr"])
             end = self.expr(sc, s["end_expr"])
             stop = end if s.get("exclusive") else f"(b add {end} {step})"
             body = self.seq(sc, s["body"])
+            if self.is_frame_local(sc, iname):
+                r, l = self.frame_cell(sc, iname)
+                lp = (f"(loop (b eq {r} {start}) (skip) (seq {body} (asgn {l} add {step})) "
+                      f"(b eq {r} {stop}))")
+                return self.frame_block(sc, iname, start, lp, stop)
             istart = f"(b eq (v {i}) {start})"
             istop = f"(b eq (v {i}) {stop})"
             incr = f"(asgn (ls {i}) add {step})"
@@ -375,7 +450,8 @@ class T:
             for a in s["args"]:
                 if "lval" in a:
                     lv = a["lval"]
-                    if lv.get("selectors"):                  # array cell by reference
+                    if lv.get("selectors") or self.is_frame_local(sc, lv["ident"]["name"]):
+                        # array cell (or frame cell) by reference
                         t = self.fresh(sc)
                         swaps.append((self.target(sc, lv), t))
                         actuals.append(t)
@@ -389,6 +465,32 @@ class T:
                     valwraps.append((t, self.expr(sc, a)))
             call = (f"({self.kind_at(s['pos'])} {self.procmap[name]} {len(actuals)} "
                     + " ".join(map(str, actuals)) + ")")
+            if sc in self.framed:
+                # Inside a recursive procedure a site temp may still hold a LIVE
+                # argument of an outer activation of this same site (it is that
+                # activation's renamed formal, and argument expressions such as
+                # `left[node]` may read it).  So each argument is first moved into a
+                # per-site frame cell P[depth] (indices evaluated with every formal
+                # intact), and only then exchanged with the temp; P[depth] keeps the
+                # outer value during the call.  Everything is undone in mirror order.
+                pre1, pre2, post1, post2 = [], [], [], []
+                for cell, t in swaps:
+                    self.sitec += 1
+                    P = f"(la {self.gid(sc, f'__park{self.sitec}#frame')} (v {self.depth(sc)}))"
+                    pre1.append(f"(swap {cell} {P})"); post1.append(f"(swap {cell} {P})")
+                    pre2.append(f"(swap {P} (ls {t}))"); post2.append(f"(swap {P} (ls {t}))")
+                for t, e in valwraps:
+                    self.sitec += 1
+                    P = f"(la {self.gid(sc, f'__park{self.sitec}#frame')} (v {self.depth(sc)}))"
+                    pre1.append(f"(asgn {P} add {e})"); post1.append(f"(asgn {P} sub {e})")
+                    pre2.append(f"(swap {P} (ls {t}))"); post2.append(f"(swap {P} (ls {t}))")
+                for x in reversed(pre1 + pre2):
+                    call = f"(seq {x} {call})"
+                tail = list(reversed(post2)) + list(reversed(post1))
+                acc = tail[-1] if tail else "(skip)"
+                for x in reversed(tail[:-1]):
+                    acc = f"(seq {x} {acc})"
+                return f"(seq {call} {acc})" if tail else call
             for t, e in reversed(valwraps):
                 call = f"(seq (enter {t} {e}) (seq {call} (exit {t} {e})))"
             for cell, t in reversed(swaps):
@@ -505,10 +607,30 @@ def translate(ja):
                     if src_key in p.arrlen and dst_key not in p.arrlen:
                         p.arrlen[dst_key] = p.arrlen[src_key]; changed = True
 
+    calls_by = {pr["procname"]["name"]: [c for c, _ in calls_in(pr["body"])] for pr in procs}
+    cyc = cyclic_procs(procs, lambda n: calls_by[n])
+    for proc in procs:
+        name = proc["procname"]["name"]
+        if name in cyc and needs_frame(proc):
+            locs = set()
+            def walk(o):
+                if isinstance(o, dict):
+                    if "enter_decl" in o:
+                        locs.add(o["enter_decl"]["ident"]["name"])
+                    if "start_expr" in o and "step_expr" in o:
+                        locs.add(o["ident"]["name"])
+                    for v in o.values():
+                        walk(v)
+                elif isinstance(o, list):
+                    for x in o:
+                        walk(x)
+            walk(proc["body"])
+            if locs & {par["ident"]["name"] for par in proc["params"]}:
+                raise Unsupported("local shadows a parameter in a recursive procedure")
+            p.framed[name] = locs
+
     proc_out = []
     for proc in procs:
-        if recursive_with_locals(proc):
-            raise Unsupported("self-recursion with local variables (no frame stack)")
         name = proc["procname"]["name"]
         formals = []
         for par in proc["params"]:                           # a stack param = (array, top)
@@ -517,6 +639,9 @@ def translate(ja):
             else:
                 formals.append(p.gid(name, par["ident"]["name"]))
         body = p.seq(name, proc["body"])
+        if name in p.framed:                                 # push / pop one frame
+            D = p.depth(name)
+            body = f"(seq (asgn (ls {D}) add (c 1)) (seq {body} (asgn (ls {D}) sub (c 1))))"
         proc_out.append((formals, body))
     main = ast["main"]
     scalars, arrays, stks, inits = [], [], [], []
