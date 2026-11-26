@@ -10,11 +10,12 @@ The front-end (`playground.html`) and the example programs (`examples.json`) are
 
 | backend | how to run | needs |
 |---------|-----------|-------|
-| **Python** (stdlib only) | `python3 -m jana_py.web` | just Python (no extra deps) |
+| **Python** (stdlib only) | `python3 -m jana_py.web` | Python + Unix resource limits |
 | **Apache / PHP** | drop `webui/` in the docroot | PHP + `python3` + `timeout` |
 
-Both serve the same page and run programs by shelling out to
-`python -m jana_py.cli` with a per-run timeout.
+Both use `jana_py.web` for rendering, saving, and running programs. PHP calls
+its gateway, so both deployments enforce the same validation and execution limits.
+The package and its matching `webui/` assets must be deployed together.
 
 ## Option 1 — Python server (no dependencies)
 
@@ -32,6 +33,7 @@ Copy this `webui/` directory under your web root (or alias a vhost to it):
 Alias /pyjanus /srv/PyJanus/webui
 <Directory /srv/PyJanus/webui>
     Require all granted
+    LimitRequestBody 262144
     DirectoryIndex index.php
     SetEnv PYJANUS_ROOT /srv/PyJanus      # dir that contains jana_py/
     SetEnv PYJANUS_PYTHON /usr/bin/python3
@@ -43,7 +45,10 @@ Then open `http://your-host/pyjanus/`.  Requirements on the server:
 - PHP with `proc_open` enabled (the default),
 - `python3` on `PATH` (or set `PYJANUS_PYTHON`) with the `jana_py` package
   importable from `PYJANUS_ROOT` (the directory that contains `jana_py/`),
-- the `timeout` command (coreutils) — used for the hard per-run cap.
+- the `timeout` command (coreutils) — caps the complete gateway request at
+  15 seconds, followed by a forced kill after 2 seconds if needed;
+- Unix `resource` limits (`RLIMIT_AS`, `RLIMIT_CPU`, `RLIMIT_FSIZE`) and `flock`.
+  Web execution fails closed if limits are unavailable; the ordinary CLI is unaffected.
 
 Defaults if the env vars are unset: `PYJANUS_ROOT` = the parent of `webui/`,
 `PYJANUS_PYTHON` = `python3`.  Quick local check without Apache:
@@ -66,13 +71,25 @@ once — both backends pick it up.
 
 ## Notes / security
 
-- Each run is capped at **10 s** (Python: `subprocess` timeout; PHP: `timeout`).
-- Janus is a small, pure reversible language — no file system or network access —
-  so running submitted programs is comparatively safe; still, expose this only to
-  trusted users (it does spawn a Python process per run).
-- Inputs are validated server-side (`--std` against the known list, `-m`/`-p`
-  digits only) and the program source is written to a temp file (never shell-
-  interpolated); all argv elements are `escapeshellarg`'d in the PHP backend.
+- Submitted input is passed through **stdin**, never interpreted as CLI options.
+  Dialects, modes, and numeric options are validated; `-m` is limited to 1–64
+  and `-p` to at most 2147483647 (primality is checked by the CLI).
+- Web `#include` resolution is restricted to the bundled `jana_py/lib/` tree,
+  including nested includes and resolved symlinks. The normal CLI retains local
+  file includes and `-I` search paths.
+- Each execution has a **10-second wall/CPU limit**, **256 MiB address-space
+  limit**, and **1 MiB limit per output stream**. At most **4 executions** run
+  concurrently across processes sharing `PYJANUS_SAVES`.
+- JSON requests are limited to **256 KiB**, source to **64 KiB**, and standard
+  input to **16 KiB**. Python serves at most 8 connections with 5-second socket
+  timeouts. For Apache, also configure `RequestReadTimeout` and
+  `MaxRequestWorkers`: PHP runs only after the web server receives the request.
+- Saved data is safely encoded when embedded in HTML, including old saved links.
+  Storage is limited to **1000 saves / 64 MiB**; remove old `.json` files when
+  full. Do not remove active `.lock` files, which coordinate concurrent requests.
+- These controls are not an OS sandbox. Keep the service behind access control
+  for trusted users, run under a dedicated unprivileged account, and keep the
+  package/library directories read-only to that account.
 
 ## URL parameters & sharing
 
@@ -84,6 +101,8 @@ once — both backends pick it up.
   (source, dialect, mode, direction, input) on the server and copies a *short*
   link `…/pyjanus-playground/?p=<hash>` (a 10-char content hash); open it later to
   restore everything.  Saves go to `PYJANUS_SAVES` (default
-  `<PYJANUS_ROOT>/playground-saves`), which must be writable by the web user
-  (e.g. `chmod 1777` if the web user is not in your group); programs are capped at
-  64 KB and de-duplicated by content hash.
+  `<PYJANUS_ROOT>/playground-saves`). This directory also holds execution locks
+  and must be writable by the service account, even when only running programs.
+  Keep it outside the document root and private (for example, owned by that
+  account with mode `0700`), not world-writable. Programs are de-duplicated by
+  content hash.
