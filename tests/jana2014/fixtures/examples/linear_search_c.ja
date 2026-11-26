@@ -1,0 +1,81 @@
+// @summary:   clean first-match search and membership, preserving duplicate-containing input
+// @technique: bennett-uncompute
+// @source:    Classical linear search; Masuda and Yokoyama (2019), arXiv:1910.10406, motivates the reversible-search comparison
+// @confirmed: independent list membership/index/count or bisect_left oracle; see tests/jana2014/test_clean_search_examples.py and reference/linear_search_c.py
+// @keep:      a, key, n, f, count
+// @oracle:    a == [4, -1, 4, 8, 4] and key == 4 and n == 5 and p == 0 and f == 6 and count == 3
+// @expect: a[5] = {4, -1, 4, 8, 4}
+// @expect: count = 3
+// @expect: f = 6
+// @expect: key = 4
+// @expect: n = 5
+// @expect: p = 0
+//
+// General retained-input search; see docs/clean-search-examples.md.
+// Input: 0 <= n <= length(k); k is retained; key,n and output cells are non-aliasing.
+// first_position requires p = 0 and returns the least matching index, or n.
+// This is a partial reversible procedure, not an arbitrary-p XOR oracle.
+
+procedure first_position(int k[], int key, int n, int p)
+  from p = 0 loop
+    p += 1
+  until p = n || k[p] = key
+
+// Flag-only task: p is retained garbage unless also declared part of the output.
+procedure flag_keep_position(int k[], int key, int n, int f, int p)
+  call first_position(k, key, n, p)
+  if p < n then
+    f ^= 1
+  fi p < n
+
+// Flag-only task: restore all ancillary state; p is only temporary memory.
+procedure flag_clean(int k[], int key, int n, int f)
+  local int p = 0
+    call first_position(k, key, n, p)
+    if p < n then
+      f ^= 1
+    fi p < n
+    uncall first_position(k, key, n, p)
+  delocal int p = 0
+
+// A distinct output problem: return the number of matches, not a Boolean.
+procedure count_matches(int k[], int key, int n, int c)
+  local int i = 0
+    from i = 0 loop
+      if k[i] = key then
+        c += 1
+      fi k[i] = key
+      i += 1
+    until i = n
+  delocal int i = n
+
+// General duplicate-safe full-scan baseline with clean ancillary state.
+procedure flag_count_clean(int k[], int key, int n, int f)
+  local int c = 0
+    call count_matches(k, key, n, c)
+    if c > 0 then
+      f ^= 1
+    fi c > 0
+    uncall count_matches(k, key, n, c)
+  delocal int c = 0
+
+procedure main()
+  int a[5]
+  int key
+  int n
+  int p
+  int f
+  int count
+
+  a[0] += 4
+  a[1] += -1
+  a[2] += 4
+  a[3] += 8
+  a[4] += 4
+  key += 4
+  n += 5
+  f += 7
+
+  call first_position(a, key, n, p)
+  call flag_clean(a, key, n, f)
+  call count_matches(a, key, n, count)

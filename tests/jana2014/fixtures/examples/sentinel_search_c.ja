@@ -1,0 +1,142 @@
+// @summary:   clean sentinel search restoring an arbitrary overwritten sentinel slot
+// @technique: bennett-uncompute
+// @source:    Classical sentinel linear search with reversible save-and-restore wrappers
+// @confirmed: independent list membership/index/count or bisect_left oracle; see tests/jana2014/test_clean_search_examples.py and reference/sentinel_search_c.py
+// @keep:      a, key, n, f
+// @oracle:    a == [4, -1, 4, 8, 4, 11] and key == 4 and n == 5 and p == 0 and f == 6
+// @expect: a[6] = {4, -1, 4, 8, 4, 11}
+// @expect: f = 6
+// @expect: key = 4
+// @expect: n = 5
+// @expect: p = 0
+//
+// Restorable-sentinel search; see docs/clean-search-examples.md.
+// All inputs are retained. n>=0; k has at least n+1 cells.
+// Position outputs start at 0; flag outputs are arbitrary-seed XOR accumulators.
+// Arguments are distinct non-aliasing storage. These preconditions are not runtime guards.
+// Ready equality kernel requires k[n]=key. Duplicates in the real prefix are allowed.
+
+procedure sentinel_position_ready(int k[], int key, int p)
+  from p = 0 loop
+    p += 1
+  until k[p] = key
+
+// Requires k[n]=0, restores it to 0.
+procedure sentinel_position_zero(int k[], int key, int n, int p)
+  k[n] ^= key
+  call sentinel_position_ready(k, key, p)
+  k[n] ^= key
+
+// Arbitrary old k[n] is saved in a scalar and restored, not discarded.
+procedure sentinel_position_saved(int k[], int key, int n, int p)
+  local int saved = 0
+    k[n] <=> saved
+    k[n] ^= key
+    call sentinel_position_ready(k, key, p)
+    k[n] ^= key
+    k[n] <=> saved
+  delocal int saved = 0
+
+procedure sentinel_flag_ready(int k[], int key, int n, int f)
+  local int p = 0
+    call sentinel_position_ready(k, key, p)
+    if p < n then
+      f ^= 1
+    fi p < n
+    uncall sentinel_position_ready(k, key, p)
+  delocal int p = 0
+
+procedure sentinel_flag_zero(int k[], int key, int n, int f)
+  k[n] ^= key
+  local int p = 0
+    call sentinel_position_ready(k, key, p)
+    if p < n then
+      f ^= 1
+    fi p < n
+    uncall sentinel_position_ready(k, key, p)
+  delocal int p = 0
+  k[n] ^= key
+
+procedure sentinel_flag_saved(int k[], int key, int n, int f)
+  local int saved = 0
+    k[n] <=> saved
+    k[n] ^= key
+    local int p = 0
+      call sentinel_position_ready(k, key, p)
+      if p < n then
+        f ^= 1
+      fi p < n
+      uncall sentinel_position_ready(k, key, p)
+    delocal int p = 0
+    k[n] ^= key
+    k[n] <=> saved
+  delocal int saved = 0
+
+// For flag-only output, p is retained garbage. If p is declared output, it is not garbage.
+procedure sentinel_flag_keep_zero(int k[], int key, int n, int f, int p)
+  call sentinel_position_zero(k, key, n, p)
+  if p < n then
+    f ^= 1
+  fi p < n
+
+// Sorted real prefix k[0..n), duplicates allowed. Only k[n]>=key is required.
+// The augmented array need not itself be sorted.
+procedure sorted_sentinel_bound_ready(int k[], int key, int p)
+  from p = 0 loop
+    p += 1
+  until k[p] >= key
+
+procedure sorted_sentinel_flag_ready(int k[], int key, int n, int f)
+  local int p = 0
+    call sorted_sentinel_bound_ready(k, key, p)
+    if p < n && k[p] = key then
+      f ^= 1
+    fi p < n && k[p] = key
+    uncall sorted_sentinel_bound_ready(k, key, p)
+  delocal int p = 0
+
+procedure sorted_sentinel_flag_zero(int k[], int key, int n, int f)
+  k[n] ^= key
+  local int p = 0
+    call sorted_sentinel_bound_ready(k, key, p)
+    if p < n && k[p] = key then
+      f ^= 1
+    fi p < n && k[p] = key
+    uncall sorted_sentinel_bound_ready(k, key, p)
+  delocal int p = 0
+  k[n] ^= key
+
+procedure sorted_sentinel_flag_saved(int k[], int key, int n, int f)
+  local int saved = 0
+    k[n] <=> saved
+    k[n] ^= key
+    local int p = 0
+      call sorted_sentinel_bound_ready(k, key, p)
+      if p < n && k[p] = key then
+        f ^= 1
+      fi p < n && k[p] = key
+      uncall sorted_sentinel_bound_ready(k, key, p)
+    delocal int p = 0
+    k[n] ^= key
+    k[n] <=> saved
+  delocal int saved = 0
+
+procedure main()
+  int a[6]
+  int key
+  int n
+  int p
+  int f
+
+  a[0] += 4
+  a[1] += -1
+  a[2] += 4
+  a[3] += 8
+  a[4] += 4
+  a[5] += 11
+  key += 4
+  n += 5
+  f += 7
+
+  call sentinel_position_saved(a, key, n, p)
+  call sentinel_flag_saved(a, key, n, f)

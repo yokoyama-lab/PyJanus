@@ -1,0 +1,81 @@
+// @summary:   clean binary-lifting lower bound and first-match-or-n, supporting duplicates and empty prefixes
+// @technique: bennett-uncompute
+// @source:    Masuda and Yokoyama (2019), Analyzing Trade-offs in Reversible Linear and Binary Search Algorithms, arXiv:1910.10406, section 2.2 / Figure 6; lower-bound adaptation
+// @confirmed: independent list membership/index/count or bisect_left oracle; see tests/jana2014/test_clean_search_examples.py and reference/binary_lifting_search_c.py
+// @keep:      a, n, p, f, result
+// @oracle:    a == [-2, 0, 0, 4, 9] and key == 0 and n == 5 and p == 1 and f == 6 and result == 6
+// @expect: a[5] = {-2, 0, 0, 4, 9}
+// @expect: f = 6
+// @expect: key = 0
+// @expect: n = 5
+// @expect: p = 1
+// @expect: result = 6
+//
+// Binary lifting adapted from Masuda and Yokoyama (2019), section 2.2.
+// Sorted retained input, duplicates OK; see docs/clean-search-examples.md.
+// No sentinel needed. n>=0; p initially 0; distinct actual scalar arguments.
+// Mathematical integers, not wrapping machine ints.
+
+procedure binary_lifting_bound(int k[], int key, int n, int p)
+  local int stride = 1
+    from stride = 1 loop
+      stride *= 2
+    until stride > n
+    from stride > n loop
+      stride /= 2
+      if p + stride <= n && k[p + stride - 1] < key then
+        p += stride
+      fi p % (2 * stride) = stride
+    until stride = 1
+  delocal int stride = 1
+
+procedure binary_lifting_flag_clean(int k[], int key, int n, int f)
+  local int p = 0
+    call binary_lifting_bound(k, key, n, p)
+    if p < n && k[p] = key then
+      f ^= 1
+    fi p < n && k[p] = key
+    uncall binary_lifting_bound(k, key, n, p)
+  delocal int p = 0
+
+procedure binary_lifting_first_clean(int k[], int key, int n, int result)
+  local int p = 0
+    call binary_lifting_bound(k, key, n, p)
+    if p < n && k[p] = key then
+      result ^= p
+    else
+      result ^= n
+    fi p < n && k[p] = key
+    uncall binary_lifting_bound(k, key, n, p)
+  delocal int p = 0
+
+// Position output starts at zero. Preserve a successful lower bound directly;
+// uncompute it only for a miss, then return n. This is not an XOR accumulator.
+procedure binary_lifting_first_selective(int k[], int key, int n, int p)
+  call binary_lifting_bound(k, key, n, p)
+  if p = n || k[p] != key then
+    uncall binary_lifting_bound(k, key, n, p)
+    p ^= n
+  fi p = n
+
+procedure main()
+  int a[5]
+  int key
+  int n
+  int p
+  int f
+  int result
+
+  a[0] += -2
+  a[1] += 0
+  a[2] += 0
+  a[3] += 4
+  a[4] += 9
+  key += 0
+  n += 5
+  f += 7
+  result += 7
+
+  call binary_lifting_bound(a, key, n, p)
+  call binary_lifting_flag_clean(a, key, n, f)
+  call binary_lifting_first_clean(a, key, n, result)
