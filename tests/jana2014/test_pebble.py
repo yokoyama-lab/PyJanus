@@ -25,9 +25,12 @@ from jana_py.pebble import (
     compare_profiles,
     format_profile,
     profile_space,
+    profile_to_dict,
     _is_zero,
     _value_bits,
 )
+
+EXAMPLE_DIR = ROOT / "tests" / "jana2014" / "fixtures" / "examples"
 
 
 def _profile(source: str, **kwargs) -> SpaceProfile:
@@ -453,6 +456,132 @@ class TestInitializedVars(unittest.TestCase):
         self.assertEqual(profile.max_live_vars, 1)
         # The init snapshot should already show 1 live var
         self.assertEqual(profile.timeline[0].live_vars, 1)
+
+
+class TestResourceVector(unittest.TestCase):
+    """RC-03 resource vector: stack_peak, total_calls, final_live_bits,
+    puts/takes, erasures (rc03.tex tab:metrics)."""
+
+    def _profile_fixture(self, name: str) -> SpaceProfile:
+        program = parse_program(name, (EXAMPLE_DIR / name).read_text())
+        validate_program(program)
+        return profile_space(program, std="jana2014")
+
+    def test_gcd_stack_peak_is_number_of_subtractions(self):
+        # gcd(48,36): 48-36, 36-12, 24-12 -> 3 log bits pushed, never popped.
+        profile = self._profile_fixture("gcd.ja")
+        self.assertEqual(profile.stack_peak, 3)
+        self.assertEqual(profile.total_calls, 1)
+        self.assertEqual(profile.call_depth_peak, profile.call_depth_max)
+        self.assertEqual(profile.steps, profile.total_steps)
+        self.assertEqual(profile.erasures, 0)
+        # final store: a = b = 12 (4 bits each) + log = {0,0,1} (1 bit)
+        self.assertEqual(profile.final_live_bits, 4 + 4 + 1)
+
+    def test_bubble_sort_stack_peak_is_comparison_count(self):
+        # n = 6: one garbage bit per comparison, n(n-1)/2 = 15, emptied by uncall.
+        profile = self._profile_fixture("bubble_sort.ja")
+        self.assertEqual(profile.stack_peak, 15)
+        self.assertEqual(profile.total_calls, 2)
+        self.assertEqual(profile.timeline[-1].call_depth, 0)
+
+    def test_knapsack_uses_no_stack(self):
+        profile = self._profile_fixture("knapsack.ja")
+        self.assertEqual(profile.stack_peak, 0)
+        self.assertEqual(profile.arrays["K"].puts, 12)
+        self.assertEqual(profile.arrays["K"].takes, 0)
+        self.assertFalse(profile.arrays["K"].ends_empty)
+        self.assertTrue(profile.arrays["K"].written)
+
+    def test_reference_passed_stack_is_not_double_counted(self):
+        """A stack held by three frames (main, outer, inner) is one stack.
+
+        rc03.tex:125-127 reports an instrument that double counted
+        reference-passed cells (75,802 instead of 310); here the naive
+        per-frame sum would be 1 + 1 + ... = 6 at the peak instead of 2.
+        """
+        profile = _profile("""\
+            procedure inner(stack s)
+                local int t = 1
+                    push(t, s)
+                delocal int t = 0
+
+            procedure outer(stack s)
+                call inner(s)
+                call inner(s)
+
+            procedure main()
+                stack s
+                call outer(s)
+        """)
+        self.assertEqual(profile.stack_peak, 2)
+        self.assertEqual(profile.total_calls, 3)
+        self.assertEqual(profile.call_depth_peak, 2)
+        self.assertEqual(profile.final_live_bits, 2)
+
+    def test_stack_peak_drops_after_pop(self):
+        profile = _profile("""\
+            procedure main()
+                stack s
+                int x
+                int y
+                x += 7
+                push(x, s)
+                x += 3
+                push(x, s)
+                pop(y, s)
+                pop(x, s)
+        """)
+        self.assertEqual(profile.stack_peak, 2)
+        # Final state: x = 7, y = 3, stack empty.
+        self.assertEqual(profile.final_live_bits, 3 + 2)
+
+    def test_array_puts_and_takes(self):
+        profile = _profile("""\
+            procedure main()
+                int a[3]
+                a[0] += 5
+                a[1] += 2
+                a[0] -= 5
+                a[2] += 0
+        """)
+        st = profile.arrays["a"]
+        self.assertEqual((st.puts, st.takes), (2, 1))
+        self.assertEqual(st.end_nonzero, 1)
+        self.assertEqual(st.size, 3)
+        self.assertTrue(st.live_at_end)
+
+    def test_reference_passed_array_counted_once(self):
+        profile = _profile("""\
+            procedure fill(int a[], int n)
+                a[0] += n
+
+            procedure main()
+                int a[2]
+                int n
+                n += 4
+                call fill(a, n)
+                call fill(a, n)
+        """)
+        self.assertEqual(list(profile.arrays), ["a"])
+        self.assertEqual(profile.arrays["a"].puts, 1)   # 0 -> 4 once; 4 -> 8 is not a put
+        self.assertEqual(profile.arrays["a"].instances, 1)
+
+    def test_profile_to_dict_is_json_serialisable(self):
+        import json
+        profile = self._profile_fixture("gcd.ja")
+        d = profile_to_dict(profile)
+        json.dumps(d)
+        self.assertEqual(d["stack_peak"], 3)
+        self.assertEqual(d["steps"], profile.total_steps)
+        self.assertNotIn("timeline", d)
+        self.assertIn("timeline", profile_to_dict(profile, include_timeline=True))
+
+    def test_format_profile_shows_resource_vector(self):
+        text = format_profile(self._profile_fixture("knapsack.ja"))
+        self.assertIn("Stack peak:          0", text)
+        self.assertIn("Erasures:            0", text)
+        self.assertIn("Arrays (name", text)
 
 
 if __name__ == "__main__":
